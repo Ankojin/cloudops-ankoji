@@ -10,7 +10,7 @@ pool:
   vmImage: ubuntu-latest
   
 steps:
-  # Authenticate with Azure
+  # Step 1: Authenticate with Azure
   - task: Bash@3
     inputs:
       targetType: 'inline'
@@ -20,26 +20,4 @@ steps:
           --username $AZURE_CLIENT_ID \
           --password $AZURE_CLIENT_SECRET \
           --tenant $AZURE_TENANT_ID
-
-
-# Step 1: Install Terraform
-  - task: TerraformInstaller@0
-    inputs:
-      terraformVersion: '4.9.0'
-
- # Run Terraform commands
-  - task: Bash@3
-    inputs:
-      targetType: 'inline'
-      script: |
-        echo "Initializing Terraform..."
-        terraform init
-
-        echo "Plan Terraform..."
-        terraform plan -out=tfplan
-    env:
-      ARM_CLIENT_ID: $(AZURE_CLIENT_ID)
-      ARM_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
-      ARM_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
-      ARM_TENANT_ID: $(AZURE_TENANT_ID)
 
