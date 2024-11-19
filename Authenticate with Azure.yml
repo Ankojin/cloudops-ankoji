@@ -1,0 +1,45 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+  
+steps:
+  # Authenticate with Azure
+  - task: Bash@3
+    inputs:
+      targetType: 'inline'
+      script: |
+        echo "Logging into Azure..."
+        az login --service-principal \
+          --username $AZURE_CLIENT_ID \
+          --password $AZURE_CLIENT_SECRET \
+          --tenant $AZURE_TENANT_ID
+
+
+# Step 1: Install Terraform
+  - task: TerraformInstaller@0
+    inputs:
+      terraformVersion: '4.9.0'
+
+ # Run Terraform commands
+  - task: Bash@3
+    inputs:
+      targetType: 'inline'
+      script: |
+        echo "Initializing Terraform..."
+        terraform init
+
+        echo "Plan Terraform..."
+        terraform plan -out=tfplan
+    env:
+      ARM_CLIENT_ID: $(AZURE_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+      ARM_SUBSCRIPTION_ID: $(AZURE_SUBSCRIPTION_ID)
+      ARM_TENANT_ID: $(AZURE_TENANT_ID)
+
