@@ -9,6 +9,8 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
+variables:
+  outputFilePath: './On-Prem-VM-Migration/VM-Migration/main-v2.tf'
 steps:
   - script:  |
            echo $(Build.SourcesDirectory)
@@ -18,3 +20,10 @@ steps:
     inputs:
       scriptSource: 'filePath'
       scriptPath: './On-Prem-VM-Migration/VM-Migration/generate-tf-final-v2.py'
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathToPublish: $(outputFilePath)
+      artifactName: 'Terraform File Output'
+      publishLocation: 'Container'
+    displayName: 'Publish Terraform Plan Output'
+
