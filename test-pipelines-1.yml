@@ -19,8 +19,9 @@ parameters:
 - name: Terraform
   displayName: Terraform
   type: string
-  default: false
+  default: 'apply'
   values: 
+  - apply
   - modify
   - destroy
   - destroyTargets 
