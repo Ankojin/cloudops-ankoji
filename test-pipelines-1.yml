@@ -1,0 +1,91 @@
+trigger:
+- none  # No automatic trigger; run manually or set appropriate branches
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+- name: pythonVersion
+  value: '3.9'
+- name: tfWorkingDirectory
+  value: '$(Build.SourcesDirectory)/On-Prem-VM-Migration/Testing'
+- group: TerraformVariables  # Reference to shared variables
+# - name: destroy
+#   value: 'true'  # Default is false; set to true for destroy
+# - name: destroyTargets
+#   value: ''  # Comma-separated list of Terraform resource targets for destroy
+
+parameters:
+- name: Terraform
+  displayName: Terraform
+  type: string
+  default: false
+  values: 
+  - modify
+  - destroy
+  - destroyTargets 
+
+steps:
+# Step 1: Install Python
+
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: $(pythonVersion)
+    addToPath: true
+  displayName: "Set up Python $(pythonVersion)"
+
+# Step 2: Python script to generate Terraform configuration
+- script: |
+    if [ "$(destroy)" == "true" ]; then
+     
+    else
+        echo "Destroy is set to true. Skipping Terraform apply."
+    echo "Running the Python script to generate Terraform configuration..."
+    python $(tfWorkingDirectory)/generate-tf-pip.py
+    echo "Python script execution completed."
+  displayName: "Run Python script to generate Terraform configuration"
+
+- script: |
+    echo "Listing files in the directory to verify output:"
+    ls -al $(tfWorkingDirectory)
+  displayName: "Verify output file location"
+
+# Step 3: Publish State Artifacts if Python generate Was Run
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(tfWorkingDirectory)/main-v1.tf'
+    artifactName: 'TerraformState'
+    publishLocation: 'pipeline'
+  condition: ne(variables['destroy'], 'true')  # Only publish artifacts if not in destroy mode
+  displayName: "Publish main-v1.tf as artifact"
+
+# Step 4: Install Terraform
+- task: TerraformInstaller@1
+  inputs:
+    terraformVersion: 'latest'
+  displayName: "Install Terraform"
+
+# Step 5: Conditional Terraform Apply
+- script: |
+    if [ "$(destroy)" == "true" ]; then
+        echo "Destroy is set to true. Skipping Terraform apply."
+    else
+        echo "Running Terraform apply..."
+        cd $(tfWorkingDirectory)
+        echo "Setting up Azure authentication for Terraform..."
+        export ARM_CLIENT_ID=$(ARM_CLIENT_ID)
+        export ARM_CLIENT_SECRET=$(ARM_CLIENT_SECRET)
+        export ARM_SUBSCRIPTION_ID=$(ARM_SUBSCRIPTION_ID)
+        export ARM_TENANT_ID=$(ARM_TENANT_ID)
+
+        echo "Initializing Terraform..."
+        terraform init
+        echo "Validate Terraform..."
+        terraform "Validate
+        echo "Running Terraform plan..."
+        terraform plan -out=tfplan
+
+        echo "Applying Terraform configuration..."
+        terraform apply -auto-approve tfplan
+    fi
+  displayName: "Run Terraform apply or skip if destroy=true"
