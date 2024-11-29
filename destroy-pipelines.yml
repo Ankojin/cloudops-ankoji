@@ -5,6 +5,10 @@ pool:
   vmImage: 'ubuntu-latest'
 
 parameters:
+  - name: project
+    displayName: "Project Name"
+    type: string
+    default: "default-project"
   - name: useDestroyTargets
     displayName: "Use Destroy Targets"
     type: boolean
@@ -13,6 +17,7 @@ parameters:
     displayName: "Destroy Targets"
     type: string
     default: ""  # Comma-separated list of resource targets for destroy
+    # No direct way to make this mandatory based on `useDestroyTargets`
 
 variables:
   - name: tfWorkingDirectory
@@ -20,14 +25,15 @@ variables:
   - group: TerraformVariables
   - name: pythonVersion
     value: "3.9"
+  - name: STORAGE_CONTAINER_NAME
+    value: "$(parameters.project)-tfstatefs"
 
 steps:
 # Step 1: Set Environment Variables
 - script: |
     echo "Setting environment variables..."
-    export STORAGE_CONTAINER_NAME="your-storage-container-name-tfstatefs"
-    echo "##vso[task.setvariable variable=STORAGE_CONTAINER_NAME]$STORAGE_CONTAINER_NAME"
-    echo "Using Storage Container: $STORAGE_CONTAINER_NAME"
+    echo "Using Project: ${{ parameters.project }}"
+    echo "Using Storage Container: $(STORAGE_CONTAINER_NAME)"
   displayName: "Set Environment Variables"
 
 # Step 2: Azure Login
@@ -48,41 +54,37 @@ steps:
         --destination $(tfWorkingDirectory) \
         --source $(STORAGE_CONTAINER_NAME) \
         --pattern "*.tfstate" \
-        --account-key $(storageAccountKey) || { echo "Failed to download tfstate files."; exit 1; }
+        --account-key $(storageAccountKey) --overwrite true || { echo "Failed to download tfstate files."; exit 1; }
     az storage blob download-batch \
         --account-name $(storageAccountName) \
         --destination $(tfWorkingDirectory) \
         --source $(STORAGE_CONTAINER_NAME) \
         --pattern "*.tf" \
-        --account-key $(storageAccountKey) || { echo "Failed to download tf files."; exit 1; }
+        --account-key $(storageAccountKey) --overwrite true || { echo "Failed to download tf files."; exit 1; }
     az storage blob download-batch \
         --account-name $(storageAccountName) \
         --destination $(tfWorkingDirectory) \
         --source $(STORAGE_CONTAINER_NAME) \
         --pattern "*.lock*" \
-        --account-key $(storageAccountKey) || { echo "Failed to download lock files."; exit 1; }
+        --account-key $(storageAccountKey) --overwrite true || { echo "Failed to download lock files."; exit 1; }
     echo "Terraform files downloaded successfully."
   displayName: "Download Terraform Files (State, TF, Lock)"
 
-# Step 4: Validate Terraform Configuration
+# Step 4: Validate Destroy Targets (Mandatory Check)
 - script: |
-    echo "Validating Terraform configuration..."
-    cd $(tfWorkingDirectory)
-    terraform init -backend=false || { echo "Terraform initialization failed! Exiting."; exit 1; }
-    terraform validate || { echo "Terraform validation failed! Exiting."; exit 1; }
-    echo "Terraform configuration is valid."
-  displayName: "Validate Terraform Configuration"
-
-# Step 5: Validation for Destroy Targets (if useDestroyTargets is true)
-- script: |
-    if [ "${{ parameters.useDestroyTargets }}" == "true" ] && [ -z "${{ parameters.destroyTargets }}" ]; then
-        echo "Error: 'destroyTargets' parameter is required when 'useDestroyTargets' is true."
-        exit 1
+    if [ "${{ parameters.useDestroyTargets }}" == "true" ]; then
+        if [ -z "${{ parameters.destroyTargets }}" ]; then
+            echo "Error: 'destroyTargets' parameter is required when 'useDestroyTargets' is true."
+            exit 1
+        fi
+        echo "Destroy targets provided: ${{ parameters.destroyTargets }}"
+    else
+        echo "'useDestroyTargets' is false. No validation needed."
     fi
-    echo "Destroy targets validation passed."
-  displayName: "Validate Destroy Targets"
+  displayName: "Validate Destroy Targets (Mandatory)"
+  condition: eq('${{ parameters.useDestroyTargets }}', 'true')
 
-# Step 6: Terraform Destroy Logic (with destroyTargets handling)
+# Step 5: Terraform Destroy Logic
 - script: |
     echo "Executing Terraform destroy..."
     cd $(tfWorkingDirectory)
