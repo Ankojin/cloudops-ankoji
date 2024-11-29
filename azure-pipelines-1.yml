@@ -1,0 +1,155 @@
+trigger:
+- none  # Manual trigger only
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+parameters:
+  - name: action
+    displayName: "Action to Perform"
+    type: string
+    default: "apply"
+    values:
+      - apply
+      - modify
+      - destroy
+  - name: project
+    displayName: "Project Name"
+    type: string
+    default: "default-project"
+  - name: useDestroyTargets
+    displayName: "Use Destroy Targets"
+    type: boolean
+    default: false  # Toggle to use destroyTargets for destroy action
+  - name: destroyTargets
+    displayName: "Destroy Targets (Comma-Separated, Optional)"
+    type: string
+    default: ""  # Comma-separated list of resource targets for destroy
+
+variables:
+  - name: tfWorkingDirectory
+    value: "$(Build.SourcesDirectory)/On-Prem-VM-Migration/Testing"
+  - group: TerraformVariables
+  - name: pythonVersion
+    value: "3.9"
+
+steps:
+# Step 1: Set Environment Variables
+- script: |
+    echo "Setting environment variables..."
+    export PROJECT_NAME="${{ parameters.project }}"
+    echo "##vso[task.setvariable variable=PROJECT_NAME]$PROJECT_NAME"
+    export STORAGE_CONTAINER_NAME="${PROJECT_NAME}-tfstatefs"
+    echo "##vso[task.setvariable variable=STORAGE_CONTAINER_NAME]$STORAGE_CONTAINER_NAME"
+    echo "Using Project: $PROJECT_NAME"
+    echo "Using Storage Container: $STORAGE_CONTAINER_NAME"
+  displayName: "Set Environment Variables"
+
+# Step 2: Azure Login
+- script: |
+    echo "Logging into Azure..."
+    az login --service-principal \
+        -u $(ARM_CLIENT_ID) \
+        -p $(ARM_CLIENT_SECRET) \
+        --tenant $(ARM_TENANT_ID) || { echo "Azure login failed! Exiting."; exit 1; }
+    echo "Azure login successful."
+  displayName: "Azure Login"
+
+# Step 3: Validate Terraform Configuration
+- script: |
+    echo "Validating Terraform configuration..."
+    cd $(tfWorkingDirectory)
+    terraform init -backend=false || { echo "Terraform initialization failed! Exiting."; exit 1; }
+    terraform validate || { echo "Terraform validation failed! Exiting."; exit 1; }
+    echo "Terraform configuration is valid."
+  displayName: "Validate Terraform Configuration"
+
+# Step 4: Download Terraform Files (For Modify/Destroy)
+- script: |
+    echo "Downloading Terraform files..."
+    mkdir -p $(tfWorkingDirectory)
+    (
+        az storage blob download-batch \
+          --account-name $(storageAccountName) \
+          --destination $(tfWorkingDirectory) \
+          --source $(STORAGE_CONTAINER_NAME) \
+          --pattern "*.tfstate*" \
+          --account-key $(storageAccountKey) || echo "Error downloading state files."
+    ) &
+    (
+        az storage blob download-batch \
+          --account-name $(storageAccountName) \
+          --destination $(tfWorkingDirectory) \
+          --source $(STORAGE_CONTAINER_NAME) \
+          --pattern "*.lock.*" \
+          --account-key $(storageAccountKey) || echo "Error downloading lock files."
+    ) &
+    wait
+    echo "Terraform files downloaded successfully."
+  displayName: "Download Terraform Files"
+  condition: or(eq('${{ parameters.action }}', 'modify'), eq('${{ parameters.action }}', 'destroy'))
+
+# Step 5: Terraform Apply/Modify Logic
+- script: |
+    echo "Executing Terraform ${action}..."
+    cd $(tfWorkingDirectory)
+    terraform init || { echo "Terraform initialization failed! Exiting."; exit 1; }
+    terraform plan -out=tfplan || { echo "Terraform plan failed! Exiting."; exit 1; }
+    terraform apply -auto-approve tfplan || { echo "Terraform apply failed! Exiting."; exit 1; }
+    echo "Terraform ${action} completed successfully."
+  displayName: "Terraform Apply/Modify Logic"
+  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
+
+# Step 6: Upload Terraform Files
+- script: |
+    echo "Uploading Terraform files..."
+    (
+        az storage blob upload-batch \
+          --account-name $(storageAccountName) \
+          --destination $(STORAGE_CONTAINER_NAME) \
+          --source $(tfWorkingDirectory) \
+          --pattern "*.tfstate*" \
+          --account-key $(storageAccountKey) || echo "Error uploading state files."
+    ) &
+    (
+        az storage blob upload-batch \
+          --account-name $(storageAccountName) \
+          --destination $(STORAGE_CONTAINER_NAME) \
+          --source $(tfWorkingDirectory) \
+          --pattern "*.lock.*" \
+          --account-key $(storageAccountKey) || echo "Error uploading lock files."
+    ) &
+    wait
+    echo "Terraform files uploaded successfully."
+  displayName: "Upload Terraform Files"
+  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
+
+# Step 7: Terraform Destroy Logic
+- script: |
+    echo "Executing Terraform destroy..."
+    cd $(tfWorkingDirectory)
+    terraform init || { echo "Terraform initialization failed! Exiting."; exit 1; }
+    
+    if [ ${{ parameters.useDestroyTargets }} = true ]; then
+        if [ -n "${{ parameters.destroyTargets }}" ]; then
+            echo "Destroying specific targets: ${{ parameters.destroyTargets }}"
+            
+            # Split destroyTargets into an array
+            IFS=',' read -r -a targets <<< "${{ parameters.destroyTargets }}"
+            
+            for target in "${targets[@]}"; do
+                echo "Destroying target: $target"
+                terraform destroy -auto-approve -target="$target" || { echo "Terraform destroy failed for target $target. Exiting."; exit 1; }
+            done
+        else
+            echo "Error: 'useDestroyTargets' is true, but 'destroyTargets' is empty."
+            exit 1
+        fi
+    else
+        echo "Destroying all resources..."
+        terraform destroy -auto-approve || { echo "Terraform destroy failed! Exiting."; exit 1; }
+    fi
+
+    echo "Terraform destroy completed successfully."
+  displayName: "Terraform Destroy Logic"
+  condition: eq('${{ parameters.action }}', 'destroy')
