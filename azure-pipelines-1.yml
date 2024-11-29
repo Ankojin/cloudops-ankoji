@@ -25,6 +25,7 @@ parameters:
     displayName: "Destroy Targets"
     type: string
     default: ""  # Comma-separated list of resource targets for destroy
+    # This is not required by default
 
 variables:
   - name: tfWorkingDirectory
@@ -159,7 +160,17 @@ steps:
       wait
       echo "All files uploaded successfully."
 
-# Step 8: Terraform Destroy Logic (with destroyTargets handling)
+# Step 8: Validation for Destroy Targets (if useDestroyTargets is true)
+- script: |
+    if [ "${{ parameters.useDestroyTargets }}" == "true" ] && [ -z "${{ parameters.destroyTargets }}" ]; then
+        echo "Error: 'destroyTargets' parameter is required when 'useDestroyTargets' is true."
+        exit 1
+    fi
+    echo "Destroy targets validation passed."
+  displayName: "Validate Destroy Targets"
+  condition: eq('${{ parameters.action }}', 'destroy')
+
+# Step 9: Terraform Destroy Logic (with destroyTargets handling)
 - script: |
     echo "Executing Terraform destroy..."
     cd $(tfWorkingDirectory)
