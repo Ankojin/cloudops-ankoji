@@ -1,0 +1,98 @@
+trigger:
+- none  # Manual trigger only
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+parameters:
+  - name: useDestroyTargets
+    displayName: "Use Destroy Targets"
+    type: boolean
+    default: false
+  - name: destroyTargets
+    displayName: "Destroy Targets"
+    type: string
+    default: ""  # Comma-separated list of resource targets for destroy
+
+variables:
+  - name: tfWorkingDirectory
+    value: "$(Build.SourcesDirectory)/On-Prem-VM-Migration/Testing"
+  - group: TerraformVariables
+  - name: pythonVersion
+    value: "3.9"
+
+steps:
+# Step 1: Set Environment Variables
+- script: |
+    echo "Setting environment variables..."
+    export STORAGE_CONTAINER_NAME="your-storage-container-name-tfstatefs"
+    echo "##vso[task.setvariable variable=STORAGE_CONTAINER_NAME]$STORAGE_CONTAINER_NAME"
+    echo "Using Storage Container: $STORAGE_CONTAINER_NAME"
+  displayName: "Set Environment Variables"
+
+# Step 2: Azure Login
+- script: |
+    echo "Logging into Azure..."
+    az login --service-principal \
+        -u $(ARM_CLIENT_ID) \
+        -p $(ARM_CLIENT_SECRET) \
+        --tenant $(ARM_TENANT_ID) || { echo "Azure login failed! Exiting."; exit 1; }
+    echo "Azure login successful."
+  displayName: "Azure Login"
+
+# Step 3: Download Terraform Files (state, tf, lock)
+- script: |
+    echo "Downloading Terraform files (state, tf, lock)..."
+    az storage blob download-batch \
+        --account-name $(storageAccountName) \
+        --destination $(tfWorkingDirectory) \
+        --source $(STORAGE_CONTAINER_NAME) \
+        --pattern "*.tfstate" \
+        --account-key $(storageAccountKey) || { echo "Failed to download tfstate files."; exit 1; }
+    az storage blob download-batch \
+        --account-name $(storageAccountName) \
+        --destination $(tfWorkingDirectory) \
+        --source $(STORAGE_CONTAINER_NAME) \
+        --pattern "*.tf" \
+        --account-key $(storageAccountKey) || { echo "Failed to download tf files."; exit 1; }
+    az storage blob download-batch \
+        --account-name $(storageAccountName) \
+        --destination $(tfWorkingDirectory) \
+        --source $(STORAGE_CONTAINER_NAME) \
+        --pattern "*.lock*" \
+        --account-key $(storageAccountKey) || { echo "Failed to download lock files."; exit 1; }
+    echo "Terraform files downloaded successfully."
+  displayName: "Download Terraform Files (State, TF, Lock)"
+
+# Step 4: Validate Terraform Configuration
+- script: |
+    echo "Validating Terraform configuration..."
+    cd $(tfWorkingDirectory)
+    terraform init -backend=false || { echo "Terraform initialization failed! Exiting."; exit 1; }
+    terraform validate || { echo "Terraform validation failed! Exiting."; exit 1; }
+    echo "Terraform configuration is valid."
+  displayName: "Validate Terraform Configuration"
+
+# Step 5: Validation for Destroy Targets (if useDestroyTargets is true)
+- script: |
+    if [ "${{ parameters.useDestroyTargets }}" == "true" ] && [ -z "${{ parameters.destroyTargets }}" ]; then
+        echo "Error: 'destroyTargets' parameter is required when 'useDestroyTargets' is true."
+        exit 1
+    fi
+    echo "Destroy targets validation passed."
+  displayName: "Validate Destroy Targets"
+
+# Step 6: Terraform Destroy Logic (with destroyTargets handling)
+- script: |
+    echo "Executing Terraform destroy..."
+    cd $(tfWorkingDirectory)
+    terraform init || { echo "Terraform initialization failed! Exiting."; exit 1; }
+    if [ "${{ parameters.useDestroyTargets }}" == "true" ]; then
+        echo "Destroying specific resources: ${{ parameters.destroyTargets }}"
+        terraform destroy -auto-approve -target=$(echo ${{ parameters.destroyTargets }} | tr ',' '\n') || { echo "Terraform destroy failed! Exiting."; exit 1; }
+    else
+        echo "Destroying all resources..."
+        terraform destroy -auto-approve || { echo "Terraform destroy failed! Exiting."; exit 1; }
+    fi
+    echo "Terraform destroy completed successfully."
+  displayName: "Terraform Destroy Logic"
