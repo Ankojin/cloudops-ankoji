@@ -17,7 +17,7 @@ parameters:
     displayName: "Destroy Targets"
     type: string
     default: ""  # Comma-separated list of resource targets for destroy
-    # No direct way to make this mandatory based on `useDestroyTargets`
+    # No direct way to make this mandatory based on `useDestroyTargets`"
 
 variables:
   - name: tfWorkingDirectory
@@ -25,15 +25,18 @@ variables:
   - group: TerraformVariables
   - name: pythonVersion
     value: "3.9"
-  - name: STORAGE_CONTAINER_NAME
-    value: "$(parameters.project)-tfstatefs"
+     
 
 steps:
 # Step 1: Set Environment Variables
 - script: |
     echo "Setting environment variables..."
-    echo "Using Project: ${{ parameters.project }}"
-    echo "Using Storage Container: $(STORAGE_CONTAINER_NAME)"
+    export PROJECT_NAME="${{ parameters.project }}"
+    echo "##vso[task.setvariable variable=PROJECT_NAME]$PROJECT_NAME"
+    export STORAGE_CONTAINER_NAME="${PROJECT_NAME}-tfstate"
+    echo "##vso[task.setvariable variable=STORAGE_CONTAINER_NAME]$STORAGE_CONTAINER_NAME"
+    echo "Using Project: $PROJECT_NAME"
+    echo "Using Storage Container: $STORAGE_CONTAINER_NAME"
   displayName: "Set Environment Variables"
 
 # Step 2: Azure Login
@@ -45,28 +48,33 @@ steps:
         --tenant $(ARM_TENANT_ID) || { echo "Azure login failed! Exiting."; exit 1; }
     echo "Azure login successful."
   displayName: "Azure Login"
-
 # Step 3: Download Terraform Files (state, tf, lock)
 - script: |
     echo "Downloading Terraform files (state, tf, lock)..."
-    az storage blob download-batch \
-        --account-name $(storageAccountName) \
-        --destination $(tfWorkingDirectory) \
-        --source $(STORAGE_CONTAINER_NAME) \
-        --pattern "*.tfstate" \
-        --account-key $(storageAccountKey) --overwrite true || { echo "Failed to download tfstate files."; exit 1; }
-    az storage blob download-batch \
-        --account-name $(storageAccountName) \
-        --destination $(tfWorkingDirectory) \
-        --source $(STORAGE_CONTAINER_NAME) \
-        --pattern "*.tf" \
-        --account-key $(storageAccountKey) --overwrite true || { echo "Failed to download tf files."; exit 1; }
-    az storage blob download-batch \
-        --account-name $(storageAccountName) \
-        --destination $(tfWorkingDirectory) \
-        --source $(STORAGE_CONTAINER_NAME) \
-        --pattern "*.lock*" \
-        --account-key $(storageAccountKey) --overwrite true || { echo "Failed to download lock files."; exit 1; }
+    (  
+        az storage blob download-batch \
+            --account-name $(storageAccountName) \
+            --destination $(tfWorkingDirectory) \
+            --source $(STORAGE_CONTAINER_NAME) \
+            --pattern "*.tfstate" \
+            --account-key $(storageAccountKey) --overwrite true || { echo "Failed to download tfstate files."; exit 1; }
+    ) &    
+    (  
+         az storage blob download-batch \
+            --account-name $(storageAccountName) \
+            --destination $(tfWorkingDirectory) \
+            --source $(STORAGE_CONTAINER_NAME) \
+            --pattern "*.tf" \
+            --account-key $(storageAccountKey) --overwrite true || { echo "Failed to download tf files."; exit 1; }
+    ) &    
+    (  
+        az storage blob download-batch \
+            --account-name $(storageAccountName) \
+            --destination $(tfWorkingDirectory) \
+            --source $(STORAGE_CONTAINER_NAME) \
+            --pattern "*.lock*" \
+            --account-key $(storageAccountKey) --overwrite true || { echo "Failed to download lock files."; exit 1; }
+    ) &    
     echo "Terraform files downloaded successfully."
   displayName: "Download Terraform Files (State, TF, Lock)"
 
@@ -98,3 +106,35 @@ steps:
     fi
     echo "Terraform destroy completed successfully."
   displayName: "Terraform Destroy Logic"
+
+  # Step 6: Upload Terraform State Files after Destroy
+- task: Bash@3
+  displayName: "Upload Terraform State Files after Destroy"
+  condition: or(eq('${{ parameters.action }}', 'destroy')
+  inputs:
+    targetType: 'inline'
+    script: |
+      echo "Uploading files in parallel..."
+      (
+          az storage blob upload-batch \
+            --account-name $(storageAccountName) \
+            --destination $(STORAGE_CONTAINER_NAME) \
+            --source $(tfWorkingDirectory) \
+            --pattern "*.tfstate*" \
+            --account-key $(storageAccountKey) \
+            --overwrite true || echo "Error uploading state files."
+      ) &
+
+      (
+          az storage blob upload-batch \
+            --account-name $(storageAccountName) \
+            --destination $(STORAGE_CONTAINER_NAME) \
+            --source $(tfWorkingDirectory) \
+            --pattern "*.lock.*" \
+            --account-key $(storageAccountKey) \
+            --overwrite true || echo "Error uploading lock files."
+      ) &
+
+      wait
+      echo "All files uploaded successfully."
+    condition: and(succeeded(), eq('${{ parameters.action }}', 'destroy'))
