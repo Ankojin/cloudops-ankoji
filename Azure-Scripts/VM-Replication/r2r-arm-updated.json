@@ -1,0 +1,70 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "vmList": {
+      "type": "array",
+      "metadata": {
+        "description": "List of VMs for replication. Each object should include vmName, fabricObjectId, recoveryResourceGroupId, recoveryContainerId, recoveryAzureNetworkId, recoverySubnetName, osDiskId, and optionally dataDiskIds and staticIp."
+      }
+    },
+    "policyId": {
+      "type": "string",
+      "defaultValue": "/Subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/BAB-Core-Migration-01/providers/Microsoft.RecoveryServices/vaults/bab-core-migrt-rsv-swec-01/replicationPolicies/2days-retention-policy",
+      "metadata": {
+        "description": "The resource ID of the replication policy to apply."
+      }
+    },
+    "primaryStagingStorageAccountId": {
+      "type": "string",
+      "defaultValue": "/subscriptions/2a908090-d056-438c-bcf3-00ce359a72b5/resourceGroups/BAB-Core-Migration-01/providers/Microsoft.Storage/storageAccounts/ouidl5babcoremasrcache",
+      "metadata": {
+        "description": "The resource ID of the primary staging Azure Storage account."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectedItems",
+      "apiVersion": "2022-02-01",
+      "name": "[concat('bab-core-migrt-rsv-swec-01/asr-a2a-default-uaenorth/asr-a2a-default-uaenorth-container/', parameters('vmList')[copyIndex()].vmName)]",
+      "copy": {
+        "name": "replicationProtectedItemsCopy",
+        "count": "[length(parameters('vmList'))]"
+      },
+      "condition": "[not(empty(parameters('vmList')[copyIndex()].vmName))]",
+      "properties": {
+        "policyId": "[parameters('policyId')]",
+        "providerSpecificDetails": {
+          "instanceType": "A2A",
+          "fabricObjectId": "[parameters('vmList')[copyIndex()].fabricObjectId]",
+          "recoveryResourceGroupId": "[parameters('vmList')[copyIndex()].recoveryResourceGroupId]",
+          "recoveryContainerId": "[parameters('vmList')[copyIndex()].recoveryContainerId]",
+          "recoveryAzureNetworkId": "[parameters('vmList')[copyIndex()].recoveryAzureNetworkId]",
+          "recoverySubnetName": "[parameters('vmList')[copyIndex()].recoverySubnetName]",
+          "staticIp": "[parameters('vmList')[copyIndex()].staticIp]",
+          "vmManagedDisks": [
+            {
+              "diskId": "[parameters('vmList')[copyIndex()].osDiskId]",
+              "primaryStagingAzureStorageAccountId": "[parameters('primaryStagingStorageAccountId')]",
+              "recoveryResourceGroupId": "[parameters('vmList')[copyIndex()].recoveryResourceGroupId]",
+              "recoveryReplicaDiskAccountType": "StandardSSD_LRS",
+              "recoveryTargetDiskAccountType": "StandardSSD_LRS"
+            }
+          ],
+          "dataDisks": "[if(and(contains(parameters('vmList')[copyIndex()], 'dataDiskIds'), greater(length(parameters('vmList')[copyIndex()].dataDiskIds), 0)), parameters('vmList')[copyIndex()].dataDiskIds, json('[]'))]"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "deployedVMs": {
+      "type": "array",
+      "value": "[parameters('vmList')]"
+    },
+    "failedVMs": {
+      "type": "array",
+      "value": "[array()]"
+    }
+  }
+}
