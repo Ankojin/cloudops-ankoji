@@ -1,0 +1,163 @@
+trigger:
+- none  # Manual trigger only
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+parameters:
+  - name: action
+    displayName: "Action to Perform"
+    type: string
+    default: "apply"
+    values:
+      - apply
+      - modify
+  - name: project
+    displayName: "Project Name"
+    type: string
+    default: "default-project"
+
+variables:
+  - name: tfWorkingDirectory
+    value: "$(Build.SourcesDirectory)/VM-Creation"
+  - group: TerraformVariables
+  - name: pythonVersion
+    value: "3.9"
+     
+steps:
+# Step 1: Set Environment Variables
+- script: |
+    set -x
+    echo "Setting environment variables..."
+    export PROJECT_NAME="${{ parameters.project }}"
+    echo "##vso[task.setvariable variable=PROJECT_NAME]$PROJECT_NAME"
+    export STORAGE_CONTAINER_NAME="${PROJECT_NAME}-tfstate"
+    echo "##vso[task.setvariable variable=STORAGE_CONTAINER_NAME]$STORAGE_CONTAINER_NAME"
+    echo "Using Project: $PROJECT_NAME"
+    echo "Using Storage Container: $STORAGE_CONTAINER_NAME"
+  displayName: "Set Environment Variables"
+
+# Step 2: Azure Login
+- script: |
+    set -x
+    echo "Logging into Azure..."
+    az login --service-principal \
+        -u $(ARM_CLIENT_ID) \
+        -p $(ARM_CLIENT_SECRET) \
+        --tenant $(ARM_TENANT_ID) || { echo "Azure login failed! Exiting."; exit 1; }
+    echo "Azure login successful."
+  displayName: "Azure Login"
+
+# Step 3: Create or Verify Azure Storage Container
+- script: |
+    set -x
+    echo "Verifying or creating storage container..."
+    containerExists=$(az storage container exists \
+        --name $(STORAGE_CONTAINER_NAME) \
+        --account-name $(storageAccountName) \
+        --account-key $(storageAccountKey) \
+        --query 'exists' -o tsv) || { echo "Error checking container existence."; exit 1; }
+
+    if [ "$containerExists" == "true" ]; then
+        echo "Storage container exists: $STORAGE_CONTAINER_NAME"
+    else
+        echo "Creating storage container: $STORAGE_CONTAINER_NAME"
+        az storage container create \
+            --name $(STORAGE_CONTAINER_NAME) \
+            --account-name $(storageAccountName) \
+            --account-key $(storageAccountKey) || { echo "Failed to create storage container."; exit 1; }
+    fi
+  displayName: "Verify/Create Storage Container"
+  condition: eq('${{ parameters.action }}', 'apply')
+
+# Step 4: Run Python Script for Configuration
+- script: |
+    set -x
+    echo "Running Python script for Terraform configuration..."
+    if [[ '${{ parameters.action }}' == 'apply' || '${{ parameters.action }}' == 'modify' ]]; then
+        echo "Triggering Python script..."
+        python $(tfWorkingDirectory)/*.py
+        
+        # Debugging: Check if Python executed successfully
+        if [ $? -ne 0 ]; then
+            echo "Error: Python script failed to execute."
+            exit 1
+        fi
+
+        # Debugging: List files in the working directory
+        echo "Listing files in the working directory after script execution:"
+        ls -la $(tfWorkingDirectory)/
+    fi
+  displayName: "Run Python Script for Configuration"
+  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
+
+# Step 5: Validate Terraform Configuration
+- task: Bash@3
+  inputs:
+    targetType: 'inline'
+    script: |
+    set -x
+    echo "Validating Terraform configuration..."
+    cd $(tfWorkingDirectory)
+    echo "Listing files in $(tfWorkingDirectory)/..."
+    ls -la $(tfWorkingDirectory)/
+    terraform init -backend=false || { echo "Terraform initialization failed! Exiting."; exit 1; }
+    terraform validate || { echo "Terraform validation failed! Exiting."; exit 1; }
+    echo "Terraform configuration is valid."
+  displayName: "Validate Terraform Configuration"
+
+# Step 6: Download Terraform State Files for Modify
+- task: Bash@3
+  displayName: "Download Terraform State Files for Modify"
+  condition: eq('${{ parameters.action }}', 'modify')
+  inputs:
+    targetType: 'inline'
+    script: |
+      set -x
+      echo "Executing parallel file upload/download preparation."
+      # Use & to run processes in the background
+      (
+          echo "Downloading state files..."
+          az storage blob download-batch \
+            --account-name $(storageAccountName) \
+            --destination $(tfWorkingDirectory) \
+            --source $(STORAGE_CONTAINER_NAME) \
+            --pattern "*.tfstate*;*.lock.hcl" \
+            --account-key $(storageAccountKey) || { echo "Error downloading state files."; exit 1; }
+      ) &
+      wait  # Wait for all background jobs to finish
+      echo "File preparation completed."
+
+# Step 7: Terraform Apply/Modify Logic
+- task: Bash@3
+  inputs:
+    targetType: 'inline'
+    script: |
+    set -x
+    echo "Executing Terraform ${action}..."
+    cd $(tfWorkingDirectory)
+    echo "Listing files in $(tfWorkingDirectory)/..."
+    ls -la $(tfWorkingDirectory)/
+    terraform init || { echo "Terraform initialization failed! Exiting."; exit 1; }
+    terraform plan -out=tfplan || { echo "Terraform plan failed! Exiting."; exit 1; }
+    terraform apply -auto-approve tfplan || { echo "Terraform apply failed! Exiting."; exit 1; }
+  displayName: "Terraform Apply/Modify Logic"
+  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
+
+# Step 8: Upload Terraform Files After Apply/Modify
+- task: Bash@3
+  inputs:
+    targetType: 'inline'
+    script: |
+      set -x
+    echo "Uploading updated Terraform files to Azure Storage..."
+      az storage blob upload-batch \
+        --account-name $(storageAccountName) \
+        --destination $(STORAGE_CONTAINER_NAME) \
+        --source $(tfWorkingDirectory) \
+        --pattern "*.tfstate*;*.lock.hcl;*.tf" \
+        --account-key $(storageAccountKey) \
+        --overwrite true
+    echo "Terraform files uploaded successfully."
+  displayName: "Upload Terraform Files Apply Or Modify to Azure Storage"
+  condition: and(succeeded(),or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))

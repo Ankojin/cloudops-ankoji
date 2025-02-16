@@ -1,0 +1,30 @@
+#cloud-config
+timezone: Asia/Riyadh
+#Disable firewalld & SELinux
+runcmd:
+    - systemctl disable firewalld.service
+    - systemctl stop firewalld.service
+    - sed -i 's/enforcing/disabled/g' /etc/selinux/config /etc/selinux/config
+#set search domain from dhcp 
+write_files:
+  - path: /etc/dhcp/dhclient.conf
+    content: | 
+       supersede domain-search "albtests.com";
+    append: true
+#Create Unix Admin User 
+users:
+  - default
+  - name: unixadmin
+    gecos: Unix Team Admin User
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: users,wheel
+    hashed_passwd: '$6$D5BM.uromWpiMoUW$ESEB6Zaph0p0xFtOvVPMOFLjM9losVnMbSqJeFTAuvrjU0EcC0JaJZtJFLK.1ghKaiLhtR.sURn.mtsaLl5zb/'
+    lock_passwd: false
+    shell: /bin/bash
+#Reboot the system wait for 2 min 
+power_state:
+    delay: +2
+    mode: reboot
+    message: Rebooting......
+    timeout: 30
+    condition: True
