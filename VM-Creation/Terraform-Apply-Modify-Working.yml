@@ -109,4 +109,4 @@ steps:
       az storage blob upload-batch --account-name $(storageAccountName) --destination $(STORAGE_CONTAINER_NAME) --source $(tfWorkingDirectory) --pattern "*.tfstate*;*.lock.hcl" --account-key $(storageAccountKey) --overwrite true
       echo "Terraform files uploaded successfully."
   displayName: "Upload Terraform Files Apply Or Modify to Azure Storage"
-  condition: and(succeeded(),or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
+  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
