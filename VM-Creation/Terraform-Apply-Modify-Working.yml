@@ -59,7 +59,7 @@ steps:
 - script: |
     set -x
     echo "Running Python script for Terraform configuration..."
-    python3 $(tfWorkingDirectory)/main.py || { echo "Error: Python script failed to execute."; exit 1; }
+    python3 $(tfWorkingDirectory)/*.py || { echo "Error: Python script failed to execute."; exit 1; }
     echo "Listing files in the working directory after script execution:"
     ls -la $(tfWorkingDirectory)/
   displayName: "Run Python Script for Configuration"
