@@ -19,7 +19,7 @@ parameters:
 
 variables:
   - name: tfWorkingDirectory
-    value: "$(Build.SourcesDirectory)/VM-Creation/"
+    value: "$(Build.SourcesDirectory)/VM-Creation"
   - group: TerraformVariables
   - name: pythonVersion
     value: "3.9"
@@ -61,7 +61,7 @@ steps:
     echo "Running Python script for Terraform configuration..."
     python3 $(tfWorkingDirectory)/*.py || { echo "Error: Python script failed to execute."; exit 1; }
     echo "Listing files in the working directory after script execution:"
-    ls -la $(tfWorkingDirectory)/
+    ls -la $(tfWorkingDirectory)/Project/BaaS-Platform/
   displayName: "Run Python Script for Configuration"
   condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
 
@@ -71,7 +71,7 @@ steps:
     script: |
       set -x
       echo "Validating Terraform configuration..."
-      cd $(tfWorkingDirectory)/Project/BaaS-Platform/baas-vms/
+      cd $(tfWorkingDirectory)/Project/BaaS-Platform/
       terraform init -backend=false || { echo "Terraform initialization failed! Exiting."; exit 1; }
       terraform validate || { echo "Terraform validation failed! Exiting."; exit 1; }
       echo "Terraform configuration is valid."
@@ -93,7 +93,7 @@ steps:
     script: |
       set -x
       echo "Executing Terraform ${{ parameters.action }}..."
-      cd $(tfWorkingDirectory)/Project/BaaS-Platform/baas-vms/
+      cd $(tfWorkingDirectory)/Project/BaaS-Platform/
       terraform init || { echo "Terraform initialization failed! Exiting."; exit 1; }
       terraform plan -out=tfplan || { echo "Terraform plan failed! Exiting."; exit 1; }
       terraform apply -auto-approve tfplan || { echo "Terraform apply failed! Exiting."; exit 1; }
@@ -106,7 +106,19 @@ steps:
     script: |
       set -x
       echo "Uploading updated Terraform files to Azure Storage..."
-      az storage blob upload-batch --account-name $(storageAccountName) --destination $(STORAGE_CONTAINER_NAME) --source $(tfWorkingDirectory) --pattern "*.tfstate*;*.lock.hcl" --account-key $(storageAccountKey) --overwrite true
-      echo "Terraform files uploaded successfully."
+      if ls $(tfWorkingDirectory)/Project/BaaS-Platform/*.tfstate* $(tfWorkingDirectory)/Project/BaaS-Platform/*.lock.hcl 1> /dev/null 2>&1; then
+        az storage blob upload-batch --account-name $(storageAccountName) --destination $(STORAGE_CONTAINER_NAME) --source $(tfWorkingDirectory)/Project/BaaS-Platform/ --pattern "*.tfstate*;*.lock.hcl" --account-key $(storageAccountKey) --overwrite true
+        echo "Terraform files uploaded successfully."
+      else
+        echo "No Terraform state or lock files found. Skipping upload."
+      fi
   displayName: "Upload Terraform Files Apply Or Modify to Azure Storage"
+  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(tfWorkingDirectory)/Project/BaaS-Platform/'
+    ArtifactName: 'TerraformFiles'
+    publishLocation: 'Container'
+  displayName: "Upload Terraform Files as Build Artifacts"
   condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
