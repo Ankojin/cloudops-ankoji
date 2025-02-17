@@ -271,29 +271,29 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{vm_name}_{disk['disk_n
    
                 # DependencyAgent
 
-resource "azurerm_virtual_machine_extension" "DependencyAgentLinux_{vm_name}" {{
-  name                 = "DependencyAgentLinux"
-  virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
-  publisher            = "Microsoft.Azure.Monitoring.DependencyAgent"
-  type                 = "DependencyAgentLinux"
-  type_handler_version = "9.10"
-  auto_upgrade_minor_version = true
-  settings  = <<SETTINGS
-    {{
-        "enableama": ["true"]
-    }}
-  SETTINGS
-}}
+# resource "azurerm_virtual_machine_extension" "DependencyAgentLinux_{vm_name}" {{
+#   name                 = "DependencyAgentLinux"
+#   virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
+#   publisher            = "Microsoft.Azure.Monitoring.DependencyAgent"
+#   type                 = "DependencyAgentLinux"
+#   type_handler_version = "9.10"
+#   auto_upgrade_minor_version = true
+#   settings  = <<SETTINGS
+#     {{
+#         "enableama": ["true"]
+#     }}
+#   SETTINGS
+# }}
            # AzureMonitor Agent
 
-resource "azurerm_virtual_machine_extension" "AzureMonitorLinuxAgent_{vm_name}" {{
-  name                 = "AzureMonitorLinuxAgent"
-  virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
-  publisher            = "Microsoft.Azure.Monitor"
-  type                 = "AzureMonitorLinuxAgent"
-  type_handler_version = "1.33"
-  automatic_upgrade_enabled =  true
-}}
+# resource "azurerm_virtual_machine_extension" "AzureMonitorLinuxAgent_{vm_name}" {{
+#   name                 = "AzureMonitorLinuxAgent"
+#   virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
+#   publisher            = "Microsoft.Azure.Monitor"
+#   type                 = "AzureMonitorLinuxAgent"
+#   type_handler_version = "1.33"
+#   automatic_upgrade_enabled =  true
+# }}
 
  
                 # Enable VM Insights
@@ -414,30 +414,30 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{vm_name}_{disk['disk_n
 
                 # DependencyAgent
 
-resource "azurerm_virtual_machine_extension" "DependencyAgentWindows_{vm_name}" {{
-  name                 = "DependencyAgentWindows"
-  virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
-  publisher            = "Microsoft.Azure.Monitoring.DependencyAgent"
-  type                 = "DependencyAgentWindows"
-  type_handler_version = "9.10"
-  auto_upgrade_minor_version = true
-  settings  = <<SETTINGS
-    {{
-        "enableama": ["true"]
-    }}
-  SETTINGS
-}}
+# resource "azurerm_virtual_machine_extension" "DependencyAgentWindows_{vm_name}" {{
+#   name                 = "DependencyAgentWindows"
+#   virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
+#   publisher            = "Microsoft.Azure.Monitoring.DependencyAgent"
+#   type                 = "DependencyAgentWindows"
+#   type_handler_version = "9.10"
+#   auto_upgrade_minor_version = true
+#   settings  = <<SETTINGS
+#     {{
+#         "enableama": ["true"]
+#     }}
+#   SETTINGS
+# }}
 
                      # AzureMonitorWindowsAgent
 
-resource "azurerm_virtual_machine_extension" "AzureMonitorWindowsAgent_{vm_name}" {{
-  name                 = "AzureMonitorWindowsAgent"
-  virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
-  publisher            = "Microsoft.Azure.Monitor"
-  type                 = "AzureMonitorWindowsAgent"
-  type_handler_version = "1.30"
-  automatic_upgrade_enabled =  true
-}}
+# resource "azurerm_virtual_machine_extension" "AzureMonitorWindowsAgent_{vm_name}" {{
+#   name                 = "AzureMonitorWindowsAgent"
+#   virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
+#   publisher            = "Microsoft.Azure.Monitor"
+#   type                 = "AzureMonitorWindowsAgent"
+#   type_handler_version = "1.30"
+#   automatic_upgrade_enabled =  true
+# }}
 
                 # Enable VM Insights
 resource "azurerm_monitor_data_collection_rule_association" "{vm_name}" {{
