@@ -19,7 +19,7 @@ parameters:
 
 variables:
   - name: tfWorkingDirectory
-    value: "$(Build.SourcesDirectory)/VM-Creation"
+    value: "$(Build.SourcesDirectory)/VM-Creation/"
   - group: TerraformVariables
   - name: pythonVersion
     value: "3.9"
@@ -71,7 +71,7 @@ steps:
     script: |
       set -x
       echo "Validating Terraform configuration..."
-      cd $(tfWorkingDirectory)
+      cd $(tfWorkingDirectory)/Project/BaaS-Platform/baas-vms/
       terraform init -backend=false || { echo "Terraform initialization failed! Exiting."; exit 1; }
       terraform validate || { echo "Terraform validation failed! Exiting."; exit 1; }
       echo "Terraform configuration is valid."
@@ -93,7 +93,7 @@ steps:
     script: |
       set -x
       echo "Executing Terraform ${{ parameters.action }}..."
-      cd $(tfWorkingDirectory)
+      cd $(tfWorkingDirectory)/Project/BaaS-Platform/baas-vms/
       terraform init || { echo "Terraform initialization failed! Exiting."; exit 1; }
       terraform plan -out=tfplan || { echo "Terraform plan failed! Exiting."; exit 1; }
       terraform apply -auto-approve tfplan || { echo "Terraform apply failed! Exiting."; exit 1; }
