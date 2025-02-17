@@ -3,7 +3,7 @@ import csv
 
 # Define paths for the CSV file and output Terraform file
 csv_file_path = "./VM-Creation/Project/BaaS-Platform/migration-vms-list_ebs.csv"
-output_tf_file = "./VM-Creation/Project/BaaS-Platform/baas-vms/main-v1.tf"
+output_tf_file = "./VM-Creation/Project/BaaS-Platform/main-v1.tf"
 cloud_init_file = "./VM-Creation/Deployment-Cloud-init.yaml"  # Path to cloud-init file
 # Function to read the cloud-init YAML file
 def read_and_encode_cloud_init_yaml(file_path):
