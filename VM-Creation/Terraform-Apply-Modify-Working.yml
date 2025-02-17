@@ -98,7 +98,7 @@ steps:
       terraform plan -out=tfplan || { echo "Terraform plan failed! Exiting."; exit 1; }
       terraform apply -auto-approve tfplan || { echo "Terraform apply failed! Exiting."; exit 1; }
   displayName: "Terraform Apply/Modify Logic"
-  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
+  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
 
 - task: Bash@3
   inputs:
@@ -109,4 +109,4 @@ steps:
       az storage blob upload-batch --account-name $(storageAccountName) --destination $(STORAGE_CONTAINER_NAME) --source $(tfWorkingDirectory) --pattern "*.tfstate*;*.lock.hcl" --account-key $(storageAccountKey) --overwrite true
       echo "Terraform files uploaded successfully."
   displayName: "Upload Terraform Files Apply Or Modify to Azure Storage"
-  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
+  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
