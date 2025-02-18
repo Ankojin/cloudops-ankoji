@@ -36,9 +36,7 @@ def parse_tags(tags_str):
 with open(output_tf_file, "w") as tf_file:
     # Write the provider block with environment-based authentication
     tf_file.write("""
-
-             
-
+        
 variable "location" {
   description = "Location for resources."
   type        = string
