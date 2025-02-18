@@ -123,7 +123,6 @@ steps:
             --account-name $(storageAccountName) \
             --destination $(STORAGE_CONTAINER_NAME) \
             --source $(tfWorkingDirectory)/Project/BaaS-Platform \
-            --source $(tfWorkingDirectory) \
             --pattern "*.lock.*" \
             --account-key $(storageAccountKey) \
             --overwrite true || echo "Error uploading lock files."
