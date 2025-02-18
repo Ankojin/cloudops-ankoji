@@ -37,10 +37,10 @@ with open(output_tf_file, "w") as tf_file:
     # Write the provider block with environment-based authentication
     tf_file.write("""
                   
-provider "azurerm"{{
-  features {{}}
+provider "azurerm"{
+  features {}
   subscription_id = var.subscription_id
-}}        
+}        
 variable "location" {
   description = "Location for resources."
   type        = string
