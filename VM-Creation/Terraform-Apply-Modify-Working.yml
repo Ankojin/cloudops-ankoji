@@ -85,7 +85,7 @@ steps:
     script: |
       set -x
       echo "Downloading state files..."
-      az storage blob download-batch --account-name $(storageAccountName) --destination $(tfWorkingDirectory) --source $(STORAGE_CONTAINER_NAME) --pattern "*.tfstate*;*.lock.hcl" --account-key $(storageAccountKey) || { echo "Error downloading state files."; exit 1; }
+      az storage blob download-batch --account-name $(storageAccountName) --destination $(tfWorkingDirectory)/Project/BaaS-Platform/ --source $(STORAGE_CONTAINER_NAME) --pattern "*.tfstate*;*.lock.hcl" --account-key $(storageAccountKey) || { echo "Error downloading state files."; exit 1; }
 
 - task: Bash@3
   inputs:
@@ -107,13 +107,30 @@ steps:
     targetType: 'inline'
     script: |
       set -x
-      echo "Uploading updated Terraform files to Azure Storage..."
-      if ls $(tfWorkingDirectory)/Project/BaaS-Platform/*.tfstate* $(tfWorkingDirectory)/Project/BaaS-Platform/*.lock.hcl 1> /dev/null 2>&1; then
-        az storage blob upload-batch --account-name $(storageAccountName) --destination $(STORAGE_CONTAINER_NAME) --source $(tfWorkingDirectory)/Project/BaaS-Platform/ --pattern "*.tfstate*;*.lock.hcl" --account-key $(storageAccountKey) --overwrite true
-        echo "Terraform files uploaded successfully."
-      else
-        echo "No Terraform state or lock files found. Skipping upload."
-      fi
+            echo "Uploading files in parallel..."
+      (
+          az storage blob upload-batch \
+            --account-name $(storageAccountName) \
+            --destination $(STORAGE_CONTAINER_NAME) \
+            --source $(tfWorkingDirectory)/Project/BaaS-Platform \
+            --pattern "*.tfstate*" \
+            --account-key $(storageAccountKey) \
+            --overwrite true || echo "Error uploading state files."
+      ) &
+
+      (
+          az storage blob upload-batch \
+            --account-name $(storageAccountName) \
+            --destination $(STORAGE_CONTAINER_NAME) \
+            --source $(tfWorkingDirectory)/Project/BaaS-Platform \
+            --source $(tfWorkingDirectory) \
+            --pattern "*.lock.*" \
+            --account-key $(storageAccountKey) \
+            --overwrite true || echo "Error uploading lock files."
+      ) &
+
+      wait
+      echo "All files uploaded successfully."
   displayName: "Upload Terraform Files Apply Or Modify to Azure Storage"
   condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
 
