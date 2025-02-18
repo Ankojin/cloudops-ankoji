@@ -36,10 +36,8 @@ def parse_tags(tags_str):
 with open(output_tf_file, "w") as tf_file:
     # Write the provider block with environment-based authentication
     tf_file.write("""
-provider "azurerm" {
-  features {}
-  subscription_id = var.subscription_id
-}
+
+             
 
 variable "location" {
   description = "Location for resources."
@@ -105,7 +103,13 @@ variable "location" {
             if subscription not in provider_aliases:
                 provider_aliases[subscription] = f"provider_{subscription.replace('-', '_')}"
                 tf_file.write(f"""
+                             
+provider "azurerm"{{
+  features {{}}
+  subscription_id = "{subscription}"
+}}
 
+    # Provider alias for subscription
 provider "azurerm" {{
   alias           = "{provider_aliases[subscription]}"
   features        {{}}
