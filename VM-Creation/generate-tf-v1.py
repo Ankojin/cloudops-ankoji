@@ -287,14 +287,14 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{vm_name}_{disk['disk_n
 # }}
            # AzureMonitor Agent
 
-# resource "azurerm_virtual_machine_extension" "AzureMonitorLinuxAgent_{vm_name}" {{
-#   name                 = "AzureMonitorLinuxAgent"
-#   virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
-#   publisher            = "Microsoft.Azure.Monitor"
-#   type                 = "AzureMonitorLinuxAgent"
-#   type_handler_version = "1.33"
-#   automatic_upgrade_enabled =  true
-# }}
+resource "azurerm_virtual_machine_extension" "AzureMonitorLinuxAgent_{vm_name}" {{
+  name                 = "AzureMonitorLinuxAgent"
+  virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
+  publisher            = "Microsoft.Azure.Monitor"
+  type                 = "AzureMonitorLinuxAgent"
+  type_handler_version = "1.33"
+  automatic_upgrade_enabled =  true
+}}
 
  
                 # Enable VM Insights
@@ -429,16 +429,16 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{vm_name}_{disk['disk_n
 #   SETTINGS
 # }}
 
-                     # AzureMonitorWindowsAgent
+#                      AzureMonitorWindowsAgent
 
-# resource "azurerm_virtual_machine_extension" "AzureMonitorWindowsAgent_{vm_name}" {{
-#   name                 = "AzureMonitorWindowsAgent"
-#   virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
-#   publisher            = "Microsoft.Azure.Monitor"
-#   type                 = "AzureMonitorWindowsAgent"
-#   type_handler_version = "1.30"
-#   automatic_upgrade_enabled =  true
-# }}
+resource "azurerm_virtual_machine_extension" "AzureMonitorWindowsAgent_{vm_name}" {{
+  name                 = "AzureMonitorWindowsAgent"
+  virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
+  publisher            = "Microsoft.Azure.Monitor"
+  type                 = "AzureMonitorWindowsAgent"
+  type_handler_version = "1.30"
+  automatic_upgrade_enabled =  true
+}}
 
                 # Enable VM Insights
 resource "azurerm_monitor_data_collection_rule_association" "{vm_name}" {{
