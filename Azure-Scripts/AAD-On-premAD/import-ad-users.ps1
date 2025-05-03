@@ -2,6 +2,12 @@
 $dryRun = $false
 $log = @()
 
+# Check if the CSV exists
+if (-Not (Test-Path "FilteredUsers.csv")) {
+    Write-Error "FilteredUsers.csv file not found."
+    exit
+}
+
 # Load user data
 Import-Csv "FilteredUsers.csv" | ForEach-Object {
     $name  = $_.DisplayName
@@ -51,7 +57,7 @@ Import-Csv "FilteredUsers.csv" | ForEach-Object {
                 Status      = "Created"
             }
         } catch {
-            Write-Error "Failed to create $upn: $_"
+            Write-Error "Failed to create $upn: ${_}"
             $log += [PSCustomObject]@{
                 DisplayName = $name
                 UPN         = $upn
@@ -69,6 +75,16 @@ Import-Csv "FilteredUsers.csv" | ForEach-Object {
     }
 }
 
-# Export log with passwords
-$log | Export-Csv "UserCreationLog.csv" -NoTypeInformation
-Write-Host "`n✅ Log saved to UserCreationLog.csv" -ForegroundColor Green
+# Export log with passwords (save to secure location)
+$log | Export-Csv "C:\SecureFolder\UserCreationLog.csv" -NoTypeInformation
+Write-Host "`n✅ Log saved to C:\SecureFolder\UserCreationLog.csv" -ForegroundColor Green
+
+# Optional: Send email notification (replace with your own SMTP settings)
+$from = "admin@domainB.local"
+$to = "itadmin@domainB.local"
+$subject = "User Creation Log"
+$body = "The user creation script has completed. Please check the log file at C:\SecureFolder\UserCreationLog.csv"
+$smtpServer = "smtp.domainB.local"
+
+Send-MailMessage -From $from -To $to -Subject $subject -Body $body -SmtpServer $smtpServer
+Write-Host "`n✅ Email notification sent to IT admin" -ForegroundColor Green

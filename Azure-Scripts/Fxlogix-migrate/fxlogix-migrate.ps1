@@ -40,7 +40,7 @@ foreach ($user in $users) {
         if ($oldBlob) {
             # Define the new blob path in the destination Azure Storage Account (On-prem domain)
             $newBlobName = "$username" + "_$newSID.vhdx"
-            $newBlobPath = "OnPremDomain/$newBlobName"
+            # $newBlobPath = "OnPremDomain/$newBlobName"  # Removed as it is unused
             
             # Start copying the old blob (profile file) to the new destination storage account
             Start-AzStorageBlobCopy -SrcBlob $oldBlob.Name -SrcContainer $containerName -DestBlob $newBlobName -DestContainer $containerName -SrcContext $sourceContext -DestContext $destinationContext
@@ -71,7 +71,7 @@ foreach ($user in $users) {
         }
     } catch {
         # Log error
-        $errorMessage = "Error processing user $username: $_"
+        $errorMessage = "Error processing user $username: $($_)"
         Add-Content -Path $logFilePath -Value $errorMessage
         Write-Host $errorMessage
     }
@@ -86,7 +86,7 @@ Write-Host $completionMessage
 
 # OPTIONAL: Generate and provide a SAS token for the new profiles in the destination account
 # If you want to grant access to the new domain user, generate a SAS token (example for read access):
-function Generate-SasToken {
+function New-SasToken {
     param (
         [string]$storageAccountName,
         [string]$containerName,
