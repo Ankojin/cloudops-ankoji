@@ -1,0 +1,105 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "policyName": {
+        "type": "string"
+      },
+      "ruleCollectionGroupName": {
+        "type": "string"
+      },
+      "ruleCollectionName": {
+        "type": "string"
+      },
+      "priority": {
+        "type": "int"
+      },
+      "domainMembersSubnet": {
+        "type": "string"
+      },
+      "domainControllers": {
+        "type": "array"
+      }
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Network/firewallPolicies/ruleCollectionGroups",
+        "apiVersion": "2023-02-01",
+        "name": "[format('{0}/{1}', parameters('policyName'), parameters('ruleCollectionGroupName'))]",
+        "properties": {
+          "priority": "[parameters('priority')]",
+          "ruleCollections": [
+            {
+              "name": "[parameters('ruleCollectionName')]",
+              "ruleType": "NetworkRule",
+              "action": {
+                "type": "Allow"
+              },
+              "rules": [
+                {
+                  "name": "Allow-Port-53",
+                  "ruleType": "NetworkRule",
+                  "ipProtocols": ["TCP", "UDP"],
+                  "sourceAddresses": [
+                    "[parameters('domainMembersSubnet')]"
+                  ],
+                  "destinationAddresses": "[parameters('domainControllers')]",
+                  "destinationPorts": ["53"]
+                },
+                {
+                  "name": "Allow-Port-88",
+                  "ruleType": "NetworkRule",
+                  "ipProtocols": ["TCP", "UDP"],
+                  "sourceAddresses": [
+                    "[parameters('domainMembersSubnet')]"
+                  ],
+                  "destinationAddresses": "[parameters('domainControllers')]",
+                  "destinationPorts": ["88"]
+                },
+                {
+                  "name": "Allow-Port-389",
+                  "ruleType": "NetworkRule",
+                  "ipProtocols": ["TCP", "UDP"],
+                  "sourceAddresses": [
+                    "[parameters('domainMembersSubnet')]"
+                  ],
+                  "destinationAddresses": "[parameters('domainControllers')]",
+                  "destinationPorts": ["389"]
+                },
+                {
+                  "name": "Allow-Port-445",
+                  "ruleType": "NetworkRule",
+                  "ipProtocols": ["TCP"],
+                  "sourceAddresses": [
+                    "[parameters('domainMembersSubnet')]"
+                  ],
+                  "destinationAddresses": "[parameters('domainControllers')]",
+                  "destinationPorts": ["445"]
+                },
+                {
+                  "name": "Allow-Port-135",
+                  "ruleType": "NetworkRule",
+                  "ipProtocols": ["TCP"],
+                  "sourceAddresses": [
+                    "[parameters('domainMembersSubnet')]"
+                  ],
+                  "destinationAddresses": "[parameters('domainControllers')]",
+                  "destinationPorts": ["135"]
+                },
+                {
+                  "name": "Allow-Port-49152-65535",
+                  "ruleType": "NetworkRule",
+                  "ipProtocols": ["TCP"],
+                  "sourceAddresses": [
+                    "[parameters('domainMembersSubnet')]"
+                  ],
+                  "destinationAddresses": "[parameters('domainControllers')]",
+                  "destinationPorts": ["49152-65535"]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }  
