@@ -1,25 +1,33 @@
 {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
-    "contentVersion": "1.0.0.0",
-    "parameters": {
-      "policyName": {
-        "value": "enz-core-nw-azfwpolicy-weeu-01"
-      },
-
-      "ruleCollectionGroupName": {
-        "value": "AD_Network_Rules_Grp"
-      },
-      "ruleCollectionName": {
-        "value": "Allow-AD-Traffic"
-      },
-      "priority": {
-        "value": 501
-      },
-      "domainMembersSubnet": {
-        "value": "10.189.0.0/20"
-      },
-      "domainControllers": {
-        "value": ["10.189.2.4", "10.189.2.5"]
-      }
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "policyName": {
+      "value": "enz-core-nw-azfwpolicy-swec-01"
+    },
+    "ruleCollectionGroupName": {
+      "value": "AD_Network_Rules_Grp"
+    },
+    "ruleCollectionName": {
+      "value": "Allow-AD-Traffic"
+    },
+    "ruleCollectionPriority": {
+      "value": 100
+    },
+    "priority": {
+      "value": 501
+    },
+    "domainMembersSubnet": {
+      "value": "10.189.0.0/20"
+    },
+    "domainControllers": {
+      "value": [
+        "10.189.2.4",
+        "10.189.2.5"
+      ]
+    },
+    "networkRulePriority": {
+      "value": 200
     }
   }
+}
