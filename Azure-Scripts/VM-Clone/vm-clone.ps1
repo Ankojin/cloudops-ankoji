@@ -7,7 +7,7 @@ $location = "westeurope"
 $vnetrg  = "bab-vdi-nw-weeu-rg-01"
 $vnetName = "bab-vdi-nw-weeu-vnet-vdi-01"
 $subnetName = "snet-vdi-avd-01"
-$nsgName = "test-vdi-join-nsg"
+$nsgName = "test-vdi-join-nsg01"
 $vmSize = "Standard_D8s_v5"
 $useSSHOnly = $true  # Set to $false if you want password login for Linux
 
