@@ -1,14 +1,14 @@
 # ---------------------------- CONFIGURATION ----------------------------
-$sourceResourceGroup = "bab-dev-dopstosca-swec-rg-01"
-$targetResourceGroup = "BAB-DEV-SHP-SWEC-RG-01"
-$sourceVMName = "DAOPSAPPJDWV3"
-$newVMName = "DASHPAPSPIWV1"
-$location = "swedencentral"
-$vnetrg  = "bab-dev-nw-swec-rg-01"
-$vnetName = "bab-dev-nw-swec-vnet-nonpci-01"
-$subnetName = "snet-dev-nonpci-app-01"
-$nsgName = "test-ad-join-nsg"
-$vmSize = "Standard_D8ls_v5"
+$sourceResourceGroup = "bab-vdi-avd-weeu-rg-01"
+$targetResourceGroup = "bab-vdi-avd-weeu-rg-01"
+$sourceVMName = "DEVAVDPHSA-2"
+$newVMName = "BABAVDSHDTA-1"
+$location = "westeurope"
+$vnetrg  = "bab-vdi-nw-weeu-rg-01"
+$vnetName = "bab-vdi-nw-weeu-vnet-vdi-01"
+$subnetName = "snet-vdi-avd-01"
+$nsgName = "test-vdi-join-nsg"
+$vmSize = "Standard_D8s_v5"
 $useSSHOnly = $true  # Set to $false if you want password login for Linux
 
 # ---------------------------- STOP SOURCE VM ----------------------------
@@ -92,7 +92,7 @@ $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 
 # Specify the desired static private IP address
-$staticIpAddress = "10.0.1.100"  # Replace with your desired IP address
+$staticIpAddress = "10.189.50.143"  # Replace with your desired IP address
 
 $nic = New-AzNetworkInterface -Name "$newVMName-NIC" -ResourceGroupName $targetResourceGroup `
     -Location $location `
@@ -124,8 +124,8 @@ foreach ($disk in $newDataDisks) {
 
 # ---------------------------- ENABLE BOOT DIAGNOSTICS ----------------------------
 # Specify the storage account for boot diagnostics
-$bootDiagStorageAccountName = "babdevvmbootdiag02"
-$bootdiagstracctrg = "bab-dev-vm-boot-diag-swec-rg-01"  
+$bootDiagStorageAccountName = "babvdivmbootdiag01"
+$bootdiagstracctrg = "bab-vdi-avd-weeu-rg-01"  
 $bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName $bootdiagstracctrg -Name $bootDiagStorageAccountName
 
 if (-not $bootDiagStorageAccount) {
