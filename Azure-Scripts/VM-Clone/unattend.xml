@@ -1,0 +1,44 @@
+<!-- unattend.xml: Join domain and set computer name -->
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <ComputerName>BABAVDSHDTA-1</ComputerName>
+    </component>
+    <component name="Microsoft-Windows-UnattendedJoin" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <Identification>
+        <JoinDomain>albtests.com</JoinDomain>
+        <MachineObjectOU>OU=VDI,DC=YOURDOMAIN,DC=local</MachineObjectOU>
+        <Credentials>
+          <Domain>YOURDOMAIN</Domain>
+          <Username>joinaccount</Username>
+          <Password>yourpassword</Password>
+        </Credentials>
+      </Identification>
+    </component>
+  </settings>
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <TimeZone>W. Europe Standard Time</TimeZone>
+      <RegisteredOrganization>MyOrg</RegisteredOrganization>
+      <RegisteredOwner>CloudOps</RegisteredOwner>
+      <DoNotOpenInitialConfigurationTasksAtLogon>true</DoNotOpenInitialConfigurationTasksAtLogon>
+      <DoNotOpenWelcomeCenter>true</DoNotOpenWelcomeCenter>
+      <AutoLogon>
+        <Enabled>false</Enabled>
+      </AutoLogon>
+      <UserAccounts>
+        <AdministratorPassword>
+          <Value></Value>
+          <PlainText>true</PlainText>
+        </AdministratorPassword>
+      </UserAccounts>
+    </component>
+  </settings>
+  <settings pass="generalize">
+    <component name="Microsoft-Windows-PnpSysprep" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <PersistAllDeviceInstalls>false</PersistAllDeviceInstalls>
+      <DoNotCleanUpNonPresentDevices>false</DoNotCleanUpNonPresentDevices>
+    </component>
+  </settings>
+</unattend>
