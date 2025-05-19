@@ -8,19 +8,19 @@
     <component name="Microsoft-Windows-UnattendedJoin" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
       <Identification>
         <JoinDomain>albtests.com</JoinDomain>
-        <MachineObjectOU>OU=VDI,DC=YOURDOMAIN,DC=local</MachineObjectOU>
+        <MachineObjectOU>OU=AADDC Computers,DC=albtests,DC=com</MachineObjectOU>
         <Credentials>
-          <Domain>YOURDOMAIN</Domain>
-          <Username>joinaccount</Username>
-          <Password>yourpassword</Password>
+          <Domain>albtests.com</Domain>
+          <Username>adjoin</Username>
+          <Password>AdJo1n@!qaz@wsx</Password>
         </Credentials>
       </Identification>
     </component>
   </settings>
   <settings pass="oobeSystem">
     <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
-      <TimeZone>W. Europe Standard Time</TimeZone>
-      <RegisteredOrganization>MyOrg</RegisteredOrganization>
+      <TimeZone>W. Arab Standard Time</TimeZone>
+      <RegisteredOrganization>BAB</RegisteredOrganization>
       <RegisteredOwner>CloudOps</RegisteredOwner>
       <DoNotOpenInitialConfigurationTasksAtLogon>true</DoNotOpenInitialConfigurationTasksAtLogon>
       <DoNotOpenWelcomeCenter>true</DoNotOpenWelcomeCenter>
