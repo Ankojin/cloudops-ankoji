@@ -1,7 +1,7 @@
 # ---------------------------- CONFIGURATION ----------------------------
 $sourceResourceGroup = "bab-vdi-avd-weeu-rg-01"
 $targetResourceGroup = "bab-vdi-avd-weeu-rg-01"
-$sourceVMName = "DEVAVDPHSA-0"
+$sourceVMName = "DEVAVDPHSA-2"
 $newVMName = "BABAVDSHDTA-1"
 $location = "westeurope"
 $vnetrg  = "bab-vdi-nw-weeu-rg-01"
@@ -92,7 +92,7 @@ $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 
 # Specify the desired static private IP address
-$staticIpAddress = "10.189.50.143"  # Replace with your desired IP address
+$staticIpAddress = "10.189.50.134"  # Replace with your desired IP address
 
 $nic = New-AzNetworkInterface -Name "$newVMName-NIC" -ResourceGroupName $targetResourceGroup `
     -Location $location `
