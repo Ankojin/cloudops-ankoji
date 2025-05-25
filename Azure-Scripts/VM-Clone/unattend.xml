@@ -8,7 +8,7 @@
     <component name="Microsoft-Windows-UnattendedJoin" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
       <Identification>
         <JoinDomain>albtests.com</JoinDomain>
-        <MachineObjectOU>OU=VDI,DC=YOURDOMAIN,DC=local</MachineObjectOU>
+        <MachineObjectOU>OU=BAB-New,OU=AVD,OU=ALB Computers,OU=ALB,DC=albtests,DC=com</MachineObjectOU>
         <Credentials>
           <Domain>YOURDOMAIN</Domain>
           <Username>joinaccount</Username>

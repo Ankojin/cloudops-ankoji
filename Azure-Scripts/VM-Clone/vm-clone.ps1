@@ -1,7 +1,7 @@
 # ---------------------------- CONFIGURATION ----------------------------
 $sourceResourceGroup = "bab-vdi-avd-weeu-rg-01"
 $targetResourceGroup = "bab-vdi-avd-weeu-rg-01"
-$sourceVMName = "DEVAVDPHSA-2"
+$sourceVMName = "DEVAVDPHSA-0"
 $newVMName = "BABAVDSHDTA-1"
 $location = "westeurope"
 $vnetrg  = "bab-vdi-nw-weeu-rg-01"
@@ -9,7 +9,7 @@ $vnetName = "bab-vdi-nw-weeu-vnet-vdi-01"
 $subnetName = "snet-vdi-avd-01"
 $nsgName = "test-vdi-join-nsg01"
 $vmSize = "Standard_D8s_v5"
-$useSSHOnly = $true  # Set to $false if you want password login for Linux
+$useSSHOnly = $false  # Set to $false if you want password login for Linux
 
 # ---------------------------- STOP SOURCE VM ----------------------------
 $sourceVM = Get-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName
