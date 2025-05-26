@@ -1,16 +1,16 @@
 # ---------------------------- CONFIGURATION ----------------------------
-$sourceSubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"  # Replace with the source subscription ID
-$targetSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"  # Replace with the target subscription ID
-$sourceResourceGroup = "bab-dev-saqr-swec-rg-01"
-$targetResourceGroup = "BAB-SIT-saq-SWEC-RG-01"
-$sourceVMName = "DASAQWBWSDWV1"
-$newVMName = "DASAQWBWSSWV1"
+$sourceSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"  # Replace with the source subscription ID
+$targetSubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"  # Replace with the target subscription ID
+$sourceResourceGroup = "bab-sit-was-swec-rg-01"
+$targetResourceGroup = "bab-dev-bib-swec-rg-01"
+$sourceVMName = "DAIBGADLDTWV1"
+$newVMName = "DAIBGADLDDWV1"
 $location = "swedencentral"
-$vnetrg  = "bab-sit-nw-swec-rg-01"
-$vnetName = "bab-sit-nw-swec-vnet-nonpci-01"
-$subnetName = "snet-sit-nonpci-web-01"
+$vnetrg  = "bab-dev-nw-swec-rg-01"
+$vnetName = "bab-dev-nw-swec-vnet-nonpci-01"
+$subnetName = "snet-dev-nonpci-app-02"
 $nsgName = "test-ad-join-nsg"
-$vmSize = "Standard_D2s_v6"
+$vmSize = "Standard_D2ls_v5"
 
 # ---------------------------- SWITCH TO SOURCE SUBSCRIPTION ----------------------------
 Set-AzContext -SubscriptionId $sourceSubscriptionId
@@ -102,11 +102,12 @@ foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
     $newDataDisks += [PSCustomObject]@{Id=$clonedDisk.Id; Lun=$dataDisk.Lun}
 }
 
-# ---------------------------- CREATE NIC WITH NSG ---------------------------- $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $targetResourceGroup -Name $nsgName
+# ---------------------------- CREATE NIC WITH NSG ---------------------------- 
+$nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $targetResourceGroup -Name $nsgName
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 
-$staticIpAddress = "10.189.66.10"  # Replace with your desired IP address
+$staticIpAddress = "10.189.57.187"  # Replace with your desired IP address
 $nic = New-AzNetworkInterface -Name "$newVMName-NIC" -ResourceGroupName $targetResourceGroup `
     -Location $location `
     -SubnetId $subnet.Id `
@@ -133,8 +134,8 @@ foreach ($disk in $newDataDisks) {
 }
 
 # ---------------------------- ENABLE BOOT DIAGNOSTICS ----------------------------
-$bootDiagStorageAccountName = "babsitvmbootdiag02"
-$bootdiagstracctrg = "bab-sit-vm-boot-diag-swec-rg-01"  
+$bootDiagStorageAccountName = "babdevvmbootdiag02"
+$bootdiagstracctrg = "bab-dev-vm-boot-diag-swec-rg-01"  
 $bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName $bootdiagstracctrg -Name $bootDiagStorageAccountName
 
 if (-not $bootDiagStorageAccount) {
