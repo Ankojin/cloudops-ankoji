@@ -148,4 +148,24 @@ try {
     throw "Failed to create the new VM '$newVMName'. Error: $_"
 }
 
+# ---------------------------- DELETE SNAPSHOTS AFTER VM CREATION ----------------------------
+# Delete OS snapshot
+try {
+    Remove-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotOSName -Force
+    Write-Host "Deleted OS snapshot '$snapshotOSName'."
+} catch {
+    Write-Warning "Failed to delete OS snapshot '$snapshotOSName'. Error: $_"
+}
+
+# Delete data disk snapshots
+foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
+    $snapshotName = "$newVMName-DataDisk-$($dataDisk.Lun)-Snap"
+    try {
+        Remove-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotName -Force
+        Write-Host "Deleted data disk snapshot '$snapshotName'."
+    } catch {
+        Write-Warning "Failed to delete data disk snapshot '$snapshotName'. Error: $_"
+    }
+}
+
 Write-Host "`n✅ VM '$newVMName' cloned from '$sourceVMName'. OS/data disks and NSG attached. No public IP."
