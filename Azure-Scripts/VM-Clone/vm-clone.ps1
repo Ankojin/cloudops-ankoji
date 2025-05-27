@@ -1,14 +1,15 @@
 # ---------------------------- CONFIGURATION ----------------------------
-$sourceResourceGroup = "bab-vdi-avd-weeu-rg-01"
-$targetResourceGroup = "bab-vdi-avd-weeu-rg-01"
-$sourceVMName = "DEVAVDPHSA-2"
-$newVMName = "BABAVDSHDTA-1"
-$location = "westeurope"
-$vnetrg  = "bab-vdi-nw-weeu-rg-01"
-$vnetName = "bab-vdi-nw-weeu-vnet-vdi-01"
-$subnetName = "snet-vdi-avd-01"
-$nsgName = "test-vdi-join-nsg01"
-$vmSize = "Standard_D8s_v5"
+$sourceResourceGroup = "bab-dev-BDS-swec-rg-01"
+$targetResourceGroup = "bab-dev-BDS-swec-rg-01"
+$sourceVMName = "DABDMDBSQDWV1-test"
+$newVMName = "DABDMDBSQDWV1"
+$location = "swedencentral"
+$vnetrg  = "bab-dev-nw-swec-rg-01"
+$vnetName = "bab-dev-nw-swec-vnet-nonpci-01"
+$subnetName = "snet-dev-nonpci-db-03"
+$nsgName = "test-ad-join-nsg"
+$nsgrg ="bab-dev-shp-swec-rg-01"
+$vmSize = "Standard_D2ls_v5"
 $useSSHOnly = $false  # Set to $false if you want password login for Linux
 
 # ---------------------------- STOP SOURCE VM ----------------------------
@@ -87,12 +88,12 @@ foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
 }
 
 # ---------------------------- CREATE NIC WITH NSG ----------------------------
-$nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $targetResourceGroup -Name $nsgName
+$nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgrg -Name $nsgName
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 
 # Specify the desired static private IP address
-$staticIpAddress = "10.189.50.134"  # Replace with your desired IP address
+$staticIpAddress = "10.189.57.222"  # Replace with your desired IP address
 
 $nic = New-AzNetworkInterface -Name "$newVMName-NIC" -ResourceGroupName $targetResourceGroup `
     -Location $location `
@@ -124,8 +125,8 @@ foreach ($disk in $newDataDisks) {
 
 # ---------------------------- ENABLE BOOT DIAGNOSTICS ----------------------------
 # Specify the storage account for boot diagnostics
-$bootDiagStorageAccountName = "babvdivmbootdiag01"
-$bootdiagstracctrg = "bab-vdi-avd-weeu-rg-01"  
+$bootDiagStorageAccountName = "babdevvmbootdiag02"
+$bootdiagstracctrg = "bab-dev-vm-boot-diag-swec-rg-01"  
 $bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName $bootdiagstracctrg -Name $bootDiagStorageAccountName
 
 if (-not $bootDiagStorageAccount) {
