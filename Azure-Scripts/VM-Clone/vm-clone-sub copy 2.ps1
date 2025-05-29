@@ -1,15 +1,18 @@
 # ---------------------------- CONFIGURATION ----------------------------
-$sourceSubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"  # Replace with the source subscription ID
-$targetSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"  # Replace with the target subscription ID
-$sourceResourceGroup = "bab-dev-saqr-swec-rg-01"
-$targetResourceGroup = "BAB-SIT-saq-SWEC-RG-01"
-$sourceVMName = "DASAQWBWSDWV1"
-$newVMName = "DASAQWBWSSWV1"
+# $sourceSubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"  # Replace with the source subscription ID
+# $targetSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"  # Replace with the target subscription ID
+$sourceSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"  # Replace with the source subscription ID
+$targetSubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"  # Replace with the target subscription ID
+$sourceResourceGroup = "bab-sit-mub-swec-rg-01"
+$targetResourceGroup = "bab-dev-mub-swec-rg-01"
+$sourceVMName = "DAMUBDBORIWV2-test"
+$newVMName = "DAMUBDBORDWV2"
 $location = "swedencentral"
 $vnetrg  = "bab-dev-nw-swec-rg-01"
 $vnetName = "bab-dev-nw-swec-vnet-nonpci-01"
 $subnetName = "snet-dev-nonpci-db-03"
 #$nsgName = "test-ad-join-nsg"
+#$nsgrg ="bab-sit-saq-swec-rg-01"
 $vmSize = "Standard_D4ls_v5"
 
 # ---------------------------- SWITCH TO SOURCE SUBSCRIPTION ----------------------------
@@ -102,11 +105,12 @@ foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
     $newDataDisks += [PSCustomObject]@{Id=$clonedDisk.Id; Lun=$dataDisk.Lun}
 }
 
-# ---------------------------- CREATE NIC WITH NSG ---------------------------- $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $targetResourceGroup -Name $nsgName
+# ---------------------------- CREATE NIC WITH NSG ---------------------------- 
+#$nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgrg -Name $nsgName
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 
-$staticIpAddress = "10.189.66.10"  # Replace with your desired IP address
+$staticIpAddress = "10.189.57.201"  # Replace with your desired IP address
 $nic = New-AzNetworkInterface -Name "$newVMName-NIC" -ResourceGroupName $targetResourceGroup `
     -Location $location `
     -SubnetId $subnet.Id `
@@ -133,8 +137,8 @@ foreach ($disk in $newDataDisks) {
 }
 
 # ---------------------------- ENABLE BOOT DIAGNOSTICS ----------------------------
-$bootDiagStorageAccountName = "babsitvmbootdiag02"
-$bootdiagstracctrg = "bab-sit-vm-boot-diag-swec-rg-01"  
+$bootDiagStorageAccountName = "babdevvmbootdiag02"
+$bootdiagstracctrg = "bab-dev-vm-boot-diag-swec-rg-01"  
 $bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName $bootdiagstracctrg -Name $bootDiagStorageAccountName
 
 if (-not $bootDiagStorageAccount) {
@@ -153,6 +157,26 @@ try {
     New-AzVM -ResourceGroupName $targetResourceGroup -Location $location -VM $vmConfig
 } catch {
     throw "Failed to create the new VM '$newVMName'. Error: $_"
+}
+
+# ---------------------------- DELETE SNAPSHOTS AFTER VM CREATION ----------------------------
+# Delete OS snapshot
+try {
+    Remove-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotOSName -Force
+    Write-Host "Deleted OS snapshot '$snapshotOSName'."
+} catch {
+    Write-Warning "Failed to delete OS snapshot '$snapshotOSName'. Error: $_"
+}
+
+# Delete data disk snapshots
+foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
+    $snapshotName = "$newVMName-DataDisk-$($dataDisk.Lun)-Snap"
+    try {
+        Remove-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotName -Force
+        Write-Host "Deleted data disk snapshot '$snapshotName'."
+    } catch {
+        Write-Warning "Failed to delete data disk snapshot '$snapshotName'. Error: $_"
+    }
 }
 
 Write-Host "`n✅ VM '$newVMName' cloned from '$sourceVMName'. OS/data disks and NSG attached."
