@@ -67,7 +67,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Detect CA config
-$caConfig = & certutil -config - | Where-Object { $_ -match "\\" } | Select-Object -First 1
+# $caConfig = & certutil -config - | Where-Object { $_ -match "\\" } | Select-Object -First 1
+$caConfig = "DAPKIAPISCWV1.albtests.com\Albtests CA Issuer"
+
 if (-not $caConfig) {
     $msg = "Failed to detect CA configuration."
     Write-Log $msg "ERROR"
