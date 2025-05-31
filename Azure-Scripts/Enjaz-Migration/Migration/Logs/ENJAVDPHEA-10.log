@@ -1,7 +1,0 @@
-Starting migration of ENJAVDPHEA-10 at 05/29/2025 16:38:44
-❌ Failed: A parameter cannot be found that matches parameter name 'ResourceId'.
-Starting migration of ENJAVDPHEA-10 at 05/29/2025 16:42:24
-❌ Failed: A parameter cannot be found that matches parameter name 'ResourceId'.
-❌ Failed to migrate VM 'ENJAVDPHEA-10' - Error: A parameter cannot be found that matches parameter name 'ResourceId'.
-❌ Error on 05/29/2025 17:18:30: A parameter cannot be found that matches parameter name 'ResourceId'.
-❌ Error on 05/29/2025 17:18:45: A parameter cannot be found that matches parameter name 'ResourceId'.

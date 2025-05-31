@@ -1,0 +1,945 @@
+**********************
+PowerShell transcript start
+Start time: 20250531232854
+Username: AzureAD\AnkojiRaoNagisetty
+RunAs User: AzureAD\AnkojiRaoNagisetty
+Configuration Name: 
+Machine: CPC-AnkNa-QEJIR (Microsoft Windows NT 10.0.26100.0)
+Host Application: C:\Program Files\PowerShell\7\pwsh.dll -NoProfile -ExecutionPolicy Bypass -Command Import-Module 'c:\Users\AnkojiRaoNagisetty\.vscode\extensions\ms-vscode.powershell-2025.0.0\modules\PowerShellEditorServices\PowerShellEditorServices.psd1'; Start-EditorServices -HostName 'Visual Studio Code Host' -HostProfileId 'Microsoft.VSCode' -HostVersion '2025.0.0' -BundledModulesPath 'c:\Users\AnkojiRaoNagisetty\.vscode\extensions\ms-vscode.powershell-2025.0.0\modules' -EnableConsoleRepl -StartupBanner "PowerShell Extension v2025.0.0
+Copyright (c) Microsoft Corporation.
+
+https://aka.ms/vscode-powershell
+Type 'help' to get help.
+" -LogLevel 'Warning' -LogPath 'c:\Users\AnkojiRaoNagisetty\AppData\Roaming\Code\logs\20250531T213927\window1\exthost\ms-vscode.powershell' -SessionDetailsPath 'c:\Users\AnkojiRaoNagisetty\AppData\Roaming\Code\User\globalStorage\ms-vscode.powershell\sessions\PSES-VSCode-6592-944282.json' -FeatureFlags @() 
+Process ID: 17096
+PSVersion: 7.5.1
+PSEdition: Core
+GitCommitId: 7.5.1
+OS: Microsoft Windows 10.0.26100
+Platform: Win32NT
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1, 6.0, 7.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+WSManStackVersion: 3.0
+**********************
+Transcript started, output file is C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\migration-20250531-232854.log
+[2025-05-31 23:28:54] [INFO] Script started at 2025-05-31 23:28:54
+[2025-05-31 23:28:54] [INFO] Starting snapshot creation and SAS URL generation in subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:28:54] [INFO] Processing VM: ENJAVDPHEA-10
+[2025-05-31 23:28:54] [INFO] Authenticating to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:28:54] [DEBUG] Using Service Principal for Tenant cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5
+
+Subscription name Tenant
+----------------- ------
+Enjaz             cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5
+[2025-05-31 23:28:54] [INFO] Successfully authenticated to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:28:54] [DEBUG] Retrieving VM details for ENJAVDPHEA-10
+[2025-05-31 23:28:55] [DEBUG] OS Disk: ENJAVDPHEA-10_disk1_1b1bfc47f7654568ad43868ef71b15a5
+[2025-05-31 23:28:56] [WARNING] Snapshot already exists: ENJAVDPHEA-10-osdisk-snap. Skipping creation.
+[2025-05-31 23:28:56] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-osdisk-snap
+[2025-05-31 23:29:30] [WARNING] Snapshot already exists: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap. Skipping creation.
+[2025-05-31 23:29:30] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap
+[2025-05-31 23:30:02] [INFO] Snapshot creation and SAS URL update complete
+[2025-05-31 23:30:02] [INFO] Authenticating to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:30:02] [DEBUG] Using Service Principal for target Tenant 1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+ENJ-VDI           1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+[2025-05-31 23:30:03] [INFO] Successfully authenticated to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:30:05] [WARNING] OS VHD ENJAVDPHEA-10-osdisk.vhd already exists in migration. Skipping copy.
+[2025-05-31 23:30:05] [WARNING] Data VHD ENJAVDPHEA-10-datadisk-0.vhd already exists in migration. Skipping copy.
+[2025-05-31 23:30:05] [INFO] Authenticating to subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:30:05] [DEBUG] Using Service Principal for Tenant 1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+ENJ-VDI           1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+[2025-05-31 23:30:06] [INFO] Successfully authenticated to subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+WARNING: Since there is no standard storage account in the same region as the VM, new standard storage account, enjvenjvdenja053123300, is created for boot diagnostics.
+>> TerminatingError(): "The pipeline has been stopped."
+>> TerminatingError(): "The pipeline has been stopped."
+>> TerminatingError(): "The pipeline has been stopped."
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+PS>. 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-combined.ps1'
+Transcript started, output file is C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\migration-20250531-234103.log
+[2025-05-31 23:41:03] [INFO] Script started at 2025-05-31 23:41:03
+[2025-05-31 23:41:03] [INFO] Starting snapshot creation and SAS URL generation in subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:41:03] [INFO] Processing VM: ENJAVDPHEA-10
+[2025-05-31 23:41:03] [INFO] Authenticating to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:41:03] [DEBUG] Using Service Principal for Tenant cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5
+
+Subscription name Tenant
+----------------- ------
+Enjaz             cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5
+[2025-05-31 23:41:03] [INFO] Successfully authenticated to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:41:03] [DEBUG] Retrieving VM details for ENJAVDPHEA-10
+[2025-05-31 23:41:04] [DEBUG] OS Disk: ENJAVDPHEA-10_disk1_1b1bfc47f7654568ad43868ef71b15a5
+[2025-05-31 23:41:06] [WARNING] Snapshot already exists: ENJAVDPHEA-10-osdisk-snap. Skipping creation.
+[2025-05-31 23:41:06] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-osdisk-snap
+[2025-05-31 23:41:39] [WARNING] Snapshot already exists: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap. Skipping creation.
+[2025-05-31 23:41:39] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap
+PS>TerminatingError(Export-Csv): "The process cannot access the file 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv' because it is being used by another process."
+[2025-05-31 23:42:10] [ERROR] Failed to export CSV to {C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv}: The process cannot access the file 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv' because it is being used by another process.
+[2025-05-31 23:42:10] [INFO] Authenticating to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:42:11] [DEBUG] Using Service Principal for target Tenant 1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+ENJ-VDI           1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+[2025-05-31 23:42:11] [INFO] Successfully authenticated to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:42:12] [WARNING] Data VHD ENJAVDPHEA-10-datadisk-0.vhd already exists in migration. Skipping copy.
+PS>TerminatingError(Export-Csv): "The process cannot access the file 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv' because it is being used by another process."
+>> TerminatingError(Export-Csv): "The process cannot access the file 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv' because it is being used by another process."
+[2025-05-31 23:42:12] [ERROR] Script execution failed: The process cannot access the file 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv' because it is being used by another process.
+Transcript stopped, output file is C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\migration-20250531-234103.log
+PS>TerminatingError(Export-Csv): "The process cannot access the file 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv' because it is being used by another process."
+>> TerminatingError(Export-Csv): "The process cannot access the file 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv' because it is being used by another process."
+The process cannot access the file 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv' because it is being used by another process.
+Export-Csv: C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-combined.ps1:419:12
+Line |
+ 419 |      $vms | Export-Csv -Path $CsvFile -NoTypeInformation -Force
+     |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | The process cannot access the file
+     | 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-map.csv' because it is being used by another process.
+
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+PS>. 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-combined.ps1'
+Transcript started, output file is C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\migration-20250531-234308.log
+[2025-05-31 23:43:08] [INFO] Script started at 2025-05-31 23:43:08
+[2025-05-31 23:43:08] [INFO] Starting snapshot creation and SAS URL generation in subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:43:08] [INFO] Processing VM: ENJAVDPHEA-10
+[2025-05-31 23:43:08] [INFO] Authenticating to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:43:08] [DEBUG] Using Service Principal for Tenant cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5
+
+Subscription name Tenant
+----------------- ------
+Enjaz             cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5
+[2025-05-31 23:43:09] [INFO] Successfully authenticated to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:43:09] [DEBUG] Retrieving VM details for ENJAVDPHEA-10
+[2025-05-31 23:43:09] [DEBUG] OS Disk: ENJAVDPHEA-10_disk1_1b1bfc47f7654568ad43868ef71b15a5
+[2025-05-31 23:43:11] [WARNING] Snapshot already exists: ENJAVDPHEA-10-osdisk-snap. Skipping creation.
+[2025-05-31 23:43:11] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-osdisk-snap
+[2025-05-31 23:43:44] [WARNING] Snapshot already exists: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap. Skipping creation.
+[2025-05-31 23:43:44] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap
+[2025-05-31 23:44:17] [INFO] Snapshot creation and SAS URL update complete
+[2025-05-31 23:44:17] [INFO] Authenticating to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:44:17] [DEBUG] Using Service Principal for target Tenant 1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+ENJ-VDI           1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+[2025-05-31 23:44:17] [INFO] Successfully authenticated to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:44:19] [WARNING] OS VHD ENJAVDPHEA-10-osdisk.vhd already exists in migration. Skipping copy.
+[2025-05-31 23:44:19] [WARNING] Data VHD ENJAVDPHEA-10-datadisk-0.vhd already exists in migration. Skipping copy.
+[2025-05-31 23:44:19] [INFO] Authenticating to subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:44:19] [DEBUG] Using Service Principal for Tenant 1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+ENJ-VDI           1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+[2025-05-31 23:44:19] [INFO] Successfully authenticated to subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:44:21] [ERROR] Failed to create VM ENJAVDPHEA-10: The term 'Write-LogInner' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+[2025-05-31 23:44:21] [INFO] No jobs started, skipping dashboard
+[2025-05-31 23:44:21] [INFO] Script completed at 2025-05-31 23:44:21
+Transcript stopped, output file is C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\migration-20250531-234308.log
+
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+PS>. 'C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\vm-migration-combined.ps1'
+Transcript started, output file is C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\migration-20250531-234857.log
+[2025-05-31 23:48:57] [INFO] Script started at 2025-05-31 23:48:57
+[2025-05-31 23:48:57] [INFO] Starting snapshot creation and SAS URL generation in subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:48:57] [INFO] Processing VM: ENJAVDPHEA-10
+[2025-05-31 23:48:57] [INFO] Authenticating to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:48:57] [DEBUG] Using Service Principal for Tenant cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5
+
+Subscription name Tenant
+----------------- ------
+Enjaz             cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5
+[2025-05-31 23:48:58] [INFO] Successfully authenticated to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:48:58] [DEBUG] Retrieving VM details for ENJAVDPHEA-10
+[2025-05-31 23:48:58] [DEBUG] OS Disk: ENJAVDPHEA-10_disk1_1b1bfc47f7654568ad43868ef71b15a5
+[2025-05-31 23:49:00] [WARNING] Snapshot already exists: ENJAVDPHEA-10-osdisk-snap. Skipping creation.
+[2025-05-31 23:49:00] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-osdisk-snap
+[2025-05-31 23:49:34] [WARNING] Snapshot already exists: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap. Skipping creation.
+[2025-05-31 23:49:34] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap
+[2025-05-31 23:50:06] [INFO] Snapshot creation and SAS URL update complete
+[2025-05-31 23:50:06] [INFO] Authenticating to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:50:06] [DEBUG] Using Service Principal for target Tenant 1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+ENJ-VDI           1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+[2025-05-31 23:50:07] [INFO] Successfully authenticated to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:50:09] [WARNING] OS VHD ENJAVDPHEA-10-osdisk.vhd already exists in migration. Skipping copy.
+[2025-05-31 23:50:09] [WARNING] Data VHD ENJAVDPHEA-10-datadisk-0.vhd already exists in migration. Skipping copy.
+[2025-05-31 23:50:09] [INFO] Authenticating to subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:50:09] [DEBUG] Using Service Principal for Tenant 1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+ENJ-VDI           1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+[2025-05-31 23:50:09] [INFO] Successfully authenticated to subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:50:12] [INFO] Creating VM ENJAVDPHEA-10
+
+RequestId           : 
+IsSuccessStatusCode : True
+StatusCode          : OK
+ReasonPhrase        : 
+
+Selecting “UK South” may reduce your costs. The region you’ve selected may cost more for the same services. You can disable this message in the future with the command “Update-AzConfig -DisplayRegionIdentified $false”. Learn more at https://go.microsoft.com/fwlink/?linkid=2225665
+[2025-05-31 23:52:31] [INFO] VM ENJAVDPHEA-10 created successfully
+[2025-05-31 23:52:31] [INFO] No jobs started, skipping dashboard
+[2025-05-31 23:52:31] [INFO] Script completed at 2025-05-31 23:52:31
+Transcript stopped, output file is C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Enjaz-Migration\combined\migration-20250531-234857.log
+
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+PS>CommandInvocation(Get-Command): "Get-Command"
+>> ParameterBinding(Get-Command): name="ListImported"; value="True"
+>> ParameterBinding(Get-Command): name="CommandType"; value="Alias"
+
+CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Alias           % -> ForEach-Object
+Alias           ? -> Where-Object
+Alias           ac -> Add-Content
+Alias           Add-AzAccount                                      4.2.0      Az.Accounts
+Alias           Add-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           cat -> Get-Content
+Alias           cd -> Set-Location
+Alias           chdir -> Set-Location
+Alias           clc -> Clear-Content
+Alias           clear -> Clear-Host
+Alias           clhy -> Clear-History
+Alias           cli -> Clear-Item
+Alias           clp -> Clear-ItemProperty
+Alias           cls -> Clear-Host
+Alias           clv -> Clear-Variable
+Alias           cnsn -> Connect-PSSession
+Alias           compare -> Compare-Object
+Alias           copy -> Copy-Item
+Alias           cp -> Copy-Item
+Alias           cpi -> Copy-Item
+Alias           cpp -> Copy-ItemProperty
+Alias           cvpa -> Convert-Path
+Alias           dbp -> Disable-PSBreakpoint
+Alias           del -> Remove-Item
+Alias           diff -> Compare-Object
+Alias           dir -> Get-ChildItem
+Alias           Disable-AzStorageSoftDelete                        8.3.0      Az.Storage
+Alias           dnsn -> Disconnect-PSSession
+Alias           ebp -> Enable-PSBreakpoint
+Alias           echo -> Write-Output
+Alias           Enable-AzStorageSoftDelete                         8.3.0      Az.Storage
+Alias           epal -> Export-Alias
+Alias           epcsv -> Export-Csv
+Alias           erase -> Remove-Item
+Alias           etsn -> Enter-PSSession
+Alias           exsn -> Exit-PSSession
+Alias           fc -> Format-Custom
+Alias           fhx -> Format-Hex                                  7.0.0.0    Microsoft.PowerShell.Utility
+Alias           fl -> Format-List
+Alias           foreach -> ForEach-Object
+Alias           ft -> Format-Table
+Alias           fw -> Format-Wide
+Alias           gal -> Get-Alias
+Alias           gbp -> Get-PSBreakpoint
+Alias           gc -> Get-Content
+Alias           gcb -> Get-Clipboard                               7.0.0.0    Microsoft.PowerShell.Management
+Alias           gci -> Get-ChildItem
+Alias           gcm -> Get-Command
+Alias           gcs -> Get-PSCallStack
+Alias           gdr -> Get-PSDrive
+Alias           gerr -> Get-Error
+Alias           Get-AzApplicationGatewayAvailableSslOptions        7.16.1     Az.Network
+Alias           Get-AzApplicationGatewayAvailableWafRuleSets       7.16.1     Az.Network
+Alias           Get-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           Get-AzDatalakeGen2FileSystem                       8.3.0      Az.Storage
+Alias           Get-AzDomain                                       4.2.0      Az.Accounts
+Alias           Get-AzExpressRouteCircuitStats                     7.16.1     Az.Network
+Alias           Get-AzInterfaceEndpoint                            7.16.1     Az.Network
+Alias           Get-AzStorageContainerAcl                          8.3.0      Az.Storage
+Alias           Get-AzVmssDiskEncryptionStatus                     9.2.0      Az.Compute
+Alias           Get-AzVmssVMDiskEncryptionStatus                   9.2.0      Az.Compute
+Alias           ghy -> Get-History
+Alias           gi -> Get-Item
+Alias           gin -> Get-ComputerInfo                            7.0.0.0    Microsoft.PowerShell.Management
+Alias           gjb -> Get-Job
+Alias           gl -> Get-Location
+Alias           gm -> Get-Member
+Alias           gmo -> Get-Module
+Alias           gp -> Get-ItemProperty
+Alias           gps -> Get-Process
+Alias           gpv -> Get-ItemPropertyValue
+Alias           group -> Group-Object
+Alias           gsn -> Get-PSSession
+Alias           gsv -> Get-Service
+Alias           gtz -> Get-TimeZone                                7.0.0.0    Microsoft.PowerShell.Management
+Alias           gu -> Get-Unique
+Alias           gv -> Get-Variable
+Alias           h -> Get-History
+Alias           history -> Get-History
+Alias           icm -> Invoke-Command
+Alias           iex -> Invoke-Expression
+Alias           ihy -> Invoke-History
+Alias           ii -> Invoke-Item
+Alias           Invoke-AzRest                                      4.2.0      Az.Accounts
+Alias           Invoke-AzSpotPlacementRecommender                  9.2.0      Az.Compute
+Alias           Invoke-AzVMAssessPatch                             9.2.0      Az.Compute
+Alias           Invoke-AzVMPatchAssess                             9.2.0      Az.Compute
+Alias           ipal -> Import-Alias
+Alias           ipcsv -> Import-Csv
+Alias           ipmo -> Import-Module
+Alias           irm -> Invoke-RestMethod
+Alias           iwr -> Invoke-WebRequest
+Alias           kill -> Stop-Process
+Alias           List-AzApplicationGatewayAvailableServerVariableA… 7.16.1     Az.Network
+Alias           List-AzApplicationGatewayAvailableSslOptions       7.16.1     Az.Network
+Alias           List-AzApplicationGatewayAvailableWafRuleSets      7.16.1     Az.Network
+Alias           List-AzApplicationGatewaySslPredefinedPolicy       7.16.1     Az.Network
+Alias           Login-AzAccount                                    4.2.0      Az.Accounts
+Alias           Logout-AzAccount                                   4.2.0      Az.Accounts
+Alias           ls -> Get-ChildItem
+Alias           man -> help
+Alias           md -> mkdir
+Alias           measure -> Measure-Object
+Alias           mi -> Move-Item
+Alias           mount -> New-PSDrive
+Alias           move -> Move-Item
+Alias           mp -> Move-ItemProperty
+Alias           mv -> Move-Item
+Alias           nal -> New-Alias
+Alias           ndr -> New-PSDrive
+Alias           New-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           New-AzDatalakeGen2FileSystem                       8.3.0      Az.Storage
+Alias           New-AzDataLakeGen2ItemAclObject                    8.3.0      Az.Storage
+Alias           New-AzFirewallThreatIntelWhitelistObject           7.16.1     Az.Network
+Alias           ni -> New-Item
+Alias           nmo -> New-Module
+Alias           nsn -> New-PSSession
+Alias           nv -> New-Variable
+Alias           ogv -> Out-GridView
+Alias           oh -> Out-Host
+Alias           popd -> Pop-Location
+Alias           ps -> Get-Process
+Alias           psedit -> Open-EditorFile                          0.2.0      PowerShellEditorServices.Commands
+Alias           pushd -> Push-Location
+Alias           pwd -> Get-Location
+Alias           r -> Invoke-History
+Alias           rbp -> Remove-PSBreakpoint
+Alias           rcjb -> Receive-Job
+Alias           rcsn -> Receive-PSSession
+Alias           rd -> Remove-Item
+Alias           rdr -> Remove-PSDrive
+Alias           Remove-AzAccount                                   4.2.0      Az.Accounts
+Alias           Remove-AzApplicationGatewayBackendHttpSettings     7.16.1     Az.Network
+Alias           Remove-AzDatalakeGen2FileSystem                    8.3.0      Az.Storage
+Alias           ren -> Rename-Item
+Alias           Repair-AzVmssServiceFabricUD                       9.2.0      Az.Compute
+Alias           ri -> Remove-Item
+Alias           rjb -> Remove-Job
+Alias           rm -> Remove-Item
+Alias           rmdir -> Remove-Item
+Alias           rmo -> Remove-Module
+Alias           rni -> Rename-Item
+Alias           rnp -> Rename-ItemProperty
+Alias           rp -> Remove-ItemProperty
+Alias           rsn -> Remove-PSSession
+Alias           rv -> Remove-Variable
+Alias           rvpa -> Resolve-Path
+Alias           sajb -> Start-Job
+Alias           sal -> Set-Alias
+Alias           saps -> Start-Process
+Alias           sasv -> Start-Service
+Alias           Save-AzProfile                                     4.2.0      Az.Accounts
+Alias           sbp -> Set-PSBreakpoint
+Alias           scb -> Set-Clipboard                               7.0.0.0    Microsoft.PowerShell.Management
+Alias           select -> Select-Object
+Alias           Select-AzSubscription                              4.2.0      Az.Accounts
+Alias           set -> Set-Variable
+Alias           Set-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           Set-AzConfig                                       4.2.0      Az.Accounts
+Alias           shcm -> Show-Command
+Alias           si -> Set-Item
+Alias           sl -> Set-Location
+Alias           sleep -> Start-Sleep
+Alias           sls -> Select-String
+Alias           sort -> Sort-Object
+Alias           sp -> Set-ItemProperty
+Alias           spjb -> Stop-Job
+Alias           spps -> Stop-Process
+Alias           spsv -> Stop-Service
+Alias           start -> Start-Process
+Alias           Start-CopyAzureStorageBlob                         8.3.0      Az.Storage
+Alias           Stop-CopyAzureStorageBlob                          8.3.0      Az.Storage
+Alias           stz -> Set-TimeZone                                7.0.0.0    Microsoft.PowerShell.Management
+Alias           sv -> Set-Variable
+Alias           tee -> Tee-Object
+Alias           type -> Get-Content
+Alias           where -> Where-Object
+Alias           wjb -> Wait-Job
+Alias           write -> Write-Output
+
+PS>CommandInvocation(Get-Command): "Get-Command"
+>> ParameterBinding(Get-Command): name="ListImported"; value="True"
+>> ParameterBinding(Get-Command): name="CommandType"; value="Alias"
+
+CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Alias           % -> ForEach-Object
+Alias           ? -> Where-Object
+Alias           ac -> Add-Content
+Alias           Add-AzAccount                                      4.2.0      Az.Accounts
+Alias           Add-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           cat -> Get-Content
+Alias           cd -> Set-Location
+Alias           chdir -> Set-Location
+Alias           clc -> Clear-Content
+Alias           clear -> Clear-Host
+Alias           clhy -> Clear-History
+Alias           cli -> Clear-Item
+Alias           clp -> Clear-ItemProperty
+Alias           cls -> Clear-Host
+Alias           clv -> Clear-Variable
+Alias           cnsn -> Connect-PSSession
+Alias           compare -> Compare-Object
+Alias           copy -> Copy-Item
+Alias           cp -> Copy-Item
+Alias           cpi -> Copy-Item
+Alias           cpp -> Copy-ItemProperty
+Alias           cvpa -> Convert-Path
+Alias           dbp -> Disable-PSBreakpoint
+Alias           del -> Remove-Item
+Alias           diff -> Compare-Object
+Alias           dir -> Get-ChildItem
+Alias           Disable-AzStorageSoftDelete                        8.3.0      Az.Storage
+Alias           dnsn -> Disconnect-PSSession
+Alias           ebp -> Enable-PSBreakpoint
+Alias           echo -> Write-Output
+Alias           Enable-AzStorageSoftDelete                         8.3.0      Az.Storage
+Alias           epal -> Export-Alias
+Alias           epcsv -> Export-Csv
+Alias           erase -> Remove-Item
+Alias           etsn -> Enter-PSSession
+Alias           exsn -> Exit-PSSession
+Alias           fc -> Format-Custom
+Alias           fhx -> Format-Hex                                  7.0.0.0    Microsoft.Po…
+Alias           fl -> Format-List
+Alias           foreach -> ForEach-Object
+Alias           ft -> Format-Table
+Alias           fw -> Format-Wide
+Alias           gal -> Get-Alias
+Alias           gbp -> Get-PSBreakpoint
+Alias           gc -> Get-Content
+Alias           gcb -> Get-Clipboard                               7.0.0.0    Microsoft.Po…
+Alias           gci -> Get-ChildItem
+Alias           gcm -> Get-Command
+Alias           gcs -> Get-PSCallStack
+Alias           gdr -> Get-PSDrive
+Alias           gerr -> Get-Error
+Alias           Get-AzApplicationGatewayAvailableSslOptions        7.16.1     Az.Network
+Alias           Get-AzApplicationGatewayAvailableWafRuleSets       7.16.1     Az.Network
+Alias           Get-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           Get-AzDatalakeGen2FileSystem                       8.3.0      Az.Storage
+Alias           Get-AzDomain                                       4.2.0      Az.Accounts
+Alias           Get-AzExpressRouteCircuitStats                     7.16.1     Az.Network
+Alias           Get-AzInterfaceEndpoint                            7.16.1     Az.Network
+Alias           Get-AzStorageContainerAcl                          8.3.0      Az.Storage
+Alias           Get-AzVmssDiskEncryptionStatus                     9.2.0      Az.Compute
+Alias           Get-AzVmssVMDiskEncryptionStatus                   9.2.0      Az.Compute
+Alias           ghy -> Get-History
+Alias           gi -> Get-Item
+Alias           gin -> Get-ComputerInfo                            7.0.0.0    Microsoft.Po…
+Alias           gjb -> Get-Job
+Alias           gl -> Get-Location
+Alias           gm -> Get-Member
+Alias           gmo -> Get-Module
+Alias           gp -> Get-ItemProperty
+Alias           gps -> Get-Process
+Alias           gpv -> Get-ItemPropertyValue
+Alias           group -> Group-Object
+Alias           gsn -> Get-PSSession
+Alias           gsv -> Get-Service
+Alias           gtz -> Get-TimeZone                                7.0.0.0    Microsoft.Po…
+Alias           gu -> Get-Unique
+Alias           gv -> Get-Variable
+Alias           h -> Get-History
+Alias           history -> Get-History
+Alias           icm -> Invoke-Command
+Alias           iex -> Invoke-Expression
+Alias           ihy -> Invoke-History
+Alias           ii -> Invoke-Item
+Alias           Invoke-AzRest                                      4.2.0      Az.Accounts
+Alias           Invoke-AzSpotPlacementRecommender                  9.2.0      Az.Compute
+Alias           Invoke-AzVMAssessPatch                             9.2.0      Az.Compute
+Alias           Invoke-AzVMPatchAssess                             9.2.0      Az.Compute
+Alias           ipal -> Import-Alias
+Alias           ipcsv -> Import-Csv
+Alias           ipmo -> Import-Module
+Alias           irm -> Invoke-RestMethod
+Alias           iwr -> Invoke-WebRequest
+Alias           kill -> Stop-Process
+Alias           List-AzApplicationGatewayAvailableServerVariableA… 7.16.1     Az.Network
+Alias           List-AzApplicationGatewayAvailableSslOptions       7.16.1     Az.Network
+Alias           List-AzApplicationGatewayAvailableWafRuleSets      7.16.1     Az.Network
+Alias           List-AzApplicationGatewaySslPredefinedPolicy       7.16.1     Az.Network
+Alias           Login-AzAccount                                    4.2.0      Az.Accounts
+Alias           Logout-AzAccount                                   4.2.0      Az.Accounts
+Alias           ls -> Get-ChildItem
+Alias           man -> help
+Alias           md -> mkdir
+Alias           measure -> Measure-Object
+Alias           mi -> Move-Item
+Alias           mount -> New-PSDrive
+Alias           move -> Move-Item
+Alias           mp -> Move-ItemProperty
+Alias           mv -> Move-Item
+Alias           nal -> New-Alias
+Alias           ndr -> New-PSDrive
+Alias           New-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           New-AzDatalakeGen2FileSystem                       8.3.0      Az.Storage
+Alias           New-AzDataLakeGen2ItemAclObject                    8.3.0      Az.Storage
+Alias           New-AzFirewallThreatIntelWhitelistObject           7.16.1     Az.Network
+Alias           ni -> New-Item
+Alias           nmo -> New-Module
+Alias           nsn -> New-PSSession
+Alias           nv -> New-Variable
+Alias           ogv -> Out-GridView
+Alias           oh -> Out-Host
+Alias           popd -> Pop-Location
+Alias           ps -> Get-Process
+Alias           psedit -> Open-EditorFile                          0.2.0      PowerShellEd…
+Alias           pushd -> Push-Location
+Alias           pwd -> Get-Location
+Alias           r -> Invoke-History
+Alias           rbp -> Remove-PSBreakpoint
+Alias           rcjb -> Receive-Job
+Alias           rcsn -> Receive-PSSession
+Alias           rd -> Remove-Item
+Alias           rdr -> Remove-PSDrive
+Alias           Remove-AzAccount                                   4.2.0      Az.Accounts
+Alias           Remove-AzApplicationGatewayBackendHttpSettings     7.16.1     Az.Network
+Alias           Remove-AzDatalakeGen2FileSystem                    8.3.0      Az.Storage
+Alias           ren -> Rename-Item
+Alias           Repair-AzVmssServiceFabricUD                       9.2.0      Az.Compute
+Alias           ri -> Remove-Item
+Alias           rjb -> Remove-Job
+Alias           rm -> Remove-Item
+Alias           rmdir -> Remove-Item
+Alias           rmo -> Remove-Module
+Alias           rni -> Rename-Item
+Alias           rnp -> Rename-ItemProperty
+Alias           rp -> Remove-ItemProperty
+Alias           rsn -> Remove-PSSession
+Alias           rv -> Remove-Variable
+Alias           rvpa -> Resolve-Path
+Alias           sajb -> Start-Job
+Alias           sal -> Set-Alias
+Alias           saps -> Start-Process
+Alias           sasv -> Start-Service
+Alias           Save-AzProfile                                     4.2.0      Az.Accounts
+Alias           sbp -> Set-PSBreakpoint
+Alias           scb -> Set-Clipboard                               7.0.0.0    Microsoft.Po…
+Alias           select -> Select-Object
+Alias           Select-AzSubscription                              4.2.0      Az.Accounts
+Alias           set -> Set-Variable
+Alias           Set-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           Set-AzConfig                                       4.2.0      Az.Accounts
+Alias           shcm -> Show-Command
+Alias           si -> Set-Item
+Alias           sl -> Set-Location
+Alias           sleep -> Start-Sleep
+Alias           sls -> Select-String
+Alias           sort -> Sort-Object
+Alias           sp -> Set-ItemProperty
+Alias           spjb -> Stop-Job
+Alias           spps -> Stop-Process
+Alias           spsv -> Stop-Service
+Alias           start -> Start-Process
+Alias           Start-CopyAzureStorageBlob                         8.3.0      Az.Storage
+Alias           Stop-CopyAzureStorageBlob                          8.3.0      Az.Storage
+Alias           stz -> Set-TimeZone                                7.0.0.0    Microsoft.Po…
+Alias           sv -> Set-Variable
+Alias           tee -> Tee-Object
+Alias           type -> Get-Content
+Alias           where -> Where-Object
+Alias           wjb -> Wait-Job
+Alias           write -> Write-Output
+
+PS>CommandInvocation(Get-Command): "Get-Command"
+>> ParameterBinding(Get-Command): name="ListImported"; value="True"
+>> ParameterBinding(Get-Command): name="CommandType"; value="Alias"
+
+CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Alias           % -> ForEach-Object
+Alias           ? -> Where-Object
+Alias           ac -> Add-Content
+Alias           Add-AzAccount                                      4.2.0      Az.Accounts
+Alias           Add-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           cat -> Get-Content
+Alias           cd -> Set-Location
+Alias           chdir -> Set-Location
+Alias           clc -> Clear-Content
+Alias           clear -> Clear-Host
+Alias           clhy -> Clear-History
+Alias           cli -> Clear-Item
+Alias           clp -> Clear-ItemProperty
+Alias           cls -> Clear-Host
+Alias           clv -> Clear-Variable
+Alias           cnsn -> Connect-PSSession
+Alias           compare -> Compare-Object
+Alias           copy -> Copy-Item
+Alias           cp -> Copy-Item
+Alias           cpi -> Copy-Item
+Alias           cpp -> Copy-ItemProperty
+Alias           cvpa -> Convert-Path
+Alias           dbp -> Disable-PSBreakpoint
+Alias           del -> Remove-Item
+Alias           diff -> Compare-Object
+Alias           dir -> Get-ChildItem
+Alias           Disable-AzStorageSoftDelete                        8.3.0      Az.Storage
+Alias           dnsn -> Disconnect-PSSession
+Alias           ebp -> Enable-PSBreakpoint
+Alias           echo -> Write-Output
+Alias           Enable-AzStorageSoftDelete                         8.3.0      Az.Storage
+Alias           epal -> Export-Alias
+Alias           epcsv -> Export-Csv
+Alias           erase -> Remove-Item
+Alias           etsn -> Enter-PSSession
+Alias           exsn -> Exit-PSSession
+Alias           fc -> Format-Custom
+Alias           fhx -> Format-Hex                                  7.0.0.0    Microsoft.Po…
+Alias           fl -> Format-List
+Alias           foreach -> ForEach-Object
+Alias           ft -> Format-Table
+Alias           fw -> Format-Wide
+Alias           gal -> Get-Alias
+Alias           gbp -> Get-PSBreakpoint
+Alias           gc -> Get-Content
+Alias           gcb -> Get-Clipboard                               7.0.0.0    Microsoft.Po…
+Alias           gci -> Get-ChildItem
+Alias           gcm -> Get-Command
+Alias           gcs -> Get-PSCallStack
+Alias           gdr -> Get-PSDrive
+Alias           gerr -> Get-Error
+Alias           Get-AzApplicationGatewayAvailableSslOptions        7.16.1     Az.Network
+Alias           Get-AzApplicationGatewayAvailableWafRuleSets       7.16.1     Az.Network
+Alias           Get-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           Get-AzDatalakeGen2FileSystem                       8.3.0      Az.Storage
+Alias           Get-AzDomain                                       4.2.0      Az.Accounts
+Alias           Get-AzExpressRouteCircuitStats                     7.16.1     Az.Network
+Alias           Get-AzInterfaceEndpoint                            7.16.1     Az.Network
+Alias           Get-AzStorageContainerAcl                          8.3.0      Az.Storage
+Alias           Get-AzVmssDiskEncryptionStatus                     9.2.0      Az.Compute
+Alias           Get-AzVmssVMDiskEncryptionStatus                   9.2.0      Az.Compute
+Alias           ghy -> Get-History
+Alias           gi -> Get-Item
+Alias           gin -> Get-ComputerInfo                            7.0.0.0    Microsoft.Po…
+Alias           gjb -> Get-Job
+Alias           gl -> Get-Location
+Alias           gm -> Get-Member
+Alias           gmo -> Get-Module
+Alias           gp -> Get-ItemProperty
+Alias           gps -> Get-Process
+Alias           gpv -> Get-ItemPropertyValue
+Alias           group -> Group-Object
+Alias           gsn -> Get-PSSession
+Alias           gsv -> Get-Service
+Alias           gtz -> Get-TimeZone                                7.0.0.0    Microsoft.Po…
+Alias           gu -> Get-Unique
+Alias           gv -> Get-Variable
+Alias           h -> Get-History
+Alias           history -> Get-History
+Alias           icm -> Invoke-Command
+Alias           iex -> Invoke-Expression
+Alias           ihy -> Invoke-History
+Alias           ii -> Invoke-Item
+Alias           Invoke-AzRest                                      4.2.0      Az.Accounts
+Alias           Invoke-AzSpotPlacementRecommender                  9.2.0      Az.Compute
+Alias           Invoke-AzVMAssessPatch                             9.2.0      Az.Compute
+Alias           Invoke-AzVMPatchAssess                             9.2.0      Az.Compute
+Alias           ipal -> Import-Alias
+Alias           ipcsv -> Import-Csv
+Alias           ipmo -> Import-Module
+Alias           irm -> Invoke-RestMethod
+Alias           iwr -> Invoke-WebRequest
+Alias           kill -> Stop-Process
+Alias           List-AzApplicationGatewayAvailableServerVariableA… 7.16.1     Az.Network
+Alias           List-AzApplicationGatewayAvailableSslOptions       7.16.1     Az.Network
+Alias           List-AzApplicationGatewayAvailableWafRuleSets      7.16.1     Az.Network
+Alias           List-AzApplicationGatewaySslPredefinedPolicy       7.16.1     Az.Network
+Alias           Login-AzAccount                                    4.2.0      Az.Accounts
+Alias           Logout-AzAccount                                   4.2.0      Az.Accounts
+Alias           ls -> Get-ChildItem
+Alias           man -> help
+Alias           md -> mkdir
+Alias           measure -> Measure-Object
+Alias           mi -> Move-Item
+Alias           mount -> New-PSDrive
+Alias           move -> Move-Item
+Alias           mp -> Move-ItemProperty
+Alias           mv -> Move-Item
+Alias           nal -> New-Alias
+Alias           ndr -> New-PSDrive
+Alias           New-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           New-AzDatalakeGen2FileSystem                       8.3.0      Az.Storage
+Alias           New-AzDataLakeGen2ItemAclObject                    8.3.0      Az.Storage
+Alias           New-AzFirewallThreatIntelWhitelistObject           7.16.1     Az.Network
+Alias           ni -> New-Item
+Alias           nmo -> New-Module
+Alias           nsn -> New-PSSession
+Alias           nv -> New-Variable
+Alias           ogv -> Out-GridView
+Alias           oh -> Out-Host
+Alias           popd -> Pop-Location
+Alias           ps -> Get-Process
+Alias           psedit -> Open-EditorFile                          0.2.0      PowerShellEd…
+Alias           pushd -> Push-Location
+Alias           pwd -> Get-Location
+Alias           r -> Invoke-History
+Alias           rbp -> Remove-PSBreakpoint
+Alias           rcjb -> Receive-Job
+Alias           rcsn -> Receive-PSSession
+Alias           rd -> Remove-Item
+Alias           rdr -> Remove-PSDrive
+Alias           Remove-AzAccount                                   4.2.0      Az.Accounts
+Alias           Remove-AzApplicationGatewayBackendHttpSettings     7.16.1     Az.Network
+Alias           Remove-AzDatalakeGen2FileSystem                    8.3.0      Az.Storage
+Alias           ren -> Rename-Item
+Alias           Repair-AzVmssServiceFabricUD                       9.2.0      Az.Compute
+Alias           ri -> Remove-Item
+Alias           rjb -> Remove-Job
+Alias           rm -> Remove-Item
+Alias           rmdir -> Remove-Item
+Alias           rmo -> Remove-Module
+Alias           rni -> Rename-Item
+Alias           rnp -> Rename-ItemProperty
+Alias           rp -> Remove-ItemProperty
+Alias           rsn -> Remove-PSSession
+Alias           rv -> Remove-Variable
+Alias           rvpa -> Resolve-Path
+Alias           sajb -> Start-Job
+Alias           sal -> Set-Alias
+Alias           saps -> Start-Process
+Alias           sasv -> Start-Service
+Alias           Save-AzProfile                                     4.2.0      Az.Accounts
+Alias           sbp -> Set-PSBreakpoint
+Alias           scb -> Set-Clipboard                               7.0.0.0    Microsoft.Po…
+Alias           select -> Select-Object
+Alias           Select-AzSubscription                              4.2.0      Az.Accounts
+Alias           set -> Set-Variable
+Alias           Set-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           Set-AzConfig                                       4.2.0      Az.Accounts
+Alias           shcm -> Show-Command
+Alias           si -> Set-Item
+Alias           sl -> Set-Location
+Alias           sleep -> Start-Sleep
+Alias           sls -> Select-String
+Alias           sort -> Sort-Object
+Alias           sp -> Set-ItemProperty
+Alias           spjb -> Stop-Job
+Alias           spps -> Stop-Process
+Alias           spsv -> Stop-Service
+Alias           start -> Start-Process
+Alias           Start-CopyAzureStorageBlob                         8.3.0      Az.Storage
+Alias           Stop-CopyAzureStorageBlob                          8.3.0      Az.Storage
+Alias           stz -> Set-TimeZone                                7.0.0.0    Microsoft.Po…
+Alias           sv -> Set-Variable
+Alias           tee -> Tee-Object
+Alias           type -> Get-Content
+Alias           where -> Where-Object
+Alias           wjb -> Wait-Job
+Alias           write -> Write-Output
+
+PS>CommandInvocation(Get-Command): "Get-Command"
+>> ParameterBinding(Get-Command): name="ListImported"; value="True"
+>> ParameterBinding(Get-Command): name="CommandType"; value="Alias"
+
+CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Alias           % -> ForEach-Object
+Alias           ? -> Where-Object
+Alias           ac -> Add-Content
+Alias           Add-AzAccount                                      4.2.0      Az.Accounts
+Alias           Add-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           cat -> Get-Content
+Alias           cd -> Set-Location
+Alias           chdir -> Set-Location
+Alias           clc -> Clear-Content
+Alias           clear -> Clear-Host
+Alias           clhy -> Clear-History
+Alias           cli -> Clear-Item
+Alias           clp -> Clear-ItemProperty
+Alias           cls -> Clear-Host
+Alias           clv -> Clear-Variable
+Alias           cnsn -> Connect-PSSession
+Alias           compare -> Compare-Object
+Alias           copy -> Copy-Item
+Alias           cp -> Copy-Item
+Alias           cpi -> Copy-Item
+Alias           cpp -> Copy-ItemProperty
+Alias           cvpa -> Convert-Path
+Alias           dbp -> Disable-PSBreakpoint
+Alias           del -> Remove-Item
+Alias           diff -> Compare-Object
+Alias           dir -> Get-ChildItem
+Alias           Disable-AzStorageSoftDelete                        8.3.0      Az.Storage
+Alias           dnsn -> Disconnect-PSSession
+Alias           ebp -> Enable-PSBreakpoint
+Alias           echo -> Write-Output
+Alias           Enable-AzStorageSoftDelete                         8.3.0      Az.Storage
+Alias           epal -> Export-Alias
+Alias           epcsv -> Export-Csv
+Alias           erase -> Remove-Item
+Alias           etsn -> Enter-PSSession
+Alias           exsn -> Exit-PSSession
+Alias           fc -> Format-Custom
+Alias           fhx -> Format-Hex                                  7.0.0.0    Microsoft.Po…
+Alias           fl -> Format-List
+Alias           foreach -> ForEach-Object
+Alias           ft -> Format-Table
+Alias           fw -> Format-Wide
+Alias           gal -> Get-Alias
+Alias           gbp -> Get-PSBreakpoint
+Alias           gc -> Get-Content
+Alias           gcb -> Get-Clipboard                               7.0.0.0    Microsoft.Po…
+Alias           gci -> Get-ChildItem
+Alias           gcm -> Get-Command
+Alias           gcs -> Get-PSCallStack
+Alias           gdr -> Get-PSDrive
+Alias           gerr -> Get-Error
+Alias           Get-AzApplicationGatewayAvailableSslOptions        7.16.1     Az.Network
+Alias           Get-AzApplicationGatewayAvailableWafRuleSets       7.16.1     Az.Network
+Alias           Get-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           Get-AzDatalakeGen2FileSystem                       8.3.0      Az.Storage
+Alias           Get-AzDomain                                       4.2.0      Az.Accounts
+Alias           Get-AzExpressRouteCircuitStats                     7.16.1     Az.Network
+Alias           Get-AzInterfaceEndpoint                            7.16.1     Az.Network
+Alias           Get-AzStorageContainerAcl                          8.3.0      Az.Storage
+Alias           Get-AzVmssDiskEncryptionStatus                     9.2.0      Az.Compute
+Alias           Get-AzVmssVMDiskEncryptionStatus                   9.2.0      Az.Compute
+Alias           ghy -> Get-History
+Alias           gi -> Get-Item
+Alias           gin -> Get-ComputerInfo                            7.0.0.0    Microsoft.Po…
+Alias           gjb -> Get-Job
+Alias           gl -> Get-Location
+Alias           gm -> Get-Member
+Alias           gmo -> Get-Module
+Alias           gp -> Get-ItemProperty
+Alias           gps -> Get-Process
+Alias           gpv -> Get-ItemPropertyValue
+Alias           group -> Group-Object
+Alias           gsn -> Get-PSSession
+Alias           gsv -> Get-Service
+Alias           gtz -> Get-TimeZone                                7.0.0.0    Microsoft.Po…
+Alias           gu -> Get-Unique
+Alias           gv -> Get-Variable
+Alias           h -> Get-History
+Alias           history -> Get-History
+Alias           icm -> Invoke-Command
+Alias           iex -> Invoke-Expression
+Alias           ihy -> Invoke-History
+Alias           ii -> Invoke-Item
+Alias           Invoke-AzRest                                      4.2.0      Az.Accounts
+Alias           Invoke-AzSpotPlacementRecommender                  9.2.0      Az.Compute
+Alias           Invoke-AzVMAssessPatch                             9.2.0      Az.Compute
+Alias           Invoke-AzVMPatchAssess                             9.2.0      Az.Compute
+Alias           ipal -> Import-Alias
+Alias           ipcsv -> Import-Csv
+Alias           ipmo -> Import-Module
+Alias           irm -> Invoke-RestMethod
+Alias           iwr -> Invoke-WebRequest
+Alias           kill -> Stop-Process
+Alias           List-AzApplicationGatewayAvailableServerVariableA… 7.16.1     Az.Network
+Alias           List-AzApplicationGatewayAvailableSslOptions       7.16.1     Az.Network
+Alias           List-AzApplicationGatewayAvailableWafRuleSets      7.16.1     Az.Network
+Alias           List-AzApplicationGatewaySslPredefinedPolicy       7.16.1     Az.Network
+Alias           Login-AzAccount                                    4.2.0      Az.Accounts
+Alias           Logout-AzAccount                                   4.2.0      Az.Accounts
+Alias           ls -> Get-ChildItem
+Alias           man -> help
+Alias           md -> mkdir
+Alias           measure -> Measure-Object
+Alias           mi -> Move-Item
+Alias           mount -> New-PSDrive
+Alias           move -> Move-Item
+Alias           mp -> Move-ItemProperty
+Alias           mv -> Move-Item
+Alias           nal -> New-Alias
+Alias           ndr -> New-PSDrive
+Alias           New-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           New-AzDatalakeGen2FileSystem                       8.3.0      Az.Storage
+Alias           New-AzDataLakeGen2ItemAclObject                    8.3.0      Az.Storage
+Alias           New-AzFirewallThreatIntelWhitelistObject           7.16.1     Az.Network
+Alias           ni -> New-Item
+Alias           nmo -> New-Module
+Alias           nsn -> New-PSSession
+Alias           nv -> New-Variable
+Alias           ogv -> Out-GridView
+Alias           oh -> Out-Host
+Alias           popd -> Pop-Location
+Alias           ps -> Get-Process
+Alias           psedit -> Open-EditorFile                          0.2.0      PowerShellEd…
+Alias           pushd -> Push-Location
+Alias           pwd -> Get-Location
+Alias           r -> Invoke-History
+Alias           rbp -> Remove-PSBreakpoint
+Alias           rcjb -> Receive-Job
+Alias           rcsn -> Receive-PSSession
+Alias           rd -> Remove-Item
+Alias           rdr -> Remove-PSDrive
+Alias           Remove-AzAccount                                   4.2.0      Az.Accounts
+Alias           Remove-AzApplicationGatewayBackendHttpSettings     7.16.1     Az.Network
+Alias           Remove-AzDatalakeGen2FileSystem                    8.3.0      Az.Storage
+Alias           ren -> Rename-Item
+Alias           Repair-AzVmssServiceFabricUD                       9.2.0      Az.Compute
+Alias           ri -> Remove-Item
+Alias           rjb -> Remove-Job
+Alias           rm -> Remove-Item
+Alias           rmdir -> Remove-Item
+Alias           rmo -> Remove-Module
+Alias           rni -> Rename-Item
+Alias           rnp -> Rename-ItemProperty
+Alias           rp -> Remove-ItemProperty
+Alias           rsn -> Remove-PSSession
+Alias           rv -> Remove-Variable
+Alias           rvpa -> Resolve-Path
+Alias           sajb -> Start-Job
+Alias           sal -> Set-Alias
+Alias           saps -> Start-Process
+Alias           sasv -> Start-Service
+Alias           Save-AzProfile                                     4.2.0      Az.Accounts
+Alias           sbp -> Set-PSBreakpoint
+Alias           scb -> Set-Clipboard                               7.0.0.0    Microsoft.Po…
+Alias           select -> Select-Object
+Alias           Select-AzSubscription                              4.2.0      Az.Accounts
+Alias           set -> Set-Variable
+Alias           Set-AzApplicationGatewayBackendHttpSettings        7.16.1     Az.Network
+Alias           Set-AzConfig                                       4.2.0      Az.Accounts
+Alias           shcm -> Show-Command
+Alias           si -> Set-Item
+Alias           sl -> Set-Location
+Alias           sleep -> Start-Sleep
+Alias           sls -> Select-String
+Alias           sort -> Sort-Object
+Alias           sp -> Set-ItemProperty
+Alias           spjb -> Stop-Job
+Alias           spps -> Stop-Process
+Alias           spsv -> Stop-Service
+Alias           start -> Start-Process
+Alias           Start-CopyAzureStorageBlob                         8.3.0      Az.Storage
+Alias           Stop-CopyAzureStorageBlob                          8.3.0      Az.Storage
+Alias           stz -> Set-TimeZone                                7.0.0.0    Microsoft.Po…
+Alias           sv -> Set-Variable
+Alias           tee -> Tee-Object
+Alias           type -> Get-Content
+Alias           where -> Where-Object
+Alias           wjb -> Wait-Job
+Alias           write -> Write-Output
+
+PS>$global:__psEditorServices_userInput = $args[0]
+PS>$global:__psEditorServices_userInput = ""
+PS>git add .
+ time Git touches it
+]633;D;0]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+PS>$global:__psEditorServices_userInput = $args[0]
+PS>$global:__psEditorServices_userInput = ""

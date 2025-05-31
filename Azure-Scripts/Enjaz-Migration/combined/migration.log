@@ -1,0 +1,25 @@
+[2025-05-31 23:48:57] [INFO] Script started at 2025-05-31 23:48:57
+[2025-05-31 23:48:57] [INFO] Starting snapshot creation and SAS URL generation in subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:48:57] [INFO] Processing VM: ENJAVDPHEA-10
+[2025-05-31 23:48:57] [INFO] Authenticating to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:48:57] [DEBUG] Using Service Principal for Tenant cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5
+[2025-05-31 23:48:58] [INFO] Successfully authenticated to subscription 44b5560d-2b39-4960-8c57-3447afb62f66
+[2025-05-31 23:48:58] [DEBUG] Retrieving VM details for ENJAVDPHEA-10
+[2025-05-31 23:48:58] [DEBUG] OS Disk: ENJAVDPHEA-10_disk1_1b1bfc47f7654568ad43868ef71b15a5
+[2025-05-31 23:49:00] [WARNING] Snapshot already exists: ENJAVDPHEA-10-osdisk-snap. Skipping creation.
+[2025-05-31 23:49:00] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-osdisk-snap
+[2025-05-31 23:49:34] [WARNING] Snapshot already exists: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap. Skipping creation.
+[2025-05-31 23:49:34] [DEBUG] Generating SAS for snapshot: ENJAVDPHEA-10-datadisk-ENJAVDPHEA-10-Disk-01-snap
+[2025-05-31 23:50:06] [INFO] Snapshot creation and SAS URL update complete
+[2025-05-31 23:50:06] [INFO] Authenticating to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:50:06] [DEBUG] Using Service Principal for target Tenant 1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+[2025-05-31 23:50:07] [INFO] Successfully authenticated to target subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:50:09] [WARNING] OS VHD ENJAVDPHEA-10-osdisk.vhd already exists in migration. Skipping copy.
+[2025-05-31 23:50:09] [WARNING] Data VHD ENJAVDPHEA-10-datadisk-0.vhd already exists in migration. Skipping copy.
+[2025-05-31 23:50:09] [INFO] Authenticating to subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:50:09] [DEBUG] Using Service Principal for Tenant 1bbcc87a-8785-4238-940b-4e8b7fbb2e7c
+[2025-05-31 23:50:09] [INFO] Successfully authenticated to subscription 822efff3-e9dd-48f4-bb90-b1b48c2791aa
+[2025-05-31 23:50:12] [INFO] Creating VM ENJAVDPHEA-10
+[2025-05-31 23:52:31] [INFO] VM ENJAVDPHEA-10 created successfully
+[2025-05-31 23:52:31] [INFO] No jobs started, skipping dashboard
+[2025-05-31 23:52:31] [INFO] Script completed at 2025-05-31 23:52:31
