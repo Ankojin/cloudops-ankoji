@@ -943,3 +943,25 @@ PS>git add .
 ]633;D;0]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
 PS>$global:__psEditorServices_userInput = $args[0]
 PS>$global:__psEditorServices_userInput = ""
+PS>git add .
+
+]633;D;0]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+PS>$global:__psEditorServices_userInput = $args[0]
+PS>$global:__psEditorServices_userInput = ""
+PS>git commit -m "updated VM migration script"
+
+]633;D;0]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+PS>$global:__psEditorServices_userInput = $args[0]
+PS>$global:__psEditorServices_userInput = ""
+PS>git push azure  main
+
+]633;D;0]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+PS>$global:__psEditorServices_userInput = $args[0]
+PS>$global:__psEditorServices_userInput = ""
+PS>git push github  main
+
+]633;D;0]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B
+PS>$global:__psEditorServices_userInput = $args[0]
+PS>$global:__psEditorServices_userInput = ""
+PS>exit
+]633;D;0]633;A]633;P;Cwd=C:\x5cOn-Prem-to-cloud-migration\x5cNew-Repo\x5cBAB_CloudOpsPS C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps> ]633;B

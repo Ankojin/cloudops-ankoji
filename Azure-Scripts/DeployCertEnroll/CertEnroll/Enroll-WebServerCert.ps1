@@ -1,4 +1,5 @@
-# Enroll-WebServerCert.ps1 with Renewal, Logging, and Event Log Reporting
+# Enroll-WebServerCert.ps1
+# Auto-enrolls a WebServer cert on a standalone CA with logging, dry-run, and event logging
 
 # Configuration
 $workDir = "C:\CertEnroll"
@@ -8,28 +9,43 @@ $infTemplate = "$workDir\request.inf"
 $infFile = "$workDir\request_expanded.inf"
 $reqFile = "$workDir\certreq.req"
 $certFile = "$workDir\certnew.cer"
-$DryRun = $false  # Set to $true to test without submitting
+$caConfig = "DAPKIAPISCWV1.albtests.com\Albtests CA Issuer"
+$DryRun = $false
 
-# Setup logging
+# Create working dir if missing
+if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir -Force | Out-Null }
+
+# Logging
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path $logFile -Value "$timestamp [$Level] $Message"
+    $entry = "$timestamp [$Level] $Message"
+    try {
+        Add-Content -Path $logFile -Value $entry
+    } catch {
+        Write-Host $entry
+    }
 }
 
-# Setup event logging
+# Event Log
 if (-not [System.Diagnostics.EventLog]::SourceExists($eventSource)) {
-    New-EventLog -LogName Application -Source $eventSource
+    try {
+        New-EventLog -LogName Application -Source $eventSource
+    } catch {
+        Write-Log "Failed to create event log source. Continuing without event log support." "WARNING"
+    }
 }
 
 function Write-EventLogEntry {
     param([string]$Message, [string]$EntryType = "Information")
-    Write-EventLog -LogName Application -Source $eventSource -EntryType $EntryType -EventId 1000 -Message $Message
+    try {
+        Write-EventLog -LogName Application -Source $eventSource -EntryType $EntryType -EventId 1000 -Message $Message
+    } catch {
+        Write-Log "Event log write failed: $Message" "WARNING"
+    }
 }
 
-# Create working dir if missing
-if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir | Out-Null }
-
+# Start
 $hostname = $env:COMPUTERNAME
 $domain = (Get-WmiObject Win32_ComputerSystem).Domain
 $fqdn = "$hostname.$domain"
@@ -37,65 +53,72 @@ $fqdn = "$hostname.$domain"
 Write-Log "Preparing certificate request for $fqdn"
 Write-Log "Dry-run mode: $DryRun"
 
-# Check for existing certificate
+# Check existing cert
 $existingCert = Get-ChildItem -Path Cert:\LocalMachine\My |
     Where-Object { $_.Subject -like "*CN=$fqdn*" -and $_.NotAfter -gt (Get-Date).AddDays(30) }
 
 if ($existingCert) {
-    Write-Log "A valid certificate already exists. Skipping renewal."
-    Write-EventLogEntry "Certificate for $fqdn already exists and is valid." "Information"
+    $msg = "Valid certificate for $fqdn already exists. Skipping enrollment."
+    Write-Log $msg
+    Write-EventLogEntry $msg
     return
 }
 
-# Expand INF file
+# Expand INF
 (Get-Content $infTemplate) -replace "%FQDN%", $fqdn -replace "%HOSTNAME%", $hostname | Set-Content $infFile
 Write-Log "INF file expanded and saved."
 
 if ($DryRun) {
-    Write-Log "[DryRun] Skipping CSR generation and submission." "Warning"
-    Write-EventLogEntry "Dry run mode enabled. No certificate request submitted." "Warning"
+    $msg = "[DryRun] Skipping certificate request and submission."
+    Write-Log $msg "WARNING"
+    Write-EventLogEntry $msg "Warning"
     return
 }
 
+# Check certreq presence
+if (-not (Get-Command certreq.exe -ErrorAction SilentlyContinue)) {
+    $msg = "'certreq.exe' not found in PATH."
+    Write-Log $msg "ERROR"
+    Write-EventLogEntry $msg "Error"
+    exit 1
+}
+
 # Generate CSR
-certreq -new $infFile $reqFile
-if ($LASTEXITCODE -ne 0) {
-    $msg = "Failed to generate CSR."
+try {
+    certreq -new $infFile $reqFile
+    if ($LASTEXITCODE -ne 0) { throw "certreq -new failed." }
+    Write-Log "CSR generated successfully."
+} catch {
+    $msg = "CSR generation failed: $_"
     Write-Log $msg "ERROR"
     Write-EventLogEntry $msg "Error"
     exit 1
 }
 
-# Detect CA config
-# $caConfig = & certutil -config - | Where-Object { $_ -match "\\" } | Select-Object -First 1
-$caConfig = "DAPKIAPISCWV1.albtests.com\Albtests CA Issuer"
-
-if (-not $caConfig) {
-    $msg = "Failed to detect CA configuration."
+# Submit
+try {
+    certreq -submit -config $caConfig $reqFile $certFile
+    if ($LASTEXITCODE -ne 0) { throw "certreq -submit failed." }
+    Write-Log "Request submitted successfully."
+} catch {
+    $msg = "Certificate submission failed: $_"
     Write-Log $msg "ERROR"
     Write-EventLogEntry $msg "Error"
     exit 1
 }
 
-Write-Log "Submitting request to CA: $caConfig"
-
-# Submit request
-certreq -submit -config $caConfig $reqFile $certFile
-if ($LASTEXITCODE -ne 0) {
-    $msg = "Submission to CA failed."
-    Write-Log $msg "ERROR"
-    Write-EventLogEntry $msg "Error"
-    exit 1
-}
-
-# Accept certificate
-certreq -accept $certFile
-if ($LASTEXITCODE -eq 0) {
-    $msg = "Certificate successfully installed into LocalMachine\My"
-    Write-Log $msg "SUCCESS"
-    Write-EventLogEntry $msg "Information"
-} else {
-    $msg = "Failed to accept and install the certificate."
+# Accept cert
+try {
+    certreq -accept $certFile
+    if ($LASTEXITCODE -eq 0) {
+        $msg = "Certificate installed into LocalMachine\My."
+        Write-Log $msg "SUCCESS"
+        Write-EventLogEntry $msg
+    } else {
+        throw "certreq -accept failed."
+    }
+} catch {
+    $msg = "Certificate installation failed: $_"
     Write-Log $msg "ERROR"
     Write-EventLogEntry $msg "Error"
     exit 1
