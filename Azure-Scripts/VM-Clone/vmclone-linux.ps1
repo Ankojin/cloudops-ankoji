@@ -4,37 +4,34 @@ $targetResourceGroup = "bab-sit-rmb-swec-rg-01"
 $sourceVMName = "D2RMBAPWSILV1-test"
 $newVMName = "DARMBAPWSILV1"
 $location = "swedencentral"
-$vnetrg  = "bab-dev-nw-swec-rg-01"
-$vnetName = "bab-dev-nw-swec-vnet-nonpci-01"
-$subnetName = "snet-dev-nonpci-app-02"
-#$nsgName = "test-vdi-join-nsg01"
+$vnetrg  = "bab-sit-nw-swec-rg-01"
+$vnetName = "bab-sit-nw-swec-vnet-nonpci-01"
+$subnetName = "snet-sit-nonpci-app-02"
 $vmSize = "Standard_E4-2s_v5"
-$useSSHOnly = $true  # Set to $false if you want password login for Linux
+$useSSHOnly = $false  # Set to $false to enable password login and reset
+
+# If password login is allowed, provide credentials here
+$linuxUsername = "azureadmin"         # Replace with valid Linux user
+$newPassword = "BabAzur1"  # Replace with secure password.
 
 # ---------------------------- SOURCE VM ----------------------------
 $sourceVM = Get-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName
 if (-not $sourceVM) {
     throw "Source VM '$sourceVMName' not found in resource group '$sourceResourceGroup'."
 }
-# Stop-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName -Force -NoWait
-# Write-Host "Waiting for VM to deallocate..."
 
-# Verify the source VM's OS disk
 if (-not $sourceVM.StorageProfile -or -not $sourceVM.StorageProfile.OsDisk) {
     throw "Source VM '$sourceVMName' does not have a valid OS disk."
 }
 
-# Retrieve the OS disk
 $osDisk = Get-AzDisk -ResourceGroupName $sourceResourceGroup -DiskName $sourceVM.StorageProfile.OsDisk.Name
 if (-not $osDisk) {
     throw "OS disk for VM '$sourceVMName' could not be retrieved."
 }
 
-# Debugging output
 Write-Host "OS Disk ID: $($osDisk.Id)"
 
 # ---------------------------- OS DISK SNAPSHOT ----------------------------
-# Check if the OS snapshot already exists
 $snapshotOSName = "$newVMName-OSSnapshot"
 $snapshotOS = Get-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotOSName -ErrorAction SilentlyContinue
 if (-not $snapshotOS) {
@@ -45,7 +42,6 @@ if (-not $snapshotOS) {
     Write-Host "OS snapshot '$snapshotOSName' already exists. Skipping creation."
 }
 
-# Check if the OS disk already exists
 $newOSDiskName = "$newVMName-OSDisk"
 $newOSDisk = Get-AzDisk -ResourceGroupName $targetResourceGroup -DiskName $newOSDiskName -ErrorAction SilentlyContinue
 if (-not $newOSDisk) {
@@ -61,7 +57,6 @@ $newDataDisks = @()
 foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
     $disk = Get-AzDisk -ResourceGroupName $sourceResourceGroup -DiskName $dataDisk.Name
 
-    # Check if the data disk snapshot already exists
     $snapshotName = "$newVMName-DataDisk-$($dataDisk.Lun)-Snap"
     $snapshot = Get-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotName -ErrorAction SilentlyContinue
     if (-not $snapshot) {
@@ -72,7 +67,6 @@ foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
         Write-Host "Snapshot '$snapshotName' for data disk with LUN '$($dataDisk.Lun)' already exists. Skipping creation."
     }
 
-    # Check if the cloned data disk already exists
     $clonedDiskName = "$newVMName-DataDisk-$($dataDisk.Lun)"
     $clonedDisk = Get-AzDisk -ResourceGroupName $targetResourceGroup -DiskName $clonedDiskName -ErrorAction SilentlyContinue
     if (-not $clonedDisk) {
@@ -86,31 +80,23 @@ foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
     $newDataDisks += [PSCustomObject]@{Id=$clonedDisk.Id; Lun=$dataDisk.Lun}
 }
 
-# ---------------------------- CREATE NIC WITH NSG ----------------------------
-#$nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $targetResourceGroup -Name $nsgName
+# ---------------------------- CREATE NIC ----------------------------
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
-
-# Specify the desired static private IP address
-$staticIpAddress = "10.189.67.107"  # Replace with your desired IP address
+$staticIpAddress = "10.189.67.107"
 
 $nic = New-AzNetworkInterface -Name "$newVMName-NIC" -ResourceGroupName $targetResourceGroup `
     -Location $location `
     -SubnetId $subnet.Id `
     -PrivateIpAddress $staticIpAddress
-    # -NetworkSecurityGroupId $nsg.Id `
-    
 
 # ---------------------------- CONFIGURE NEW VM ----------------------------
 $vmConfig = New-AzVMConfig -VMName $newVMName -VMSize $vmSize
-
 $osType = $sourceVM.StorageProfile.OsDisk.OsType
 
 if ($osType -eq "Linux") {
-    # Attach the OS disk without setting an OS profile
     $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $newOSDisk.Id -CreateOption Attach -Linux
 } elseif ($osType -eq "Windows") {
-    # Attach the OS disk without setting an OS profile
     $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $newOSDisk.Id -CreateOption Attach -Windows
 } else {
     throw "Unknown OS type: $osType"
@@ -124,16 +110,12 @@ foreach ($disk in $newDataDisks) {
 }
 
 # ---------------------------- ENABLE BOOT DIAGNOSTICS ----------------------------
-# Specify the storage account for boot diagnostics
-$bootDiagStorageAccountName = "babdevvmbootdiag02"
-$bootdiagstracctrg = "bab-dev-vm-boot-diag-swec-rg-01"
+$bootDiagStorageAccountName = "babsitvmbootdiag02"
+$bootdiagstracctrg = "bab-sit-vm-boot-diag-swec-rg-01"
 $bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName $bootdiagstracctrg -Name $bootDiagStorageAccountName
-
 if (-not $bootDiagStorageAccount) {
-    throw "Boot diagnostics storage account '$bootDiagStorageAccountName' not found in resource group '$bootdiagstracctrg'."
+    throw "Boot diagnostics storage account '$bootDiagStorageAccountName' not found."
 }
-
-# Enable boot diagnostics directly in the VM configuration
 $vmConfig.DiagnosticsProfile = @{
     BootDiagnostics = @{
         Enabled = $true
@@ -148,8 +130,28 @@ try {
     throw "Failed to create the new VM '$newVMName'. Error: $_"
 }
 
+# ---------------------------- OPTIONAL: Reset Linux Password ----------------------------
+if ($osType -eq "Linux" -and -not $useSSHOnly) {
+    Write-Host "`n🔐 Setting Linux password for user '$linuxUsername' on VM '$newVMName'..."
+
+    try {
+        Set-AzVMAccessExtension -ResourceGroupName $targetResourceGroup `
+            -VMName $newVMName `
+            -Name "ResetPassword" `
+            -Location $location `
+            -UserName $linuxUsername `
+            -Password $newPassword `
+            -TypeHandlerVersion "1.5" `
+            -Publisher "Microsoft.OSTCExtensions" `
+            -Type "VMAccessForLinux"
+
+        Write-Host "✅ Linux password reset completed for user '$linuxUsername'."
+    } catch {
+        Write-Warning "⚠️ Failed to reset Linux password on VM '$newVMName'. Error: $_"
+    }
+}
+
 # ---------------------------- DELETE SNAPSHOTS AFTER VM CREATION ----------------------------
-# Delete OS snapshot
 try {
     Remove-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotOSName -Force
     Write-Host "Deleted OS snapshot '$snapshotOSName'."
@@ -157,7 +159,6 @@ try {
     Write-Warning "Failed to delete OS snapshot '$snapshotOSName'. Error: $_"
 }
 
-# Delete data disk snapshots
 foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
     $snapshotName = "$newVMName-DataDisk-$($dataDisk.Lun)-Snap"
     try {
@@ -168,4 +169,4 @@ foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
     }
 }
 
-Write-Host "`n✅ VM '$newVMName' cloned from '$sourceVMName'. OS/data disks and NSG attached. No public IP."
+Write-Host "`n✅ VM '$newVMName' cloned from '$sourceVMName'. OS/data disks attached, static IP set. SSH-only: $useSSHOnly"
