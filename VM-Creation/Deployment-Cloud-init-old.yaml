@@ -1,11 +1,10 @@
 #cloud-config
 timezone: Asia/Riyadh
-#Disable firewalld 
+#Disable firewalld & SELinux
 runcmd:
     - systemctl disable firewalld.service
     - systemctl stop firewalld.service
-    - sed -i 's/enforcing/disabled/g' /etc/selinux/config /etc/selinux/config 
-
+    - sed -i 's/enforcing/disabled/g' /etc/selinux/config /etc/selinux/config
 #set search domain from dhcp 
 write_files:
   - path: /etc/dhcp/dhclient.conf
@@ -24,7 +23,7 @@ users:
     shell: /bin/bash
 #Reboot the system wait for 2 min 
 power_state:
-    delay: now
+    delay: +2
     mode: reboot
     message: Rebooting......
     timeout: 30
