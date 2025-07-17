@@ -1,14 +1,15 @@
 # ---------------------------- CONFIGURATION ----------------------------
-$sourceResourceGroup = "bab-dev-dopstosca-swec-rg-01"
-$targetResourceGroup = "BAB-DEV-SHP-SWEC-RG-01"
-$sourceVMName = "DAOPSAPPJDWV3"
-$newVMName = "DASHPAPSPIWV1"
-$location = "swedencentral"
-$vnetrg  = "bab-dev-nw-swec-rg-01"
-$vnetName = "bab-dev-nw-swec-vnet-nonpci-01"
-$subnetName = "snet-dev-nonpci-app-01"
+$sourceResourceGroup = "bab-vdi-avd-weeu-rg-01"
+$targetResourceGroup = "bab-vdi-avd-weeu-rg-01"
+$sourceVMName = "BABAVDSHDTA-2"
+$newVMName = "BABAVDSHDTA-2-Clone"
+$location = "westeurope"
+$vnetrg  = "bab-vdi-nw-weeu-rg-01"
+$vnetName = "bab-vdi-nw-weeu-vnet-vdi-01"
+$subnetName = "snet-vdi-avd-01"
+$nsgrg= "bab-vdi-avd-weeu-rg-01"
 $nsgName = "test-ad-join-nsg"
-$vmSize = "Standard_D8ls_v5"
+$vmSize = "Standard_d4s_v5"
 $useSSHOnly = $true  # Set to $false if you want password login for Linux
 
 # ---------------------------- STOP SOURCE VM ----------------------------
@@ -87,12 +88,12 @@ foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
 }
 
 # ---------------------------- CREATE NIC WITH NSG ----------------------------
-$nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $targetResourceGroup -Name $nsgName
+$nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgrg -Name $nsgName
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 
 # Specify the desired static private IP address
-$staticIpAddress = "10.0.1.100"  # Replace with your desired IP address
+$staticIpAddress = "10.189.50.170"  # Replace with your desired IP address
 
 $nic = New-AzNetworkInterface -Name "$newVMName-NIC" -ResourceGroupName $targetResourceGroup `
     -Location $location `
@@ -124,8 +125,8 @@ foreach ($disk in $newDataDisks) {
 
 # ---------------------------- ENABLE BOOT DIAGNOSTICS ----------------------------
 # Specify the storage account for boot diagnostics
-$bootDiagStorageAccountName = "babdevvmbootdiag02"
-$bootdiagstracctrg = "bab-dev-vm-boot-diag-swec-rg-01"  
+$bootDiagStorageAccountName = "babvdivmbootdiag01"
+$bootdiagstracctrg = "bab-vdi-avd-weeu-rg-01"  
 $bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName $bootdiagstracctrg -Name $bootDiagStorageAccountName
 
 if (-not $bootDiagStorageAccount) {
@@ -143,8 +144,23 @@ $vmConfig.DiagnosticsProfile = @{
 # ---------------------------- CREATE THE NEW VM ----------------------------
 try {
     New-AzVM -ResourceGroupName $targetResourceGroup -Location $location -VM $vmConfig
+    Write-Host "`n✅ VM '$newVMName' cloned from '$sourceVMName'. OS/data disks and NSG attached. No public IP."
+
+    # ---------------------------- DELETE SNAPSHOTS ----------------------------
+    # Delete OS snapshot
+    if ($snapshotOS) {
+        Write-Host "Deleting OS snapshot '$snapshotOSName'..."
+        Remove-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotOSName -Force
+    }
+    # Delete data disk snapshots
+    foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
+        $snapshotName = "$newVMName-DataDisk-$($dataDisk.Lun)-Snap"
+        $snapshot = Get-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotName -ErrorAction SilentlyContinue
+        if ($snapshot) {
+            Write-Host "Deleting data disk snapshot '$snapshotName'..."
+            Remove-AzSnapshot -ResourceGroupName $targetResourceGroup -SnapshotName $snapshotName -Force
+        }
+    }
 } catch {
     throw "Failed to create the new VM '$newVMName'. Error: $_"
 }
-
-Write-Host "`n✅ VM '$newVMName' cloned from '$sourceVMName'. OS/data disks and NSG attached. No public IP."
