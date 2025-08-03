@@ -5,14 +5,14 @@ $sourceSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"  # Replace with t
 $targetSubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"  # Replace with the target subscription ID
 $sourceResourceGroup = "bab-sit-mub-swec-rg-01"
 $targetResourceGroup = "bab-dev-mub-swec-rg-01"
-$sourceVMName = "DAMUBDBORIWV2-test"
+$sourceVMName = "DABIBADLDDWV1"
 $newVMName = "DAMUBDBORDWV2"
 $location = "swedencentral"
 $vnetrg  = "bab-dev-nw-swec-rg-01"
 $vnetName = "bab-dev-nw-swec-vnet-nonpci-01"
 $subnetName = "snet-dev-nonpci-db-03"
-#$nsgName = "test-ad-join-nsg"
-#$nsgrg ="bab-sit-saq-swec-rg-01"
+$nsgName = "test-ad-join-nsg"
+$nsgrg ="bab-sit-saq-swec-rg-01"
 $vmSize = "Standard_D4ls_v5"
 
 # ---------------------------- SWITCH TO SOURCE SUBSCRIPTION ----------------------------
@@ -106,7 +106,7 @@ foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
 }
 
 # ---------------------------- CREATE NIC WITH NSG ---------------------------- 
-#$nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgrg -Name $nsgName
+$nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgrg -Name $nsgName
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 

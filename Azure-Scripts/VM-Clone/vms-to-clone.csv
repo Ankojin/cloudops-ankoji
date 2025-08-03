@@ -1,7 +1,3 @@
 ﻿SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
-DAMUBAPCOIWV1-test,DAMUBAPCODWV1,10.189.57.146,snet-dev-nonpci-app-02,Standard_D2ls_v5
-DAMUBAPCOIWV2-test,DAMUBAPCODWV2,10.189.57.147,snet-dev-nonpci-app-02,Standard_D2ls_v5
-DAMUBAPJBIWV1-test,DAMUBAPJBDWV1,10.189.57.148,snet-dev-nonpci-app-02,Standard_D4ls_v5
-DAMUBDBORIWV2-test,DAMUBDBORDWV2,10.189.57.201,snet-dev-nonpci-db-03,Standard_D4ls_v5
-DAMUBWBAPIWV1-test,DAMUBWBAPDWV1,10.189.57.16,snet-dev-nonpci-web-02,Standard_D2ls_v5
-DAMUBWBAPIWV2-test,DAMUBWBAPDWV2,10.189.57.17,snet-dev-nonpci-web-02,Standard_D2s_v5
+DANCRAPXXIWV1-test,DANCRAPXXIWV1,10.189.66.95,snet-sit-nonpci-app-01,Standard_D2ls_v5
+DAFCODBSQIWV1-test,DAFCODBSQIWV1,10.189.66.215,snet-sit-nonpci-db-01,Standard_D2s_v5
