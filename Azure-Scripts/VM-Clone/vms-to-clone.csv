@@ -1,3 +1,2 @@
 ﻿SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
-DANCRAPXXIWV1-test,DANCRAPXXIWV1,10.189.66.95,snet-sit-nonpci-app-01,Standard_D2ls_v5
-DAFCODBSQIWV1-test,DAFCODBSQIWV1,10.189.66.215,snet-sit-nonpci-db-01,Standard_D2s_v5
+DAMFAWBWBDWV1,DAMFAWBWBDWV1,10.189.60.71,snet-dmz-shared-web-01,Standard_D2s_v5

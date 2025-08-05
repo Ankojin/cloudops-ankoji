@@ -1,6 +1,6 @@
 # ---------------------------- CONFIGURATION ----------------------------
-$sourceResourceGroup = "bab-sit-aptra-swec-rg-01"
-$targetResourceGroup = "bab-sit-aptra-swec-rg-01"
+$sourceResourceGroup = "bab-sit-mdw-swec-rg-01"
+$targetResourceGroup = "bab-sit-mdw-swec-rg-01"
 $location = "swedencentral"
 $vnetrg  = "bab-sit-nw-swec-rg-01"
 $vnetName = "bab-sit-nw-swec-vnet-nonpci-01"
