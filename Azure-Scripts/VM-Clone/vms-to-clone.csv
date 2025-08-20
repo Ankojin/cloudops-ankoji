@@ -1,2 +1,3 @@
 ﻿SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
-DAMFAWBWBDWV1,DAMFAWBWBDWV1,10.189.60.71,snet-dmz-shared-web-01,Standard_D2s_v5
+DAMUBWBMGIWV1,DAMUBWBMGDWV01,10.189.57.19,snet-dev-nonpci-web-02,Standard_D4ls_v5
+DAMUBDBORILV1,DAMUBDBORDLV01,10.189.57.206,snet-dev-nonpci-db-03,Standard_E2s_v5

@@ -1,9 +1,9 @@
 #!/bin/bash
 # List of users to create
-USERS=("cortex")
+USERS=("was")
 
 # Default password for all users
-DEFAULT_PASS="Cortexbab@123"
+DEFAULT_PASS="Wasbab@123"
 
 for USER in "${USERS[@]}"
 do

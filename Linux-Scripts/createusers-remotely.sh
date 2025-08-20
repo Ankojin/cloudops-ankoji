@@ -1,7 +1,7 @@
 #!/bin/bash
 
-USERS=("cortex")
-DEFAULT_PASS="Cortexbab@123"
+USERS=("rhadmin")
+DEFAULT_PASS="r1wutLdv$9v0375"
 
 for USER in "${USERS[@]}"; do
     if id "$USER" &>/dev/null; then

@@ -1,6 +1,6 @@
 # Parameters
-$ResourceGroupName = "BAB-DEV-SVCNOW-SWEC-RG-01"
-$ExcludedVMName = "DASNWAPTMDWV1"
+$ResourceGroupName = "bab-sit-ipay-swec-rg-01"
+$ExcludedVMName = "DAIPYDBSQIWV1"
 $SnapshotPrefix = "snapshot"
 $Location = "swedencentral"
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"  # Shared timestamp for consistency

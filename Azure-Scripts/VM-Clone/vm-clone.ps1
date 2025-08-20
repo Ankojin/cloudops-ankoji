@@ -1,11 +1,11 @@
 # ---------------------------- CONFIGURATION ----------------------------
-$sourceResourceGroup = "bab-sit-mdw-swec-rg-01"
-$targetResourceGroup = "bab-sit-mdw-swec-rg-01"
-$location = "swedencentral"
-$vnetrg  = "bab-sit-nw-swec-rg-01"
-$vnetName = "bab-sit-nw-swec-vnet-nonpci-01"
+$sourceResourceGroup = "BAB-VDI-AVD-WEEU-RG-01"
+$targetResourceGroup = "BAB-VDI-AVD-WEEU-RG-01"
+$location = "westeurope"
+$vnetrg  = "bab-vdi-nw-weeu-rg-01"
+$vnetName = "bab-vdi-nw-weeu-vnet-vdi-01"
 $nsgName = "test-ad-join-nsg"
-$nsgrg ="bab-sit-saq-swec-rg-01"
+$nsgrg = "bab-vdi-avd-weeu-rg-01"
 $useSSHOnly = $true  # Set to $false if you want password login for Linux
 
 # Specify the path to your CSV file
@@ -15,8 +15,8 @@ $csvPath = "C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\VM
 $nsg = Get-AzNetworkSecurityGroup -ResourceGroupName $nsgrg -Name $nsgName
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 
-$bootDiagStorageAccountName = "babsitvmbootdiag02"
-$bootdiagstracctrg = "bab-sit-vm-boot-diag-swec-rg-01"
+$bootDiagStorageAccountName = "babvdivmbootdiag01"
+$bootdiagstracctrg = "bab-vdi-avd-weeu-rg-01"
 $bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName $bootdiagstracctrg -Name $bootDiagStorageAccountName
 if (-not $bootDiagStorageAccount) {
     throw "Boot diagnostics storage account '$bootDiagStorageAccountName' not found in resource group '$bootdiagstracctrg'."
