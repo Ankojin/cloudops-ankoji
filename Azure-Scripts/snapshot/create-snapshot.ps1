@@ -3,7 +3,7 @@ $ResourceGroupName = "bab-sit-ipay-swec-rg-01"
 $ExcludedVMName    = "DAIPYDBSQIWV1"
 $SnapshotPrefix    = "snapshot"
 $Location          = "swedencentral"
-$dateStamp         = Get-Date -Format "yyyyMMdd"   # date only
+$dateStamp         = Get-Date -Format "yyyyMMdd-HHmmss"   # date only
 
 # Function to extract disk name from resource ID
 function Get-DiskNameFromId {
