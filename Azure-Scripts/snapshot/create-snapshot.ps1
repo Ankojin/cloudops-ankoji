@@ -1,5 +1,5 @@
 # Parameters
-$ResourceGroupName = "bab-sit-ipay-swec-rg-01"
+$ResourceGroupName = ""
 $ExcludedVMName    = "DAIPYDBSQIWV1"
 $SnapshotPrefix    = "snapshot"
 $Location          = "swedencentral"
