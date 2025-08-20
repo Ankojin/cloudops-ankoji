@@ -1,12 +1,9 @@
 # Parameters
 $ResourceGroupName = "bab-sit-ipay-swec-rg-01"
-$ExcludedVMName = "DAIPYDBSQIWV1"
-$SnapshotPrefix = "snapshot"
-$Location = "swedencentral"
-$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"  # Shared timestamp for consistency
-
-# Optional: Login
-# Connect-AzAccount
+$ExcludedVMName    = "DAIPYDBSQIWV1"
+$SnapshotPrefix    = "snapshot"
+$Location          = "swedencentral"
+$dateStamp         = Get-Date -Format "yyyyMMdd"   # date only
 
 # Function to extract disk name from resource ID
 function Get-DiskNameFromId {
@@ -21,16 +18,11 @@ foreach ($vm in $VMs) {
     $vmName = $vm.Name
     Write-Host "`nProcessing VM: $vmName"
 
-    # Get OS Disk
-    $osDiskId = $vm.StorageProfile.OSDisk.ManagedDisk.Id
-    $osDiskName = Get-DiskNameFromId $osDiskId
-    $osSnapshotName = "$SnapshotPrefix-$vmName-os-$timestamp"
-
-    # Skip if OS snapshot already exists
-    if (Get-AzSnapshot -ResourceGroupName $ResourceGroupName -SnapshotName $osSnapshotName -ErrorAction SilentlyContinue) {
-        Write-Host "⚠️ OS snapshot already exists: $osSnapshotName — skipping."
-    } else {
-        $osDiskObj = Get-AzDisk -DiskName $osDiskName -ResourceGroupName $ResourceGroupName
+    # ----- OS Disk -----
+    $osSnapshotName = "$SnapshotPrefix-$vmName-os-$dateStamp"
+    if (-not (Get-AzSnapshot -ResourceGroupName $ResourceGroupName -SnapshotName $osSnapshotName -ErrorAction SilentlyContinue)) {
+        $osDiskName = Get-DiskNameFromId $vm.StorageProfile.OSDisk.ManagedDisk.Id
+        $osDiskObj  = Get-AzDisk -DiskName $osDiskName -ResourceGroupName $ResourceGroupName
         $osSnapshotConfig = New-AzSnapshotConfig -SourceUri $osDiskObj.Id `
                                                  -Location $Location `
                                                  -CreateOption Copy `
@@ -43,18 +35,18 @@ foreach ($vm in $VMs) {
             Write-Warning "❌ Failed to create OS snapshot for $vmName. Error: $_"
         }
     }
+    else {
+        Write-Host "⚠️ OS snapshot already exists: $osSnapshotName — skipping."
+    }
 
-    # Snapshot each data disk
+    # ----- Data Disks -----
     foreach ($dataDisk in $vm.StorageProfile.DataDisks) {
-        $dataDiskId = $dataDisk.ManagedDisk.Id
-        $dataDiskName = Get-DiskNameFromId $dataDiskId
-        $dataSnapshotName = "$SnapshotPrefix-$vmName-data${dataDisk.Lun}-$timestamp"
+        $lun = $dataDisk.Lun
+        $dataSnapshotName = "$SnapshotPrefix-$vmName-data$lun-$dateStamp"   # <-- UNIQUE per LUN
 
-        # Skip if data snapshot already exists
-        if (Get-AzSnapshot -ResourceGroupName $ResourceGroupName -SnapshotName $dataSnapshotName -ErrorAction SilentlyContinue) {
-            Write-Host "⚠️ Data snapshot already exists: $dataSnapshotName — skipping."
-        } else {
-            $dataDiskObj = Get-AzDisk -DiskName $dataDiskName -ResourceGroupName $ResourceGroupName
+        if (-not (Get-AzSnapshot -ResourceGroupName $ResourceGroupName -SnapshotName $dataSnapshotName -ErrorAction SilentlyContinue)) {
+            $dataDiskName = Get-DiskNameFromId $dataDisk.ManagedDisk.Id
+            $dataDiskObj  = Get-AzDisk -DiskName $dataDiskName -ResourceGroupName $ResourceGroupName
             $dataSnapshotConfig = New-AzSnapshotConfig -SourceUri $dataDiskObj.Id `
                                                        -Location $Location `
                                                        -CreateOption Copy `
@@ -64,8 +56,11 @@ foreach ($vm in $VMs) {
                 Write-Host "✅ Created Data snapshot: $dataSnapshotName"
             }
             catch {
-                Write-Warning "❌ Failed to create Data snapshot for $vmName (LUN $($dataDisk.Lun)). Error: $_"
+                Write-Warning "❌ Failed to create Data snapshot for $vmName (LUN $lun). Error: $_"
             }
+        }
+        else {
+            Write-Host "⚠️ Data snapshot already exists: $dataSnapshotName — skipping."
         }
     }
 }
