@@ -1,0 +1,31 @@
+trigger:
+- main
+
+pool:
+  name: Default  # Change to your self-hosted agent pool name
+
+variables:
+  ResourceGroupName: 'YOUR_RESOURCE_GROUP'   # Set your RG here or override in UI
+  ExcludedVMName: ''                        # Optional, can be left empty
+
+steps:
+- task: AzureCLI@2
+  displayName: 'Azure Login (Service Principal)'
+  inputs:
+    azureSubscription: $(AZURE_SUBSCRIPTION_ID)
+    scriptType: ps
+    scriptLocation: inlineScript
+    inlineScript: |
+      $tenantId = $env:AZURE_TENANT_ID
+      $clientId = $env:AZURE_CLIENT_ID
+      $clientSecret = $env:AZURE_CLIENT_SECRET
+      Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ClientId $clientId -ClientSecret $clientSecret
+      # Azure login complete
+
+- task: PowerShell@2
+  displayName: 'Run create-snapshot.ps1'
+  inputs:
+    targetType: 'filePath'
+    filePath: 'Pipelines/create-snapshot/create-snapshot.ps1'
+    arguments: '-ResourceGroupName "$(ResourceGroupName)" -ExcludedVMName "$(ExcludedVMName)"'
+    pwsh: true
