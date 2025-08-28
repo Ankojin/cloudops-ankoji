@@ -55,5 +55,5 @@ steps:
       if ([string]::IsNullOrWhiteSpace($excludedVM) -or $excludedVM.ToLower() -eq "none") {
         & $scriptPath -ResourceGroupName $resourceGroup
       } else {
-        & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMName $excludedVM
+        & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMNames $excludedVM
       }
