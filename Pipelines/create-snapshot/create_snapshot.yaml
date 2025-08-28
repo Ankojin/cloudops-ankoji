@@ -45,17 +45,15 @@ steps:
         exit 1
       }
 
-      # Connect using service principal and secret
+      # Modern login for Az 14.3.0
       $secureSecret = ConvertTo-SecureString $clientSecret -AsPlainText -Force
-      Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ApplicationId $applicationId -Password $secureSecret -Subscription $subscriptionId
+      Connect-AzAccount -ServicePrincipal `
+        -Tenant $tenantId `
+        -ApplicationId $applicationId `
+        -Password $secureSecret `
+        -Subscription $subscriptionId
 
       Write-Host "Azure login successful. Using subscription $subscriptionId"
-
-- script: |
-    echo "TENANT: $env:AZURE_TENANT_ID"
-    echo "CLIENT: $env:AZURE_CLIENT_ID"
-    echo "SECRET: $env:AZURE_CLIENT_SECRET"
-  displayName: 'Debug: Show Azure Environment Variables'
 
 - task: PowerShell@2
   displayName: 'Run create-snapshot.ps1'
@@ -65,16 +63,16 @@ steps:
     script: |
       $ErrorActionPreference = 'Stop'
       $resourceGroup = '${{ parameters.resourceGroupName }}'
+      $excludedVM = '${{ parameters.excludedVMName }}'
 
       if ([string]::IsNullOrWhiteSpace($resourceGroup)) {
         Write-Error "Resource Group Name is required."
         exit 1
       }
 
-      $excludedVM = '${{ parameters.excludedVMName }}'
       $scriptPath = 'Pipelines/create-snapshot/create-snapshot.ps1'
 
-      if ([string]::IsNullOrWhiteSpace($excludedVM)) {
+      if ([string]::IsNullOrWhiteSpace($excludedVM) -or $excludedVM.ToLower() -eq "none") {
         & $scriptPath -ResourceGroupName $resourceGroup
       } else {
         & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMName $excludedVM
