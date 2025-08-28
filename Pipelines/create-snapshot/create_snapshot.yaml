@@ -8,7 +8,7 @@ parameters:
     type: string
     default: ''
   - name: excludedVMName
-    displayName: 'Excluded VM Name (optional)'
+    displayName: 'Excluded VM Name (optional, leave blank if not needed)'
     type: string
     default: ''
 
@@ -21,6 +21,13 @@ variables:
 - group: AZ-Connect  # Library variable group with AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
 
 steps:
+- script: |
+    echo "TENANT: $(AZURE_TENANT_ID)"
+    echo "CLIENT: $(AZURE_CLIENT_ID)"
+    echo "SECRET: $(AZURE_CLIENT_SECRET)"
+  displayName: 'Debug: Show Azure Variables'
+  # Remove or comment out the secret line after debugging!
+
 - task: PowerShell@2
   displayName: 'Azure Login (Service Principal)'
   inputs:
@@ -28,9 +35,9 @@ steps:
     script: |
       Write-Host "Logging into Azure..."
       $ErrorActionPreference = 'Stop'
-      $tenantId = $env:AZURE_TENANT_ID
-      $clientId = $env:AZURE_CLIENT_ID
-      $clientSecret = $env:AZURE_CLIENT_SECRET
+      $tenantId = "$(AZURE_TENANT_ID)"
+      $clientId = "$(AZURE_CLIENT_ID)"
+      $clientSecret = "$(AZURE_CLIENT_SECRET)"
       $subscriptionMap = @{
         'BAB_DEV' = '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
         'BAB_SIT' = 'e48414cd-f96d-4414-ae9e-da7fec844f77'
