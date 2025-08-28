@@ -17,9 +17,6 @@ trigger: none
 pool:
   name: cloudops-agent  # Change to your self-hosted agent pool name
 
-variables:
-- group: AZ-Connect  # Library variable group with AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
-
 steps:
 - task: PowerShell@2
   displayName: 'Azure Login (Service Principal)'
@@ -31,9 +28,9 @@ steps:
       $ErrorActionPreference = 'Stop'
       Import-Module Az.Accounts -Force
 
-      $tenantId = "$(AZURE_TENANT_ID)"
-      $applicationId = "$(AZURE_CLIENT_ID)"
-      $clientSecret = "$(AZURE_CLIENT_SECRET)"
+      $tenantId = $env:AZURE_TENANT_ID
+      $applicationId = $env:AZURE_CLIENT_ID
+      $clientSecret = $env:AZURE_CLIENT_SECRET
 
       $subscriptionMap = @{
         'BAB_DEV' = '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
@@ -53,6 +50,12 @@ steps:
       Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ApplicationId $applicationId -Password $secureSecret -Subscription $subscriptionId
 
       Write-Host "Azure login successful. Using subscription $subscriptionId"
+
+- script: |
+    echo "TENANT: $env:AZURE_TENANT_ID"
+    echo "CLIENT: $env:AZURE_CLIENT_ID"
+    echo "SECRET: $env:AZURE_CLIENT_SECRET"
+  displayName: 'Debug: Show Azure Environment Variables'
 
 - task: PowerShell@2
   displayName: 'Run create-snapshot.ps1'
