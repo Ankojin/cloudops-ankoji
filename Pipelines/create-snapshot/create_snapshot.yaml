@@ -5,8 +5,8 @@ parameters:
   - name: resourceGroupName
     displayName: 'Resource Group Name'
     default: ''
-  - name: excludedVMName
-    displayName: 'Excluded VM Name (Enter NA(default) or comma-separated for multiple)'
+  - name: excludedVMNames
+    displayName: 'Excluded VM Names (comma-separated, or "none" for no exclusion)'
     default: ''
 
 trigger: none
@@ -43,7 +43,7 @@ steps:
     pwsh: true
     script: |
       $resourceGroup = '${{ parameters.resourceGroupName }}'
-      $excludedVM = '${{ parameters.excludedVMName }}'
+      $excludedVMs = '${{ parameters.excludedVMNames }}'
       $scriptPath = 'Pipelines/create-snapshot/create-snapshot.ps1'
 
       if ([string]::IsNullOrWhiteSpace($resourceGroup)) {
@@ -52,8 +52,8 @@ steps:
       }
 
       # Treat empty or "none" as no exclusion
-      if ([string]::IsNullOrWhiteSpace($excludedVM) -or $excludedVM.ToLower() -eq "none") {
+      if ([string]::IsNullOrWhiteSpace($excludedVMs) -or $excludedVMs.ToLower() -eq "none") {
         & $scriptPath -ResourceGroupName $resourceGroup
       } else {
-        & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMNames $excludedVM
+        & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMNames $excludedVMs
       }
