@@ -6,7 +6,7 @@ parameters:
     displayName: 'Resource Group Name'
     default: ''
   - name: excludedVMName
-    displayName: 'Excluded VM Name (optional, leave blank if not needed)'
+    displayName: 'Excluded VM Name (Enter NA(default) or comma-separated for multiple)'
     default: ''
 
 trigger: none
