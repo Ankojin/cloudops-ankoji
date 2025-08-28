@@ -1,27 +1,29 @@
-
 parameters:
   - name: subscriptionId
     displayName: 'Azure Subscription'
     type: string
-    default: 'SUBSCRIPTION_ID_1'
+    default: '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
     values:
-      - value: 'SUBSCRIPTION_ID_1'
-        displayName: 'Production Subscription'
-      - value: 'SUBSCRIPTION_ID_2'
-        displayName: 'Development Subscription'
-      - value: 'SUBSCRIPTION_ID_3'
-        displayName: 'Test Subscription'
+      - value: '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
+        displayName: 'BAB_DEV'
+      - value: 'e48414cd-f96d-4414-ae9e-da7fec844f77'
+        displayName: 'cb801de6-404a-4e76-8e9a-475206cbc2e5'
+  - name: resourceGroupName
+    displayName: 'Resource Group Name'
+    type: string
+    default: ''
+  - name: excludedVMName
+    displayName: 'Excluded VM Name (optional)'
+    type: string
+    default: ''
 
-trigger:
-  - main
+trigger: none
 
 pool:
-  name: Default  # Change to your self-hosted agent pool name
+  name: cloudops-agent  # Change to your self-hosted agent pool name
 
 variables:
 - group: AZ-Connect  # Library variable group with AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
-  ResourceGroupName: 'YOUR_RESOURCE_GROUP'   # Set your RG here or override in UI
-  ExcludedVMName: ''                        # Optional, can be left empty
 
 steps:
 - task: PowerShell@2
@@ -34,14 +36,26 @@ steps:
       $tenantId = $env:AZURE_TENANT_ID
       $clientId = $env:AZURE_CLIENT_ID
       $clientSecret = $env:AZURE_CLIENT_SECRET
-  $subscriptionId = "${{ parameters.subscriptionId }}"
-  Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ClientId $clientId -ClientSecret $clientSecret -Subscription $subscriptionId
-  Write-Host "Azure login successful."
+      $subscriptionId = "${{ parameters.subscriptionId }}"
+      Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ClientId $clientId -ClientSecret $clientSecret -Subscription $subscriptionId
+      Write-Host "Azure login successful."
 
 - task: PowerShell@2
   displayName: 'Run create-snapshot.ps1'
   inputs:
-    targetType: 'filePath'
-    filePath: 'Pipelines/create-snapshot/create-snapshot.ps1'
-    arguments: '-ResourceGroupName "$(ResourceGroupName)" -ExcludedVMName "$(ExcludedVMName)"'
+    targetType: 'inline'
+    script: |
+      $ErrorActionPreference = 'Stop'
+      $resourceGroup = '${{ parameters.resourceGroupName }}'
+      if ([string]::IsNullOrWhiteSpace($resourceGroup)) {
+        Write-Error "Resource Group Name is required."
+        exit 1
+      }
+      $excludedVM = '${{ parameters.excludedVMName }}'
+      $scriptPath = 'Pipelines/create-snapshot/create-snapshot.ps1'
+      if ([string]::IsNullOrWhiteSpace($excludedVM)) {
+        & $scriptPath -ResourceGroupName $resourceGroup
+      } else {
+        & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMName $excludedVM
+      }
     pwsh: true

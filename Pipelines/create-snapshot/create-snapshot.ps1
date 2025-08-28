@@ -1,14 +1,11 @@
 param(
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $true)]
     [string]$ResourceGroupName,
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [string]$ExcludedVMName = ""
 )
+$ErrorActionPreference = 'Stop'
 
-$ResourceGroupName = if ($ResourceGroupName) { $ResourceGroupName } else { Read-Host "Enter the Resource Group Name" }
-if (-not $ExcludedVMName) {
-    $ExcludedVMName = Read-Host "Enter the VM name to exclude (press Enter to skip)"
-}
 $SnapshotPrefix    = "snapshot"
 $Location          = "swedencentral"
 $dateStamp         = Get-Date -Format "yyyyMMdd-HHmmss"   # date only
