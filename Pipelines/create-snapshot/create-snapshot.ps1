@@ -15,6 +15,9 @@ function IsExcluded($vmName, $excludedList) {
     return $excludedList -contains $vmName
 }
 
+# Ensure log folder exists
+if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
+
 # Check if az CLI is available
 if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
     "Azure CLI (az) is not installed or not in PATH." | Tee-Object -FilePath $LogFile -Append
@@ -32,19 +35,26 @@ try {
 # Get all VM names in the resource group
 $vms = az vm list --resource-group $ResourceGroupName --query "[].name" -o tsv | ForEach-Object { $_.Trim() }
 
-foreach ($vmName in $vms) {
-    if (IsExcluded $vmName $ExcludedVMList) {
-        "Skipping excluded VM: $vmName" | Tee-Object -FilePath $LogFile -Append
-        continue
+# Parallelize per VM
+$vms | ForEach-Object -Parallel {
+    param($vmName, $ResourceGroupName, $ExcludedVMList, $SnapshotPrefix, $DateStamp, $LogFile)
+
+    function IsExcluded($vmName, $excludedList) {
+        return $excludedList -contains $vmName
     }
 
-    "Processing VM: $vmName" | Tee-Object -FilePath $LogFile -Append
+    if (IsExcluded $vmName $ExcludedVMList) {
+        "Skipping excluded VM: $vmName" | Tee-Object -FilePath $LogFile -Append
+        return
+    }
+
+    "`nProcessing VM: $vmName" | Tee-Object -FilePath $LogFile -Append
 
     # ----- OS Disk -----
     $osDiskId = az vm show -g $ResourceGroupName -n $vmName --query "storageProfile.osDisk.managedDisk.id" -o tsv
     if (-not $osDiskId) {
         "ERROR: No OS disk found for VM $vmName. Skipping." | Tee-Object -FilePath $LogFile -Append
-        continue
+        return
     }
     $osDiskName = Split-Path $osDiskId -Leaf
     $location = az disk show --ids $osDiskId --query location -o tsv
@@ -60,7 +70,7 @@ foreach ($vmName in $vms) {
 
     # ----- Data Disks -----
     $dataDisks = az vm show -g $ResourceGroupName -n $vmName --query "storageProfile.dataDisks[]" -o json | ConvertFrom-Json
-    if ($null -eq $dataDisks) { continue }
+    if ($null -eq $dataDisks) { return }
 
     foreach ($dataDisk in $dataDisks) {
         $dataDiskId = $dataDisk.managedDisk.id
@@ -77,6 +87,6 @@ foreach ($vmName in $vms) {
             "⚠️ Data snapshot already exists: $dataSnapshotName — skipping." | Tee-Object -FilePath $LogFile -Append
         }
     }
-}
+} -ArgumentList $ResourceGroupName, $ExcludedVMList, $SnapshotPrefix, $DateStamp, $LogFile -ThrottleLimit 4
 
 "`n🎉 Snapshot process completed." | Tee-Object -FilePath $LogFile -Append
