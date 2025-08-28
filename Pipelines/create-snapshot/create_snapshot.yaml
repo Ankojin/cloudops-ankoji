@@ -51,9 +51,5 @@ steps:
         exit 1
       }
 
-      # Treat empty or "none" as no exclusion
-      if ([string]::IsNullOrWhiteSpace($excludedVMs) -or $excludedVMs.ToLower() -eq "none") {
-        & $scriptPath -ResourceGroupName $resourceGroup
-      } else {
-        & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMNames $excludedVMs
-      }
+      # Always pass both parameters, even if excludedVMs is empty or 'none'
+      & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMNames $excludedVMs
