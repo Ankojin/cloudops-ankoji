@@ -1,26 +1,42 @@
+
+parameters:
+  - name: subscriptionId
+    displayName: 'Azure Subscription'
+    type: string
+    default: 'SUBSCRIPTION_ID_1'
+    values:
+      - value: 'SUBSCRIPTION_ID_1'
+        displayName: 'Production Subscription'
+      - value: 'SUBSCRIPTION_ID_2'
+        displayName: 'Development Subscription'
+      - value: 'SUBSCRIPTION_ID_3'
+        displayName: 'Test Subscription'
+
 trigger:
-- main
+  - main
 
 pool:
   name: Default  # Change to your self-hosted agent pool name
 
 variables:
+- group: AZ-Connect  # Library variable group with AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
   ResourceGroupName: 'YOUR_RESOURCE_GROUP'   # Set your RG here or override in UI
   ExcludedVMName: ''                        # Optional, can be left empty
 
 steps:
-- task: AzureCLI@2
+- task: PowerShell@2
   displayName: 'Azure Login (Service Principal)'
   inputs:
-    azureSubscription: $(AZURE_SUBSCRIPTION_ID)
-    scriptType: ps
-    scriptLocation: inlineScript
-    inlineScript: |
+    targetType: 'inline'
+    script: |
+      Write-Host "Logging into Azure..."
+      $ErrorActionPreference = 'Stop'
       $tenantId = $env:AZURE_TENANT_ID
       $clientId = $env:AZURE_CLIENT_ID
       $clientSecret = $env:AZURE_CLIENT_SECRET
-      Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ClientId $clientId -ClientSecret $clientSecret
-      # Azure login complete
+  $subscriptionId = "${{ parameters.subscriptionId }}"
+  Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ClientId $clientId -ClientSecret $clientSecret -Subscription $subscriptionId
+  Write-Host "Azure login successful."
 
 - task: PowerShell@2
   displayName: 'Run create-snapshot.ps1'

@@ -23,8 +23,9 @@ for USER in "${USERS[@]}"; do
     else
         useradd -m "$USER"
         echo "$USER:$DEFAULT_PASS" | chpasswd
-        chage -d 0 "$USER"
-        chage -M 90 -m 7 -W 14 "$USER"
+        # chage -d 0 "$USER"
+        # chage -M 90 -m 7 -W 14 "$USER"
+        chage -M -1 "$USER"
 
         echo "$USER ALL=(ALL) ALL" > "/etc/sudoers.d/$USER"
         chmod 0440 "/etc/sudoers.d/$USER"
