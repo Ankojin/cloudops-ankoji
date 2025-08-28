@@ -30,22 +30,29 @@ steps:
       Write-Host "Logging into Azure..."
       $ErrorActionPreference = 'Stop'
       Import-Module Az.Accounts -Force
+
       $tenantId = "$(AZURE_TENANT_ID)"
       $applicationId = "$(AZURE_CLIENT_ID)"
       $clientSecret = "$(AZURE_CLIENT_SECRET)"
+
       $subscriptionMap = @{
         'BAB_DEV' = '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
         'BAB_SIT' = 'e48414cd-f96d-4414-ae9e-da7fec844f77'
       }
-      $subscriptionId = $subscriptionMap['${{ parameters.subscriptionName }}']
+
+      $paramSubscription = "${{ parameters.subscriptionName }}"
+      $subscriptionId = $subscriptionMap[$paramSubscription]
+
       if (-not $subscriptionId) {
-        Write-Error "Invalid subscription selection."
+        Write-Error "Invalid subscription selection. Use BAB_DEV or BAB_SIT."
         exit 1
       }
-      $securePassword = ConvertTo-SecureString $clientSecret -AsPlainText -Force
-      $psCredential = New-Object System.Management.Automation.PSCredential -ArgumentList $applicationId, $securePassword
-      Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ApplicationId $applicationId -Credential $psCredential -Subscription $subscriptionId
-      Write-Host "Azure login successful."
+
+      # Connect using service principal and secret
+      $secureSecret = ConvertTo-SecureString $clientSecret -AsPlainText -Force
+      Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ApplicationId $applicationId -Password $secureSecret -Subscription $subscriptionId
+
+      Write-Host "Azure login successful. Using subscription $subscriptionId"
 
 - task: PowerShell@2
   displayName: 'Run create-snapshot.ps1'
@@ -55,12 +62,15 @@ steps:
     script: |
       $ErrorActionPreference = 'Stop'
       $resourceGroup = '${{ parameters.resourceGroupName }}'
+
       if ([string]::IsNullOrWhiteSpace($resourceGroup)) {
         Write-Error "Resource Group Name is required."
         exit 1
       }
+
       $excludedVM = '${{ parameters.excludedVMName }}'
       $scriptPath = 'Pipelines/create-snapshot/create-snapshot.ps1'
+
       if ([string]::IsNullOrWhiteSpace($excludedVM)) {
         & $scriptPath -ResourceGroupName $resourceGroup
       } else {
