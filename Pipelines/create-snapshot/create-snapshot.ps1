@@ -9,9 +9,24 @@ param(
 $ErrorActionPreference = 'Stop'
 $SnapshotPrefix = "snapshot"
 $DateStamp     = Get-Date -Format "yyyyMMdd-HHmmss"
+$LogFile = "C:\log\snapshot_log.txt"
 
 function IsExcluded($vmName, $excludedList) {
     return $excludedList -contains $vmName
+}
+
+# Check if az CLI is available
+if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+    "Azure CLI (az) is not installed or not in PATH." | Tee-Object -FilePath $LogFile -Append
+    exit 1
+}
+
+# Check if logged in
+try {
+    az account show -o none
+} catch {
+    "Not logged in to Azure CLI. Please login before running this script." | Tee-Object -FilePath $LogFile -Append
+    exit 1
 }
 
 # Get all VM names in the resource group
@@ -19,41 +34,49 @@ $vms = az vm list --resource-group $ResourceGroupName --query "[].name" -o tsv |
 
 foreach ($vmName in $vms) {
     if (IsExcluded $vmName $ExcludedVMList) {
-        Write-Host "Skipping excluded VM: $vmName"
+        "Skipping excluded VM: $vmName" | Tee-Object -FilePath $LogFile -Append
         continue
     }
 
-    Write-Host "`nProcessing VM: $vmName"
+    "Processing VM: $vmName" | Tee-Object -FilePath $LogFile -Append
 
     # ----- OS Disk -----
     $osDiskId = az vm show -g $ResourceGroupName -n $vmName --query "storageProfile.osDisk.managedDisk.id" -o tsv
+    if (-not $osDiskId) {
+        "ERROR: No OS disk found for VM $vmName. Skipping." | Tee-Object -FilePath $LogFile -Append
+        continue
+    }
     $osDiskName = Split-Path $osDiskId -Leaf
     $location = az disk show --ids $osDiskId --query location -o tsv
     $osSnapshotName = "$SnapshotPrefix-$vmName-os-$DateStamp"
 
-    if (-not (az snapshot show -g $ResourceGroupName -n $osSnapshotName -o none 2>$null)) {
+    $snapshotExists = az snapshot show -g $ResourceGroupName -n $osSnapshotName -o none 2>$null
+    if ($LASTEXITCODE -ne 0) {
         az snapshot create -g $ResourceGroupName -n $osSnapshotName --source $osDiskId --location $location --sku Standard_LRS
-        Write-Host "✅ Created OS snapshot: $osSnapshotName"
+        "✅ Created OS snapshot: $osSnapshotName" | Tee-Object -FilePath $LogFile -Append
     } else {
-        Write-Host "⚠️ OS snapshot already exists: $osSnapshotName — skipping."
+        "⚠️ OS snapshot already exists: $osSnapshotName — skipping." | Tee-Object -FilePath $LogFile -Append
     }
 
     # ----- Data Disks -----
-    $dataDiskIds = az vm show -g $ResourceGroupName -n $vmName --query "storageProfile.dataDisks[].managedDisk.id" -o tsv
-    $lunIndex = 0
-    foreach ($dataDiskId in $dataDiskIds) {
+    $dataDisks = az vm show -g $ResourceGroupName -n $vmName --query "storageProfile.dataDisks[]" -o json | ConvertFrom-Json
+    if ($null -eq $dataDisks) { continue }
+
+    foreach ($dataDisk in $dataDisks) {
+        $dataDiskId = $dataDisk.managedDisk.id
+        $lun = $dataDisk.lun
         $dataDiskName = Split-Path $dataDiskId -Leaf
         $location = az disk show --ids $dataDiskId --query location -o tsv
-        $dataSnapshotName = "$SnapshotPrefix-$vmName-data$lunIndex-$DateStamp"
+        $dataSnapshotName = "$SnapshotPrefix-$vmName-data$lun-$DateStamp"
 
-        if (-not (az snapshot show -g $ResourceGroupName -n $dataSnapshotName -o none 2>$null)) {
+        $snapshotExists = az snapshot show -g $ResourceGroupName -n $dataSnapshotName -o none 2>$null
+        if ($LASTEXITCODE -ne 0) {
             az snapshot create -g $ResourceGroupName -n $dataSnapshotName --source $dataDiskId --location $location --sku Standard_LRS
-            Write-Host "✅ Created Data snapshot: $dataSnapshotName"
+            "✅ Created Data snapshot: $dataSnapshotName" | Tee-Object -FilePath $LogFile -Append
         } else {
-            Write-Host "⚠️ Data snapshot already exists: $dataSnapshotName — skipping."
+            "⚠️ Data snapshot already exists: $dataSnapshotName — skipping." | Tee-Object -FilePath $LogFile -Append
         }
-        $lunIndex++
     }
 }
 
-Write-Host "`n🎉 Snapshot process completed."
+"`n🎉 Snapshot process completed." | Tee-Object -FilePath $LogFile -Append
