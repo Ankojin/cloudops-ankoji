@@ -42,25 +42,14 @@ try {
 # Get all VM names in the resource group
 $vms = az vm list --resource-group $ResourceGroupName --query "[].name" -o tsv | ForEach-Object { $_.Trim() }
 
-# Parallelize per VM
-$vms | ForEach-Object -Parallel {
-    param($vmName, $ResourceGroupName, $ExcludedVMNames, $SnapshotPrefix, $DateStamp, $LogFile)
-
-    function IsExcluded($vmName, $excludedNames) {
-        if ([string]::IsNullOrWhiteSpace($excludedNames) -or $excludedNames.ToLower() -eq "none") {
-            return $false
-        }
-        $excludedList = $excludedNames -split ',' | ForEach-Object { $_.Trim() }
-        return $excludedList -contains $vmName
-    }
-
+foreach ($vmName in $vms) {
     try {
         # Disk location cache for this VM
         $diskLocationCache = @{}
 
         if (IsExcluded $vmName $ExcludedVMNames) {
             "Skipping excluded VM: $vmName" | Tee-Object -FilePath $LogFile -Append
-            return
+            continue
         }
 
         "Processing VM: $vmName" | Tee-Object -FilePath $LogFile -Append
@@ -69,7 +58,7 @@ $vms | ForEach-Object -Parallel {
         $osDiskId = az vm show -g $ResourceGroupName -n $vmName --query "storageProfile.osDisk.managedDisk.id" -o tsv
         if (-not $osDiskId) {
             "ERROR: No OS disk found for VM $vmName. Skipping." | Tee-Object -FilePath $LogFile -Append
-            return
+            continue
         }
         $osDiskName = Split-Path $osDiskId -Leaf
         if (-not $diskLocationCache.ContainsKey($osDiskId)) {
@@ -91,7 +80,7 @@ $vms | ForEach-Object -Parallel {
         if ($null -eq $dataDisks) { 
             "No data disks for VM: $vmName" | Tee-Object -FilePath $LogFile -Append
             "Finished VM: $vmName" | Tee-Object -FilePath $LogFile -Append
-            return 
+            continue
         }
 
         foreach ($dataDisk in $dataDisks) {
@@ -115,6 +104,6 @@ $vms | ForEach-Object -Parallel {
     } catch {
         "❌ Error processing VM $($vmName): $($_)" | Tee-Object -FilePath $LogFile -Append
     }
-} -ArgumentList $ResourceGroupName, $ExcludedVMNames, $SnapshotPrefix, $DateStamp, $LogFile -ThrottleLimit 4
+}
 
 "`n🎉 Snapshot process completed." | Tee-Object -FilePath $LogFile -Append
