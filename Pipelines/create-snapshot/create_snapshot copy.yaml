@@ -1,8 +1,11 @@
 parameters:
   - name: subscriptionName
-    displayName: 'Azure Subscription (type BAB_DEV or BAB_SIT)'
+    displayName: 'Azure Subscription'
     type: string
     default: 'BAB_DEV'
+    allowedValues:
+      - 'BAB_DEV'
+      - 'BAB_SIT'
   - name: resourceGroupName
     displayName: 'Resource Group Name'
     type: string
