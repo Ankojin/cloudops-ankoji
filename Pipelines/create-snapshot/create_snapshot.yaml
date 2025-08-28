@@ -20,21 +20,16 @@ pool:
 variables:
 - group: AZ-Connect  # Library variable group with AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
 
-# Uncomment for debugging variable values (remove/comment out for production)
-# - script: |
-#     echo "TENANT: $(AZURE_TENANT_ID)"
-#     echo "CLIENT: $(AZURE_CLIENT_ID)"
-#     echo "SECRET: $(AZURE_CLIENT_SECRET)"
-#   displayName: 'Debug: Show Azure Variables'
-
 steps:
 - task: PowerShell@2
   displayName: 'Azure Login (Service Principal)'
   inputs:
     targetType: 'inline'
+    pwsh: true
     script: |
       Write-Host "Logging into Azure..."
       $ErrorActionPreference = 'Stop'
+      Import-Module Az.Accounts -Force
       $tenantId = "$(AZURE_TENANT_ID)"
       $applicationId = "$(AZURE_CLIENT_ID)"
       $clientSecret = "$(AZURE_CLIENT_SECRET)"
@@ -56,6 +51,7 @@ steps:
   displayName: 'Run create-snapshot.ps1'
   inputs:
     targetType: 'inline'
+    pwsh: true
     script: |
       $ErrorActionPreference = 'Stop'
       $resourceGroup = '${{ parameters.resourceGroupName }}'
@@ -70,4 +66,3 @@ steps:
       } else {
         & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMName $excludedVM
       }
-    pwsh: true

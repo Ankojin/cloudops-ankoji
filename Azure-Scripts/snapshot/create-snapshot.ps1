@@ -1,6 +1,6 @@
 # Parameters
-$ResourceGroupName = ""
-$ExcludedVMName    = "DAIPYDBSQIWV1"
+$ResourceGroupName = "bab-sit-mux-swec-rg-01"
+$ExcludedVMName    = ""
 $SnapshotPrefix    = "snapshot"
 $Location          = "swedencentral"
 $dateStamp         = Get-Date -Format "yyyyMMdd-HHmmss"   # date only
