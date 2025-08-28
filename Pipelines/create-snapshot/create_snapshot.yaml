@@ -15,65 +15,53 @@ parameters:
 trigger: none
 
 pool:
-  name: cloudops-agent  # Change to your self-hosted agent pool name
+  name: cloudops-agent
 
 steps:
 - task: PowerShell@2
-  displayName: 'Azure Login (Service Principal)'
+  displayName: 'Azure CLI Login'
   inputs:
     targetType: 'inline'
     pwsh: true
     script: |
-      Write-Host "Logging into Azure..."
-      $ErrorActionPreference = 'Stop'
-      Import-Module Az.Accounts -Force
-
-      $tenantId = $env:AZURE_TENANT_ID
-      $applicationId = $env:AZURE_CLIENT_ID
-      $clientSecret = $env:AZURE_CLIENT_SECRET
-
+      Write-Host "Logging into Azure CLI..."
       $subscriptionMap = @{
         'BAB_DEV' = '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
         'BAB_SIT' = 'e48414cd-f96d-4414-ae9e-da7fec844f77'
       }
 
       $paramSubscription = "${{ parameters.subscriptionName }}"
-      $subscriptionId = $subscriptionMap[$paramSubscription]
-
-      if (-not $subscriptionId) {
-        Write-Error "Invalid subscription selection. Use BAB_DEV or BAB_SIT."
-        exit 1
+      if (-not $subscriptionMap.ContainsKey($paramSubscription)) {
+          Write-Error "Invalid subscription: $paramSubscription"
+          exit 1
       }
 
-      # Modern login for Az 14.3.0
-      $secureSecret = ConvertTo-SecureString $clientSecret -AsPlainText -Force
-      Connect-AzAccount -ServicePrincipal `
-        -Tenant $tenantId `
-        -ApplicationId $applicationId `
-        -Password $secureSecret `
-        -Subscription $subscriptionId
+      $subscriptionId = $subscriptionMap[$paramSubscription]
 
-      Write-Host "Azure login successful. Using subscription $subscriptionId"
+      az login --service-principal -u $env:AZURE_CLIENT_ID -p $env:AZURE_CLIENT_SECRET --tenant $env:AZURE_TENANT_ID
+      az account set --subscription $subscriptionId
+      Write-Host "Azure CLI login successful. Using subscription $subscriptionId"
 
 - task: PowerShell@2
-  displayName: 'Run create-snapshot.ps1'
+  displayName: 'Run create-snapshot.ps1 (Azure CLI)'
   inputs:
     targetType: 'inline'
     pwsh: true
     script: |
-      $ErrorActionPreference = 'Stop'
       $resourceGroup = '${{ parameters.resourceGroupName }}'
       $excludedVM = '${{ parameters.excludedVMName }}'
 
       if ([string]::IsNullOrWhiteSpace($resourceGroup)) {
-        Write-Error "Resource Group Name is required."
-        exit 1
+          Write-Error "Resource Group Name is required"
+          exit 1
+      }
+
+      # Treat empty or "none" as no exclusion
+      if ([string]::IsNullOrWhiteSpace($excludedVM) -or $excludedVM.ToLower() -eq "none") {
+          $excludedList = @()
+      } else {
+          $excludedList = $excludedVM.Split(',') | ForEach-Object { $_.Trim() }
       }
 
       $scriptPath = 'Pipelines/create-snapshot/create-snapshot.ps1'
-
-      if ([string]::IsNullOrWhiteSpace($excludedVM) -or $excludedVM.ToLower() -eq "none") {
-        & $scriptPath -ResourceGroupName $resourceGroup
-      } else {
-        & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMName $excludedVM
-      }
+      & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMList $excludedList

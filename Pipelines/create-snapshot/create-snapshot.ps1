@@ -3,79 +3,56 @@ param(
     [string]$ResourceGroupName,
 
     [Parameter(Mandatory = $false)]
-    [string]$ExcludedVMName = ""
+    [string[]]$ExcludedVMList = @()
 )
 
 $ErrorActionPreference = 'Stop'
 $SnapshotPrefix = "snapshot"
-$dateStamp      = Get-Date -Format "yyyyMMdd-HHmmss"
+$DateStamp     = Get-Date -Format "yyyyMMdd-HHmmss"
 
-function Get-DiskNameFromId {
-    param ([string]$diskId)
-    return ($diskId -split "/")[-1]
+function IsExcluded($vmName, $excludedList) {
+    return $excludedList -contains $vmName
 }
 
-# Treat empty string or "none" as no exclusion
-if ([string]::IsNullOrWhiteSpace($ExcludedVMName) -or $ExcludedVMName.ToLower() -eq "none") {
-    $excludedList = @()
-} else {
-    $excludedList = $ExcludedVMName -split ',' | ForEach-Object { $_.Trim() }
-}
+# Get all VM names in the resource group
+$vms = az vm list --resource-group $ResourceGroupName --query "[].name" -o tsv | ForEach-Object { $_.Trim() }
 
-$VMs = Get-AzVM -ResourceGroupName $ResourceGroupName | Where-Object { $_.Name -notin $excludedList }
+foreach ($vmName in $vms) {
+    if (IsExcluded $vmName $ExcludedVMList) {
+        Write-Host "Skipping excluded VM: $vmName"
+        continue
+    }
 
-foreach ($vm in $VMs) {
-    $vmName = $vm.Name
     Write-Host "`nProcessing VM: $vmName"
 
     # ----- OS Disk -----
-    $osSnapshotName = "$SnapshotPrefix-$vmName-os-$dateStamp"
-    if (-not (Get-AzSnapshot -ResourceGroupName $ResourceGroupName -SnapshotName $osSnapshotName -ErrorAction SilentlyContinue)) {
-        $osDiskName = Get-DiskNameFromId $vm.StorageProfile.OSDisk.ManagedDisk.Id
-        $osDiskObj  = Get-AzDisk -DiskName $osDiskName -ResourceGroupName $ResourceGroupName
-        $Location   = $osDiskObj.Location
+    $osDiskId = az vm show -g $ResourceGroupName -n $vmName --query "storageProfile.osDisk.managedDisk.id" -o tsv
+    $osDiskName = Split-Path $osDiskId -Leaf
+    $location = az disk show --ids $osDiskId --query location -o tsv
+    $osSnapshotName = "$SnapshotPrefix-$vmName-os-$DateStamp"
 
-        $osSnapshotConfig = New-AzSnapshotConfig -SourceUri $osDiskObj.Id `
-                                                 -Location $Location `
-                                                 -CreateOption Copy `
-                                                 -SkuName Standard_LRS
-        try {
-            New-AzSnapshot -Snapshot $osSnapshotConfig -SnapshotName $osSnapshotName -ResourceGroupName $ResourceGroupName
-            Write-Host "✅ Created OS snapshot: $osSnapshotName"
-        }
-        catch {
-            Write-Warning "❌ Failed to create OS snapshot for $vmName. Error: $_"
-        }
-    }
-    else {
+    if (-not (az snapshot show -g $ResourceGroupName -n $osSnapshotName -o none 2>$null)) {
+        az snapshot create -g $ResourceGroupName -n $osSnapshotName --source $osDiskId --location $location --sku Standard_LRS
+        Write-Host "✅ Created OS snapshot: $osSnapshotName"
+    } else {
         Write-Host "⚠️ OS snapshot already exists: $osSnapshotName — skipping."
     }
 
     # ----- Data Disks -----
-    foreach ($dataDisk in $vm.StorageProfile.DataDisks) {
-        $lun = $dataDisk.Lun
-        $dataSnapshotName = "$SnapshotPrefix-$vmName-data$lun-$dateStamp"
+    $dataDiskIds = az vm show -g $ResourceGroupName -n $vmName --query "storageProfile.dataDisks[].managedDisk.id" -o tsv
+    $lunIndex = 0
+    foreach ($dataDiskId in $dataDiskIds) {
+        $dataDiskName = Split-Path $dataDiskId -Leaf
+        $location = az disk show --ids $dataDiskId --query location -o tsv
+        $dataSnapshotName = "$SnapshotPrefix-$vmName-data$lunIndex-$DateStamp"
 
-        if (-not (Get-AzSnapshot -ResourceGroupName $ResourceGroupName -SnapshotName $dataSnapshotName -ErrorAction SilentlyContinue)) {
-            $dataDiskName = Get-DiskNameFromId $dataDisk.ManagedDisk.Id
-            $dataDiskObj  = Get-AzDisk -DiskName $dataDiskName -ResourceGroupName $ResourceGroupName
-            $Location     = $dataDiskObj.Location
-
-            $dataSnapshotConfig = New-AzSnapshotConfig -SourceUri $dataDiskObj.Id `
-                                                       -Location $Location `
-                                                       -CreateOption Copy `
-                                                       -SkuName Standard_LRS
-            try {
-                New-AzSnapshot -Snapshot $dataSnapshotConfig -SnapshotName $dataSnapshotName -ResourceGroupName $ResourceGroupName
-                Write-Host "✅ Created Data snapshot: $dataSnapshotName"
-            }
-            catch {
-                Write-Warning "❌ Failed to create Data snapshot for $vmName (LUN $lun). Error: $_"
-            }
-        }
-        else {
+        if (-not (az snapshot show -g $ResourceGroupName -n $dataSnapshotName -o none 2>$null)) {
+            az snapshot create -g $ResourceGroupName -n $dataSnapshotName --source $dataDiskId --location $location --sku Standard_LRS
+            Write-Host "✅ Created Data snapshot: $dataSnapshotName"
+        } else {
             Write-Host "⚠️ Data snapshot already exists: $dataSnapshotName — skipping."
         }
+        $lunIndex++
     }
 }
 
