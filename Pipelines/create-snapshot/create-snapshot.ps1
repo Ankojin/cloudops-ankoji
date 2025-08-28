@@ -3,7 +3,7 @@ param(
     [string]$ResourceGroupName,
 
     [Parameter(Mandatory = $false)]
-    [string]$ExcludedVMName = ""
+    [string]$ExcludedVMNames = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,8 +11,12 @@ $SnapshotPrefix = "snapshot"
 $DateStamp     = Get-Date -Format "yyyyMMdd-HHmmss"
 $LogFile = "C:\log\snapshot_log.txt"
 
-function IsExcluded($vmName, $excludedName) {
-    return $vmName -eq $excludedName
+function IsExcluded($vmName, $excludedNames) {
+    if ([string]::IsNullOrWhiteSpace($excludedNames) -or $excludedNames.ToLower() -eq "none") {
+        return $false
+    }
+    $excludedList = $excludedNames -split ',' | ForEach-Object { $_.Trim() }
+    return $excludedList -contains $vmName
 }
 
 # Ensure log folder exists
@@ -36,7 +40,7 @@ try {
 $vms = az vm list --resource-group $ResourceGroupName --query "[].name" -o tsv | ForEach-Object { $_.Trim() }
 
 foreach ($vmName in $vms) {
-    if (IsExcluded $vmName $ExcludedVMName) {
+    if (IsExcluded $vmName $ExcludedVMNames) {
         "Skipping excluded VM: $vmName" | Tee-Object -FilePath $LogFile -Append
         continue
     }
