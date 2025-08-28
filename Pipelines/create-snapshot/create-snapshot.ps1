@@ -113,7 +113,7 @@ $vms | ForEach-Object -Parallel {
         }
         "Finished VM: $vmName" | Tee-Object -FilePath $LogFile -Append
     } catch {
-        # "❌ Error processing VM $vmName: ${_}" | Tee-Object -FilePath $LogFile -Append
+        
         "❌ Error processing VM $($vmName): $($_)" | Tee-Object -FilePath $LogFile -Append
     }
 } -ArgumentList $ResourceGroupName, $ExcludedVMNames, $SnapshotPrefix, $DateStamp, $LogFile -ThrottleLimit 4
