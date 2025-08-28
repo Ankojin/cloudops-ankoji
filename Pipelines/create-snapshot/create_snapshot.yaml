@@ -1,13 +1,13 @@
 parameters:
   - name: subscriptionId
-    displayName: 'Azure Subscription'
+    displayName: 'BAB_DEV'
     type: string
     default: '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
     values:
       - value: '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
         displayName: 'BAB_DEV'
       - value: 'e48414cd-f96d-4414-ae9e-da7fec844f77'
-        displayName: 'cb801de6-404a-4e76-8e9a-475206cbc2e5'
+        displayName: 'BAB_SIT'
   - name: resourceGroupName
     displayName: 'Resource Group Name'
     type: string
