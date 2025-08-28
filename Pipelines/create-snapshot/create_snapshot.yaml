@@ -50,18 +50,16 @@ steps:
     script: |
       $resourceGroup = '${{ parameters.resourceGroupName }}'
       $excludedVM = '${{ parameters.excludedVMName }}'
+      $scriptPath = 'Pipelines/create-snapshot/create-snapshot.ps1'
 
       if ([string]::IsNullOrWhiteSpace($resourceGroup)) {
-          Write-Error "Resource Group Name is required"
-          exit 1
+        Write-Error "Resource Group Name is required"
+        exit 1
       }
 
       # Treat empty or "none" as no exclusion
       if ([string]::IsNullOrWhiteSpace($excludedVM) -or $excludedVM.ToLower() -eq "none") {
-          $excludedList = @()
+        & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMList @()
       } else {
-          $excludedList = $excludedVM.Split(',') | ForEach-Object { $_.Trim() }
+        & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMList $excludedVM.Split(',')
       }
-
-      $scriptPath = 'Pipelines/create-snapshot/create-snapshot.ps1'
-      & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMList $excludedList
