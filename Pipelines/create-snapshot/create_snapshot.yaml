@@ -20,14 +20,14 @@ pool:
 variables:
 - group: AZ-Connect  # Library variable group with AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
 
-steps:
-- script: |
-    echo "TENANT: $(AZURE_TENANT_ID)"
-    echo "CLIENT: $(AZURE_CLIENT_ID)"
-    echo "SECRET: $(AZURE_CLIENT_SECRET)"
-  displayName: 'Debug: Show Azure Variables'
-  # Remove or comment out the secret line after debugging!
+# Uncomment for debugging variable values (remove/comment out for production)
+# - script: |
+#     echo "TENANT: $(AZURE_TENANT_ID)"
+#     echo "CLIENT: $(AZURE_CLIENT_ID)"
+#     echo "SECRET: $(AZURE_CLIENT_SECRET)"
+#   displayName: 'Debug: Show Azure Variables'
 
+steps:
 - task: PowerShell@2
   displayName: 'Azure Login (Service Principal)'
   inputs:
@@ -36,7 +36,7 @@ steps:
       Write-Host "Logging into Azure..."
       $ErrorActionPreference = 'Stop'
       $tenantId = "$(AZURE_TENANT_ID)"
-      $clientId = "$(AZURE_CLIENT_ID)"
+      $applicationId = "$(AZURE_CLIENT_ID)"
       $clientSecret = "$(AZURE_CLIENT_SECRET)"
       $subscriptionMap = @{
         'BAB_DEV' = '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
@@ -47,7 +47,9 @@ steps:
         Write-Error "Invalid subscription selection."
         exit 1
       }
-      Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ClientId $clientId -ClientSecret $clientSecret -Subscription $subscriptionId
+      $securePassword = ConvertTo-SecureString $clientSecret -AsPlainText -Force
+      $psCredential = New-Object System.Management.Automation.PSCredential ($applicationId, $securePassword)
+      Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ApplicationId $applicationId -Credential $psCredential -Subscription $subscriptionId
       Write-Host "Azure login successful."
 
 - task: PowerShell@2
