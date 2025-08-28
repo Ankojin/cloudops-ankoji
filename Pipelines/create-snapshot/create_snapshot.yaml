@@ -48,7 +48,7 @@ steps:
         exit 1
       }
       $securePassword = ConvertTo-SecureString $clientSecret -AsPlainText -Force
-      $psCredential = New-Object System.Management.Automation.PSCredential ($applicationId, $securePassword)
+      $psCredential = New-Object System.Management.Automation.PSCredential -ArgumentList $applicationId, $securePassword
       Connect-AzAccount -ServicePrincipal -Tenant $tenantId -ApplicationId $applicationId -Credential $psCredential -Subscription $subscriptionId
       Write-Host "Azure login successful."
 
