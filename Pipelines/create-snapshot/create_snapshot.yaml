@@ -40,10 +40,10 @@ steps:
         --tenant $env:AZURE_TENANT_ID
       az account set --subscription $subscriptionId
       Write-Host "Azure CLI login successful. Using subscription $subscriptionId"
-    env:
-      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
-      AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
-      AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+  env:
+    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
 
 - task: PowerShell@2
   displayName: 'Snapshot all VMs except excluded'
@@ -91,6 +91,7 @@ steps:
         }
       }
       Write-Host "🎉 Snapshot process completed."
+
 - task: PowerShell@2
   displayName: 'Show PowerShell Info'
   inputs:
