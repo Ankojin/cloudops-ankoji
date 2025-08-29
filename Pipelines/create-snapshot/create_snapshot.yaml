@@ -1,3 +1,6 @@
+variables:
+- group: cloud-subs
+
 parameters:
   - name: subscriptionName
     displayName: 'Azure Subscription (type BAB_DEV or BAB_SIT)'
@@ -18,9 +21,9 @@ steps:
 - script: |
     echo "Logging into Azure CLI with service principal..."
     if [ "${{ parameters.subscriptionName }}" = "BAB_DEV" ]; then
-      export SUBSCRIPTION_ID="43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
+      export SUBSCRIPTION_ID="${BAB_DEV_SUBSCRIPTION_ID}"
     elif [ "${{ parameters.subscriptionName }}" = "BAB_SIT" ]; then
-      export SUBSCRIPTION_ID="e48414cd-f96d-4414-ae9e-da7fec844f77"
+      export SUBSCRIPTION_ID="${BAB_SIT_SUBSCRIPTION_ID}"
     else
       echo "Invalid subscription: ${{ parameters.subscriptionName }}"
       exit 1
@@ -33,6 +36,7 @@ steps:
     az account set --subscription "$SUBSCRIPTION_ID"
     echo "Azure CLI login successful. Using subscription $SUBSCRIPTION_ID"
   displayName: 'Azure CLI Login'
+  shell: bash
   env:
     AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
     AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
@@ -82,3 +86,4 @@ steps:
     done
     echo "🎉 Snapshot process completed."
   displayName: 'Snapshot all VMs except excluded'
+  shell: bash
