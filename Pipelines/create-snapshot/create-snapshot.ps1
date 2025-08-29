@@ -2,9 +2,12 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ResourceGroupName,
 
-    [Parameter(Mandatory = $false)]
-    [string]$ExcludedVMNames = ""
+    [Parameter(Mandatory = $true)]
+    [string]$ExcludedVMNames
 )
+
+Write-Host "DEBUG: ResourceGroupName='$ResourceGroupName'"
+Write-Host "DEBUG: ExcludedVMNames='$ExcludedVMNames'"
 
 $ErrorActionPreference = 'Stop'
 $SnapshotPrefix = "snapshot"
