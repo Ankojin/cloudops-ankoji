@@ -18,7 +18,7 @@ pool:
   name: cloudops-agent
 
 steps:
-- script: |
+- bash: |
     echo "Logging into Azure CLI with service principal..."
     if [ "${{ parameters.subscriptionName }}" = "BAB_DEV" ]; then
       export SUBSCRIPTION_ID="${BAB_DEV_SUBSCRIPTION_ID}"
@@ -36,13 +36,12 @@ steps:
     az account set --subscription "$SUBSCRIPTION_ID"
     echo "Azure CLI login successful. Using subscription $SUBSCRIPTION_ID"
   displayName: 'Azure CLI Login'
-  shell: bash
   env:
     AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
     AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
     AZURE_TENANT_ID: $(AZURE_TENANT_ID)
 
-- script: |
+- bash: |
     set -e
     RESOURCE_GROUP="${{ parameters.resourceGroupName }}"
     EXCLUDED_VMS="${{ parameters.excludedVMNames }}"
@@ -86,4 +85,3 @@ steps:
     done
     echo "🎉 Snapshot process completed."
   displayName: 'Snapshot all VMs except excluded'
-  shell: bash
