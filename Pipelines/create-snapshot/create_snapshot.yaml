@@ -18,76 +18,84 @@ pool:
   name: cloudops-agent
 
 steps:
-- bash: |
-    echo "Logging into Azure CLI with service principal..."
-    if [ "${{ parameters.subscriptionName }}" = "BAB_DEV" ]; then
-      export SUBSCRIPTION_ID="${BAB_DEV_SUBSCRIPTION_ID}"
-    elif [ "${{ parameters.subscriptionName }}" = "BAB_SIT" ]; then
-      export SUBSCRIPTION_ID="${BAB_SIT_SUBSCRIPTION_ID}"
-    else
-      echo "Invalid subscription: ${{ parameters.subscriptionName }}"
-      exit 1
-    fi
-
-    az login --service-principal \
-      -u "$AZURE_CLIENT_ID" \
-      -p "$AZURE_CLIENT_SECRET" \
-      --tenant "$AZURE_TENANT_ID"
-    az account set --subscription "$SUBSCRIPTION_ID"
-    echo "Azure CLI login successful. Using subscription $SUBSCRIPTION_ID"
+- task: PowerShell@2
   displayName: 'Azure CLI Login'
-  env:
-    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
-    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
-    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+  inputs:
+    targetType: 'inline'
+    pwsh: true
+    script: |
+      Write-Host "Logging into Azure CLI with service principal..."
+      if ('${{ parameters.subscriptionName }}' -eq 'BAB_DEV') {
+        $subscriptionId = "${BAB_DEV_SUBSCRIPTION_ID}"
+      } elseif ('${{ parameters.subscriptionName }}' -eq 'BAB_SIT') {
+        $subscriptionId = "${BAB_SIT_SUBSCRIPTION_ID}"
+      } else {
+        Write-Error "Invalid subscription: ${{ parameters.subscriptionName }}"
+        exit 1
+      }
 
-- bash: |
-    set -e
-    RESOURCE_GROUP="${{ parameters.resourceGroupName }}"
-    EXCLUDED_VMS="${{ parameters.excludedVMNames }}"
-    DATE=$(date +%Y%m%d-%H%M%S)
-    SNAPSHOT_PREFIX="snapshot"
+      az login --service-principal `
+        -u $env:AZURE_CLIENT_ID `
+        -p $env:AZURE_CLIENT_SECRET `
+        --tenant $env:AZURE_TENANT_ID
+      az account set --subscription $subscriptionId
+      Write-Host "Azure CLI login successful. Using subscription $subscriptionId"
+    env:
+      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+      AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+      AZURE_TENANT_ID: $(AZURE_TENANT_ID)
 
-    # Convert excluded list to array
-    IFS=',' read -ra EXCLUDES <<< "$EXCLUDED_VMS"
-
-    # List all VMs in the resource group
-    for VM in $(az vm list --resource-group "$RESOURCE_GROUP" --query "[].name" -o tsv); do
-      SKIP=0
-      for EX in "${EXCLUDES[@]}"; do
-        # Remove spaces and compare, or skip if EXCLUDED_VMS is "none"
-        if [[ "$VM" == "${EX// /}" ]] || [[ "$EXCLUDED_VMS" == "none" ]]; then
-          SKIP=1
-          break
-        fi
-      done
-      if [[ $SKIP -eq 1 ]]; then
-        echo "Skipping excluded VM: $VM"
-        continue
-      fi
-
-      echo "Processing VM: $VM"
-      # Get OS disk ID
-      OS_DISK_ID=$(az vm show -g "$RESOURCE_GROUP" -n "$VM" --query "storageProfile.osDisk.managedDisk.id" -o tsv)
-      LOCATION=$(az disk show --ids "$OS_DISK_ID" --query location -o tsv)
-      OS_SNAPSHOT_NAME="${SNAPSHOT_PREFIX}-${VM}-os-${DATE}"
-      az snapshot create -g "$RESOURCE_GROUP" -n "$OS_SNAPSHOT_NAME" --source "$OS_DISK_ID" --location "$LOCATION" --sku Standard_LRS
-
-      # Get data disks
-      DATA_DISKS=$(az vm show -g "$RESOURCE_GROUP" -n "$VM" --query "storageProfile.dataDisks[].managedDisk.id" -o tsv)
-      LUN=0
-      for DATA_DISK_ID in $DATA_DISKS; do
-        DATA_SNAPSHOT_NAME="${SNAPSHOT_PREFIX}-${VM}-data${LUN}-${DATE}"
-        LOCATION=$(az disk show --ids "$DATA_DISK_ID" --query location -o tsv)
-        az snapshot create -g "$RESOURCE_GROUP" -n "$DATA_SNAPSHOT_NAME" --source "$DATA_DISK_ID" --location "$LOCATION" --sku Standard_LRS
-        ((LUN++))
-      done
-    done
-    echo "🎉 Snapshot process completed."
+- task: PowerShell@2
   displayName: 'Snapshot all VMs except excluded'
-- bash: |
-    echo "Bash version:"
-    bash --version
-    which bash
-    echo "Current directory: $(pwd)"
-  displayName: 'Show Bash Info'
+  inputs:
+    targetType: 'inline'
+    pwsh: true
+    script: |
+      $ResourceGroup = '${{ parameters.resourceGroupName }}'
+      $ExcludedVMs = '${{ parameters.excludedVMNames }}'
+      $Date = Get-Date -Format "yyyyMMdd-HHmmss"
+      $SnapshotPrefix = "snapshot"
+
+      # Convert excluded list to array
+      $Excludes = @()
+      if ($ExcludedVMs -and $ExcludedVMs.ToLower() -ne "none") {
+        $Excludes = $ExcludedVMs -split ',' | ForEach-Object { $_.Trim() }
+      }
+
+      $VMs = az vm list --resource-group $ResourceGroup --query "[].name" -o tsv | ForEach-Object { $_.Trim() }
+
+      foreach ($VM in $VMs) {
+        if ($Excludes -and $Excludes -contains $VM) {
+          Write-Host "Skipping excluded VM: $VM"
+          continue
+        }
+        if ($ExcludedVMs.ToLower() -eq "none") {
+          # Do not skip any VMs
+        }
+
+        Write-Host "Processing VM: $VM"
+        # Get OS disk ID
+        $osDiskId = az vm show -g $ResourceGroup -n $VM --query "storageProfile.osDisk.managedDisk.id" -o tsv
+        $location = az disk show --ids $osDiskId --query location -o tsv
+        $osSnapshotName = "$SnapshotPrefix-$VM-os-$Date"
+        az snapshot create -g $ResourceGroup -n $osSnapshotName --source $osDiskId --location $location --sku Standard_LRS
+
+        # Get data disks
+        $dataDisks = az vm show -g $ResourceGroup -n $VM --query "storageProfile.dataDisks[].managedDisk.id" -o tsv
+        $lun = 0
+        foreach ($dataDiskId in $dataDisks) {
+          $dataSnapshotName = "$SnapshotPrefix-$VM-data$lun-$Date"
+          $location = az disk show --ids $dataDiskId --query location -o tsv
+          az snapshot create -g $ResourceGroup -n $dataSnapshotName --source $dataDiskId --location $location --sku Standard_LRS
+          $lun++
+        }
+      }
+      Write-Host "🎉 Snapshot process completed."
+- task: PowerShell@2
+  displayName: 'Show PowerShell Info'
+  inputs:
+    targetType: 'inline'
+    pwsh: true
+    script: |
+      $PSVersionTable
+      Get-Command az
