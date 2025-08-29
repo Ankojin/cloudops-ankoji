@@ -12,24 +12,31 @@ parameters:
   - name: resourceGroupName
     displayName: 'Source Resource Group'
     type: string
+    default: 'my-source-rg'
   - name: targetResourceGroupName
     displayName: 'Target Resource Group'
     type: string
+    default: 'my-target-rg'
   - name: vnetName
     displayName: 'VNet Name'
     type: string
+    default: 'my-vnet'
   - name: vnetRg
     displayName: 'VNet Resource Group'
     type: string
+    default: 'my-vnet-rg'
   - name: nsgName
     displayName: 'NSG Name'
     type: string
+    default: 'my-nsg'
   - name: nsgRg
     displayName: 'NSG Resource Group'
     type: string
+    default: 'my-nsg-rg'
   - name: bootDiagStorage
     displayName: 'Boot Diagnostics Storage Account Name'
     type: string
+    default: 'mybootdiagstorage'
   - name: singleSourceVM
     displayName: 'Single Source VM Name (leave empty if using Multi-VMs)'
     type: string
@@ -266,3 +273,11 @@ steps:
       }
 
       "[$(Get-Date -Format o)] ✅ Pipeline completed." | Tee-Object -FilePath $LogFile -Append
+
+# ------------------- Publish Summary as Artifact -------------------
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish VM Clone Summary Artifact'
+  inputs:
+    PathtoPublish: 'C:\log\vm_clone_summary.csv'
+    ArtifactName: 'VMCloneSummary'
+    publishLocation: 'Container'
