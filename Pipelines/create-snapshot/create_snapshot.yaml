@@ -51,9 +51,7 @@ steps:
         exit 1
       }
 
-      # Always pass both parameters, and ensure $excludedVMs is a string
-      if ([string]::IsNullOrWhiteSpace($excludedVMs)) {
-        $excludedVMs = ""
-      }
-
+      # Always pass both parameters as strings
+      if ($null -eq $excludedVMs) { $excludedVMs = "" }
+      Write-Host "DEBUG: Passing ExcludedVMNames='$excludedVMs' to $scriptPath"
       & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMNames $excludedVMs

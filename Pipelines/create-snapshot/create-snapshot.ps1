@@ -11,6 +11,10 @@ $SnapshotPrefix = "snapshot"
 $DateStamp     = Get-Date -Format "yyyyMMdd-HHmmss"
 $LogFile = "C:\log\snapshot_log.txt"
 
+# --- DEBUG: Show what is being passed from YAML ---
+"DEBUG: Received ExcludedVMNames='$ExcludedVMNames'" | Tee-Object -FilePath $LogFile -Append
+Write-Host "DEBUG: Received ExcludedVMNames='$ExcludedVMNames'"
+
 function IsExcluded($vmName, $excludedNames) {
     if ([string]::IsNullOrWhiteSpace($excludedNames) -or $excludedNames.ToLower() -eq "none") {
         return $false
