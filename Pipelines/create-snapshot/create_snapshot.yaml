@@ -51,5 +51,9 @@ steps:
         exit 1
       }
 
-      # Always pass both parameters, even if excludedVMs is empty or 'none'
+      # Always pass both parameters, and ensure $excludedVMs is a string
+      if ([string]::IsNullOrWhiteSpace($excludedVMs)) {
+        $excludedVMs = ""
+      }
+
       & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMNames $excludedVMs
