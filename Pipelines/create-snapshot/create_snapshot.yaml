@@ -45,13 +45,7 @@ steps:
       $resourceGroup = '${{ parameters.resourceGroupName }}'
       $excludedVMs = '${{ parameters.excludedVMNames }}'
       $scriptPath = 'Pipelines/create-snapshot/create-snapshot.ps1'
-
-      if ([string]::IsNullOrWhiteSpace($resourceGroup)) {
-        Write-Error "Resource Group Name is required"
-        exit 1
-      }
-
-      # Always pass both parameters as strings
-      if ($null -eq $excludedVMs) { $excludedVMs = "" }
-      Write-Host "DEBUG: Passing ExcludedVMNames='$excludedVMs' to $scriptPath"
       & $scriptPath $resourceGroup $excludedVMs
+
+- script: pwsh -v
+  displayName: 'Show PowerShell Version'
