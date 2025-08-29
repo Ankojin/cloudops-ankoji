@@ -26,9 +26,9 @@ steps:
     script: |
       Write-Host "Logging into Azure CLI with service principal..."
       if ('${{ parameters.subscriptionName }}' -eq 'BAB_DEV') {
-        $subscriptionId = "${BAB_DEV_SUBSCRIPTION_ID}"
+        $subscriptionId = $env:BAB_DEV_SUBSCRIPTION_ID
       } elseif ('${{ parameters.subscriptionName }}' -eq 'BAB_SIT') {
-        $subscriptionId = "${BAB_SIT_SUBSCRIPTION_ID}"
+        $subscriptionId = $env:BAB_SIT_SUBSCRIPTION_ID
       } else {
         Write-Error "Invalid subscription: ${{ parameters.subscriptionName }}"
         exit 1
