@@ -15,37 +15,70 @@ pool:
   name: cloudops-agent
 
 steps:
-- task: PowerShell@2
+- script: |
+    echo "Logging into Azure CLI with service principal..."
+    if [ "${{ parameters.subscriptionName }}" = "BAB_DEV" ]; then
+      export SUBSCRIPTION_ID="43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
+    elif [ "${{ parameters.subscriptionName }}" = "BAB_SIT" ]; then
+      export SUBSCRIPTION_ID="e48414cd-f96d-4414-ae9e-da7fec844f77"
+    else
+      echo "Invalid subscription: ${{ parameters.subscriptionName }}"
+      exit 1
+    fi
+
+    az login --service-principal \
+      -u "$AZURE_CLIENT_ID" \
+      -p "$AZURE_CLIENT_SECRET" \
+      --tenant "$AZURE_TENANT_ID"
+    az account set --subscription "$SUBSCRIPTION_ID"
+    echo "Azure CLI login successful. Using subscription $SUBSCRIPTION_ID"
   displayName: 'Azure CLI Login'
-  inputs:
-    targetType: 'inline'
-    pwsh: true
-    script: |
-      Write-Host "Logging into Azure CLI..."
-      $subscriptionMap = @{
-        'BAB_DEV' = '43cc4f11-ffb1-4a0d-8420-0ba3746b4248'
-        'BAB_SIT' = 'e48414cd-f96d-4414-ae9e-da7fec844f77'
-      }
-      $paramSubscription = "${{ parameters.subscriptionName }}"
-      if (-not $subscriptionMap.ContainsKey($paramSubscription)) {
-          Write-Error "Invalid subscription: $paramSubscription"
-          exit 1
-      }
-      $subscriptionId = $subscriptionMap[$paramSubscription]
-      az login --service-principal -u $env:AZURE_CLIENT_ID -p $env:AZURE_CLIENT_SECRET --tenant $env:AZURE_TENANT_ID
-      az account set --subscription $subscriptionId
-      Write-Host "Azure CLI login successful. Using subscription $subscriptionId"
+  env:
+    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
 
-- task: PowerShell@2
-  displayName: 'Run create-snapshot.ps1 (Azure CLI)'
-  inputs:
-    targetType: 'inline'
-    pwsh: true
-    script: |
-      $resourceGroup = '${{ parameters.resourceGroupName }}'
-      $excludedVMs = '${{ parameters.excludedVMNames }}'
-      $scriptPath = 'Pipelines/create-snapshot/create-snapshot.ps1'
-      & $scriptPath $resourceGroup $excludedVMs
+- script: |
+    set -e
+    RESOURCE_GROUP="${{ parameters.resourceGroupName }}"
+    EXCLUDED_VMS="${{ parameters.excludedVMNames }}"
+    DATE=$(date +%Y%m%d-%H%M%S)
+    SNAPSHOT_PREFIX="snapshot"
 
-- script: pwsh -v
-  displayName: 'Show PowerShell Version'
+    # Convert excluded list to array
+    IFS=',' read -ra EXCLUDES <<< "$EXCLUDED_VMS"
+
+    # List all VMs in the resource group
+    for VM in $(az vm list --resource-group "$RESOURCE_GROUP" --query "[].name" -o tsv); do
+      SKIP=0
+      for EX in "${EXCLUDES[@]}"; do
+        # Remove spaces and compare, or skip if EXCLUDED_VMS is "none"
+        if [[ "$VM" == "${EX// /}" ]] || [[ "$EXCLUDED_VMS" == "none" ]]; then
+          SKIP=1
+          break
+        fi
+      done
+      if [[ $SKIP -eq 1 ]]; then
+        echo "Skipping excluded VM: $VM"
+        continue
+      fi
+
+      echo "Processing VM: $VM"
+      # Get OS disk ID
+      OS_DISK_ID=$(az vm show -g "$RESOURCE_GROUP" -n "$VM" --query "storageProfile.osDisk.managedDisk.id" -o tsv)
+      LOCATION=$(az disk show --ids "$OS_DISK_ID" --query location -o tsv)
+      OS_SNAPSHOT_NAME="${SNAPSHOT_PREFIX}-${VM}-os-${DATE}"
+      az snapshot create -g "$RESOURCE_GROUP" -n "$OS_SNAPSHOT_NAME" --source "$OS_DISK_ID" --location "$LOCATION" --sku Standard_LRS
+
+      # Get data disks
+      DATA_DISKS=$(az vm show -g "$RESOURCE_GROUP" -n "$VM" --query "storageProfile.dataDisks[].managedDisk.id" -o tsv)
+      LUN=0
+      for DATA_DISK_ID in $DATA_DISKS; do
+        DATA_SNAPSHOT_NAME="${SNAPSHOT_PREFIX}-${VM}-data${LUN}-${DATE}"
+        LOCATION=$(az disk show --ids "$DATA_DISK_ID" --query location -o tsv)
+        az snapshot create -g "$RESOURCE_GROUP" -n "$DATA_SNAPSHOT_NAME" --source "$DATA_DISK_ID" --location "$LOCATION" --sku Standard_LRS
+        ((LUN++))
+      done
+    done
+    echo "🎉 Snapshot process completed."
+  displayName: 'Snapshot all VMs except excluded'
