@@ -54,4 +54,4 @@ steps:
       # Always pass both parameters as strings
       if ($null -eq $excludedVMs) { $excludedVMs = "" }
       Write-Host "DEBUG: Passing ExcludedVMNames='$excludedVMs' to $scriptPath"
-      & $scriptPath -ResourceGroupName $resourceGroup -ExcludedVMNames $excludedVMs
+      & $scriptPath $resourceGroup $excludedVMs
