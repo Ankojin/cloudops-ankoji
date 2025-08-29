@@ -1,0 +1,8 @@
+{
+    "yaml.schemas": {
+        "https://raw.githubusercontent.com/microsoft/azure-pipelines-vscode/master/service-schema.json": "*.yml"
+    },
+    "yaml.validate": true,
+    "yaml.format.enable": true,
+    "yaml.schemaStore.enable": true
+}

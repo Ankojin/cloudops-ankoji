@@ -8,7 +8,7 @@ parameters:
   - name: targetSubscriptionName
     displayName: 'Target Subscription (BAB_DEV, BAB_SIT, BAB_CORE)'
     type: string
-    default: 'BAB_DEV'
+    default: 'BAB_SIT'
   - name: resourceGroupName
     displayName: 'Source Resource Group'
     type: string
