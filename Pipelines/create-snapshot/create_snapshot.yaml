@@ -102,7 +102,7 @@ steps:
           }
           "[$(Get-Date -Format o)] Finished VM: $VM" | Tee-Object -FilePath $LogFile -Append
         } catch {
-          "[$(Get-Date -Format o)] ❌ Error processing VM $VM: $($_)" | Tee-Object -FilePath $LogFile -Append
+          "[$(Get-Date -Format o)] ❌ Error processing VM $VM: ${($_)}" | Tee-Object -FilePath $LogFile -Append
         }
       }
       "[$(Get-Date -Format o)] 🎉 Snapshot process completed." | Tee-Object -FilePath $LogFile -Append
