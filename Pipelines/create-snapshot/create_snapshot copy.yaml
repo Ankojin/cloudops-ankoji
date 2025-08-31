@@ -57,69 +57,52 @@ steps:
     targetType: 'inline'
     pwsh: true
     script: |
-      function Write-Log($Message) {
-        "[$(Get-Date -Format o)] $Message" | Tee-Object -FilePath $LogFile -Append
-      }
-
       $LogFile = "C:\log\snapshot_log.txt"
-      # No need to re-create directory or clear log here
-
-      Write-Log "Starting snapshot process..."
+      if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
+      "[$(Get-Date -Format o)] Starting snapshot process..." | Tee-Object -FilePath $LogFile -Append
 
       $ResourceGroup = '${{ parameters.resourceGroupName }}'
-      if (-not $ResourceGroup) {
-        Write-Log "❌ Resource group name is required."
-        exit 1
-      }
-
       $ExcludedVMs = '${{ parameters.excludedVMNames }}'
       $Date = Get-Date -Format "yyyyMMdd-HHmmss"
       $SnapshotPrefix = "snapshot"
 
+      # Convert excluded list to array
       $Excludes = @()
       if ($ExcludedVMs -and $ExcludedVMs.ToLower() -ne "none") {
         $Excludes = $ExcludedVMs -split ',' | ForEach-Object { $_.Trim() }
       }
 
       $VMs = az vm list --resource-group $ResourceGroup --query "[].name" -o tsv | ForEach-Object { $_.Trim() }
-      if (-not $VMs) {
-        Write-Log "No VMs found in resource group $ResourceGroup."
-        exit 0
-      }
 
       foreach ($VM in $VMs) {
         try {
-          if ($Excludes -contains $VM) {
-            Write-Log "Skipping excluded VM: $VM"
+          if ($Excludes -and $Excludes -contains $VM) {
+            "[$(Get-Date -Format o)] Skipping excluded VM: $VM" | Tee-Object -FilePath $LogFile -Append
             continue
           }
+          if ($ExcludedVMs.ToLower() -eq "none") {
+            # Do not skip any VMs
+          }
 
-          Write-Log "Processing VM: $VM"
-          $vmInfo = az vm show -g $ResourceGroup -n $VM | ConvertFrom-Json
-
-          # OS Disk
-          $osDiskId = $vmInfo.storageProfile.osDisk.managedDisk.id
-          $osDisk = az disk show --ids $osDiskId | ConvertFrom-Json
-          $location = $osDisk.location
+          "[$(Get-Date -Format o)] Processing VM: $VM" | Tee-Object -FilePath $LogFile -Append
+          # Get OS disk ID
+          $osDiskId = az vm show -g $ResourceGroup -n $VM --query "storageProfile.osDisk.managedDisk.id" -o tsv
+          $location = az disk show --ids $osDiskId --query location -o tsv
           $osSnapshotName = "$SnapshotPrefix-$VM-os-$Date"
           az snapshot create -g $ResourceGroup -n $osSnapshotName --source $osDiskId --location $location --sku Standard_LRS | Tee-Object -FilePath $LogFile -Append
 
-          # Data Disks
-          $dataDisks = $vmInfo.storageProfile.dataDisks
-          if ($dataDisks) {
-            foreach ($disk in $dataDisks) {
-              $dataDiskId = $disk.managedDisk.id
-              $lun = $disk.lun
-              $dataDisk = az disk show --ids $dataDiskId | ConvertFrom-Json
-              $location = $dataDisk.location
-              $dataSnapshotName = "$SnapshotPrefix-$VM-data$lun-$Date"
-              az snapshot create -g $ResourceGroup -n $dataSnapshotName --source $dataDiskId --location $location --sku Standard_LRS | Tee-Object -FilePath $LogFile -Append
-            }
+          # Get data disks
+          $dataDisks = az vm show -g $ResourceGroup -n $VM --query "storageProfile.dataDisks[].managedDisk.id" -o tsv
+          $lun = 0
+          foreach ($dataDiskId in $dataDisks) {
+            $dataSnapshotName = "$SnapshotPrefix-$VM-data$lun-$Date"
+            $location = az disk show --ids $dataDiskId --query location -o tsv
+            az snapshot create -g $ResourceGroup -n $dataSnapshotName --source $dataDiskId --location $location --sku Standard_LRS | Tee-Object -FilePath $LogFile -Append
+            $lun++
           }
-
-          Write-Log "Finished VM: $VM"
+          "[$(Get-Date -Format o)] Finished VM: $VM" | Tee-Object -FilePath $LogFile -Append
         } catch {
-          Write-Log "❌ Error processing VM $VM: $($_.Exception | Out-String)"
+                   "[$(Get-Date -Format o)] ❌ Error processing VM $($VM): $($_.Exception.Message)" | Tee-Object -FilePath $LogFile -Append
         }
       }
-      Write-Log "🎉 Snapshot process completed."
+      "[$(Get-Date -Format o)] 🎉 Snapshot process completed." | Tee-Object -FilePath $LogFile -Append
