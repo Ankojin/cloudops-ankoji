@@ -119,7 +119,7 @@ steps:
 
           Write-Log "Finished VM: $VM"
         } catch {
-          Write-Log "❌ Error processing VM $VM: $($_.Exception | Out-String)"
+          Write-Log ("❌ Error processing VM $VM: " + ($_.Exception | Out-String))
         }
       }
       Write-Log "🎉 Snapshot process completed."
