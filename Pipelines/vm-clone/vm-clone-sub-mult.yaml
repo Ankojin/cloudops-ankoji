@@ -230,18 +230,25 @@ steps:
                       $subnetId = az network vnet subnet show -g $using:vnetRg --vnet-name $using:vnetName -n $($PSItem.SubnetName) --query id -o tsv
                       $nsgId = az network nsg show -g $using:nsgRg -n $using:nsgName --query id -o tsv
 
-                      # Stop pipeline if any required NIC parameter is missing
+                      # Log all NIC parameters for troubleshooting
+                      "[$(Get-Date -Format o)] NIC creation params for $($PSItem.NewVMName): SubnetId='$subnetId', NSGId='$nsgId', StaticIp='$($PSItem.StaticIp)', SubnetName='$($PSItem.SubnetName)'" | Tee-Object -FilePath $using:LogFile -Append
+
+                      # Stop pipeline if any required NIC parameter is missing, with explicit error
                       if (-not $subnetId) {
-                          "[$(Get-Date -Format o)] ❌ Stopping pipeline: SubnetId is empty for $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
-                          throw "Stopping pipeline due to missing SubnetId"
+                          "[$(Get-Date -Format o)] ❌ ERROR: SubnetId is empty for $($PSItem.NewVMName). SubnetName='$($PSItem.SubnetName)'" | Tee-Object -FilePath $using:LogFile -Append
+                          throw "Stopping pipeline due to missing SubnetId for $($PSItem.NewVMName)"
                       }
                       if (-not $nsgId) {
-                          "[$(Get-Date -Format o)] ❌ Stopping pipeline: NSGId is empty for $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
-                          throw "Stopping pipeline due to missing NSGId"
+                          "[$(Get-Date -Format o)] ❌ ERROR: NSGId is empty for $($PSItem.NewVMName). NSGName='$using:nsgName'" | Tee-Object -FilePath $using:LogFile -Append
+                          throw "Stopping pipeline due to missing NSGId for $($PSItem.NewVMName)"
+                      }
+                      if (-not $PSItem.SubnetName) {
+                          "[$(Get-Date -Format o)] ❌ ERROR: SubnetName is empty for $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
+                          throw "Stopping pipeline due to missing SubnetName for $($PSItem.NewVMName)"
                       }
                       if (-not $PSItem.StaticIp) {
-                          "[$(Get-Date -Format o)] ❌ Stopping pipeline: StaticIp is empty for $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
-                          throw "Stopping pipeline due to missing StaticIp"
+                          "[$(Get-Date -Format o)] ❌ ERROR: StaticIp is empty for $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
+                          throw "Stopping pipeline due to missing StaticIp for $($PSItem.NewVMName)"
                       }
 
                       $nicId = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --private-ip-address $($PSItem.StaticIp) --network-security-group $nsgId --query id -o tsv
