@@ -1,7 +1,7 @@
 # ------------------- Parallel VM Cloning Pipeline with Summary -------------------
 
 variables:
-- group: AZResources
+- group: AZ-Resources
 - group: cloud-subs
 
 parameters:
