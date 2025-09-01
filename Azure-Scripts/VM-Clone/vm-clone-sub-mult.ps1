@@ -11,15 +11,11 @@ $nsgrg = "bab-dev-shp-swec-rg-01"
 $nsgName = "test-ad-join-nsg"
 $csvPath = "C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\VM-Clone\vms-to-clone.csv"
 
-# DRY RUN: Set to $true to only print actions, not execute them
-$dryRun = $false
-
 # CSV columns: SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
 if (Test-Path $csvPath) {
     Write-Host "Importing VM definitions from CSV: $csvPath"
     $vmsToClone = Import-Csv -Path $csvPath
 } else {
-
     throw "CSV file with VM definitions not found at $csvPath. Please provide the file."
 }
 
@@ -32,25 +28,15 @@ foreach ($vm in $vmsToClone) {
 
     Write-Host "`n--- Starting clone for VM '$sourceVMName' as '$newVMName' ---"
 
-    if ($dryRun) {
-        Write-Host "[DRY RUN] Would switch to source subscription: $sourceSubscriptionId"
-    } else {
-        # ---------------------------- SWITCH TO SOURCE SUBSCRIPTION ----------------------------
-        Set-AzContext -SubscriptionId $sourceSubscriptionId
-    }
+    # ---------------------------- SWITCH TO SOURCE SUBSCRIPTION ----------------------------
+    Set-AzContext -SubscriptionId $sourceSubscriptionId
 
     # ---------------------------- Get SOURCE VM ----------------------------
-    if ($dryRun) {
-        Write-Host "[DRY RUN] Would get source VM '$sourceVMName' in resource group '$sourceResourceGroup'"
-        # Simulate sourceVM object for dry run
+    try {
+        $sourceVM = Get-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName -ErrorAction Stop
+    } catch {
+        Write-Warning "Source VM '$sourceVMName' not found in resource group '$sourceResourceGroup'. Skipping."
         continue
-    } else {
-        try {
-            $sourceVM = Get-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName -ErrorAction Stop
-        } catch {
-            Write-Warning "Source VM '$sourceVMName' not found in resource group '$sourceResourceGroup'. Skipping."
-            continue
-        }
     }
 
     if (-not $sourceVM.StorageProfile -or -not $sourceVM.StorageProfile.OsDisk) {
@@ -70,19 +56,6 @@ foreach ($vm in $vmsToClone) {
 
     if (-not $osDisk.Id) {
         Write-Warning "OS Disk ID is null for VM '$sourceVMName'. Skipping."
-        continue
-    }
-
-    if ($dryRun) {
-        Write-Host "[DRY RUN] Would get OS disk for VM '$sourceVMName'"
-        Write-Host "[DRY RUN] Would switch to target subscription: $targetSubscriptionId"
-        Write-Host "[DRY RUN] Would create/check OS snapshot and disk for '$newVMName'"
-        Write-Host "[DRY RUN] Would clone data disks for '$newVMName'"
-        Write-Host "[DRY RUN] Would create NIC in subnet '$vmSubnetName' with static IP '$staticIpAddress'"
-        Write-Host "[DRY RUN] Would create VM '$newVMName' with size '$vmVmSize'"
-        Write-Host "[DRY RUN] Would enable boot diagnostics for '$newVMName'"
-        Write-Host "[DRY RUN] Would delete snapshots for '$newVMName'"
-        Write-Host "[DRY RUN] Would finish clone for '$newVMName'"
         continue
     }
 
@@ -170,11 +143,7 @@ foreach ($vm in $vmsToClone) {
     # Uncomment and set NSG if needed
     $nicParams.NetworkSecurityGroupId = $nsg.Id
 
-    if ($dryRun) {
-        Write-Host "[DRY RUN] Would create NIC with parameters: $nicParams"
-    } else {
-        $nic = New-AzNetworkInterface @nicParams
-    }
+    $nic = New-AzNetworkInterface @nicParams
 
     # ---------------------------- CONFIGURE NEW VM ----------------------------
     $vmConfig = New-AzVMConfig -VMName $newVMName -VMSize $vmVmSize
