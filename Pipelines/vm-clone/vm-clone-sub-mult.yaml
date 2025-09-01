@@ -1,8 +1,36 @@
 # ------------------- VM Cloning Pipeline from CSV -------------------
 
 variables:
-- group: AZ-Resources
-- group: cloud-subs
+  - group: AZ-Resources
+  - group: cloud-subs
+
+  # Source Subscription ID
+  - name: SRC_SUBSCRIPTION_ID
+    value: ${{ if eq(parameters.subscriptionName, 'BAB_DEV') }}${{ variables.BAB_DEV_SUBSCRIPTION_ID }}${{ if eq(parameters.subscriptionName, 'BAB_SIT') }}${{ variables.BAB_SIT_SUBSCRIPTION_ID }}${{ if eq(parameters.subscriptionName, 'BAB_CORE') }}${{ variables.BAB_CORE_SUBSCRIPTION_ID }}
+
+  # Target Subscription ID
+  - name: TGT_SUBSCRIPTION_ID
+    value: ${{ if eq(parameters.targetSubscriptionName, 'BAB_DEV') }}${{ variables.BAB_DEV_SUBSCRIPTION_ID }}${{ if eq(parameters.targetSubscriptionName, 'BAB_SIT') }}${{ variables.BAB_SIT_SUBSCRIPTION_ID }}${{ if eq(parameters.targetSubscriptionName, 'BAB_CORE') }}${{ variables.BAB_CORE_SUBSCRIPTION_ID }}
+
+  # VNET Name
+  - name: VNET_NAME
+    value: ${{ if eq(parameters.targetSubscriptionName, 'BAB_DEV') }}${{ variables.DEV_VNETName }}${{ if eq(parameters.targetSubscriptionName, 'BAB_SIT') }}${{ variables.SIT_VNETName }}${{ if eq(parameters.targetSubscriptionName, 'BAB_CORE') }}${{ variables.CORE_VNETName }}
+
+  # VNET RG
+  - name: VNET_RG
+    value: ${{ if eq(parameters.targetSubscriptionName, 'BAB_DEV') }}${{ variables.DEV_VNETRG }}${{ if eq(parameters.targetSubscriptionName, 'BAB_SIT') }}${{ variables.SIT_VNETRG }}${{ if eq(parameters.targetSubscriptionName, 'BAB_CORE') }}${{ variables.CORE_VNETRG }}
+
+  # NSG Name
+  - name: NSG_NAME
+    value: ${{ if eq(parameters.targetSubscriptionName, 'BAB_DEV') }}${{ variables.DEV_NSGName }}${{ if eq(parameters.targetSubscriptionName, 'BAB_SIT') }}${{ variables.SIT_NSGName }}${{ if eq(parameters.targetSubscriptionName, 'BAB_CORE') }}${{ variables.CORE_NSGName }}
+
+  # NSG RG
+  - name: NSG_RG
+    value: ${{ if eq(parameters.targetSubscriptionName, 'BAB_DEV') }}${{ variables.DEV_NSGRG }}${{ if eq(parameters.targetSubscriptionName, 'BAB_SIT') }}${{ variables.SIT_NSGRG }}${{ if eq(parameters.targetSubscriptionName, 'BAB_CORE') }}${{ variables.CORE_NSGRG }}
+
+  # BootDiag Storage
+  - name: BOOTDIAG_STORAGE
+    value: ${{ if eq(parameters.targetSubscriptionName, 'BAB_DEV') }}${{ variables.DEV_BootDiagStorage }}${{ if eq(parameters.targetSubscriptionName, 'BAB_SIT') }}${{ variables.SIT_BootDiagStorage }}${{ if eq(parameters.targetSubscriptionName, 'BAB_CORE') }}${{ variables.CORE_BootDiagStorage }}
 
 parameters:
   - name: subscriptionName
@@ -171,15 +199,15 @@ steps:
           }
       } -ThrottleLimit $ThrottleLimit
   env:
-    SRC_SUBSCRIPTION_ID: ${{ parameters.subscriptionName == 'BAB_DEV' && variables.BAB_DEV_SUBSCRIPTION_ID || parameters.subscriptionName == 'BAB_SIT' && variables.BAB_SIT_SUBSCRIPTION_ID || variables.BAB_CORE_SUBSCRIPTION_ID }}
-    TGT_SUBSCRIPTION_ID: ${{ parameters.targetSubscriptionName == 'BAB_DEV' && variables.BAB_DEV_SUBSCRIPTION_ID || parameters.targetSubscriptionName == 'BAB_SIT' && variables.BAB_SIT_SUBSCRIPTION_ID || variables.BAB_CORE_SUBSCRIPTION_ID }}
+    SRC_SUBSCRIPTION_ID: $(SRC_SUBSCRIPTION_ID)
+    TGT_SUBSCRIPTION_ID: $(TGT_SUBSCRIPTION_ID)
     SOURCE_RG: ${{ parameters.resourceGroupName }}
     TARGET_RG: ${{ parameters.targetResourceGroupName }}
-    VNET_NAME: ${{ parameters.targetSubscriptionName == 'BAB_DEV' && variables.DEV_VNETName || parameters.targetSubscriptionName == 'BAB_SIT' && variables.SIT_VNETName || variables.CORE_VNETName }}
-    VNET_RG: ${{ parameters.targetSubscriptionName == 'BAB_DEV' && variables.DEV_VNETRG || parameters.targetSubscriptionName == 'BAB_SIT' && variables.SIT_VNETRG || variables.CORE_VNETRG }}
-    NSG_NAME: ${{ parameters.targetSubscriptionName == 'BAB_DEV' && variables.DEV_NSGName || parameters.targetSubscriptionName == 'BAB_SIT' && variables.SIT_NSGName || variables.CORE_NSGName }}
-    NSG_RG: ${{ parameters.targetSubscriptionName == 'BAB_DEV' && variables.DEV_NSGRG || parameters.targetSubscriptionName == 'BAB_SIT' && variables.SIT_NSGRG || variables.CORE_NSGRG }}
-    BOOTDIAG_STORAGE: ${{ parameters.targetSubscriptionName == 'BAB_DEV' && variables.DEV_BootDiagStorage || parameters.targetSubscriptionName == 'BAB_SIT' && variables.SIT_BootDiagStorage || variables.CORE_BootDiagStorage }}
+    VNET_NAME: $(VNET_NAME)
+    VNET_RG: $(VNET_RG)
+    NSG_NAME: $(NSG_NAME)
+    NSG_RG: $(NSG_RG)
+    BOOTDIAG_STORAGE: $(BOOTDIAG_STORAGE)
     AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
     AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
     AZURE_TENANT_ID: $(AZURE_TENANT_ID)
