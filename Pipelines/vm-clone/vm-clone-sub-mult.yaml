@@ -223,6 +223,8 @@ steps:
                   $nicName = "$($PSItem.NewVMName)-nic"
                   $existingNic = az network nic list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$nicName'].id" -o tsv
 
+                  "[$(Get-Date -Format o)] Checking for NIC: $nicName in RG: ${{ parameters.targetResourceGroupName }}" | Tee-Object -FilePath $using:LogFile -Append
+
                   if ($existingNic) {
                       $nicId = $existingNic
                       "[$(Get-Date -Format o)] NIC already exists for $($PSItem.NewVMName): $nicId. Will use existing NIC." | Tee-Object -FilePath $using:LogFile -Append
@@ -233,7 +235,6 @@ steps:
                       # Log all NIC parameters for troubleshooting
                       "[$(Get-Date -Format o)] NIC creation params for $($PSItem.NewVMName): SubnetId='$subnetId', NSGId='$nsgId', StaticIp='$($PSItem.StaticIp)', SubnetName='$($PSItem.SubnetName)'" | Tee-Object -FilePath $using:LogFile -Append
 
-                      # Stop pipeline if any required NIC parameter is missing, with explicit error
                       if (-not $subnetId) {
                           "[$(Get-Date -Format o)] ❌ ERROR: SubnetId is empty for $($PSItem.NewVMName). SubnetName='$($PSItem.SubnetName)'" | Tee-Object -FilePath $using:LogFile -Append
                           throw "Stopping pipeline due to missing SubnetId for $($PSItem.NewVMName)"
@@ -255,6 +256,21 @@ steps:
                       if (-not $nicId) { throw "NIC creation failed" }
                       "[$(Get-Date -Format o)] Created NIC for $($PSItem.NewVMName): $nicId" | Tee-Object -FilePath $using:LogFile -Append
                   }
+
+                  # Log the final NIC ID to be used for VM creation
+                  "[$(Get-Date -Format o)] Using NIC ID for VM creation: $nicId" | Tee-Object -FilePath $using:LogFile -Append
+
+                  # Check NIC provisioning state
+                  $nicState = az network nic show --ids $nicId --query "provisioningState" -o tsv
+                  "[$(Get-Date -Format o)] NIC provisioning state for $($PSItem.NewVMName): $nicState" | Tee-Object -FilePath $using:LogFile -Append
+                  if ($nicState -ne "Succeeded") {
+                      throw "NIC $nicId is not in Succeeded state, current state: $nicState"
+                  }
+
+                  if (-not $nicId) {
+                      "[$(Get-Date -Format o)] ❌ ERROR: nicId is empty for $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
+                      throw "Stopping pipeline due to empty nicId for $($PSItem.NewVMName)"
+                  }
               } catch {
                   "[$(Get-Date -Format o)] ❌ Failed to create/find NIC for $($PSItem.NewVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to NIC failure"
@@ -262,6 +278,7 @@ steps:
 
               # ------------------- VM -------------------
               try {
+                  "[$(Get-Date -Format o)] About to create VM $($PSItem.NewVMName) with NIC ID: $nicId" | Tee-Object -FilePath $using:LogFile -Append
                   $vmCreate = az vm create -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osType --size $($PSItem.VMSize) --boot-diagnostics-storage "https://$using:bootDiagStorage.blob.core.windows.net/"
                   if (-not $?) { throw "VM creation failed" }
               } catch {
