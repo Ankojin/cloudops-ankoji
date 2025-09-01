@@ -1,4 +1,4 @@
-# ------------------- Parallel VM Cloning Pipeline with Summary -------------------
+# ------------------- VM Cloning Pipeline from CSV -------------------
 
 variables:
 - group: AZ-Resources
@@ -77,10 +77,11 @@ steps:
     targetType: 'inline'
     pwsh: true
     script: |
+      if (-not (Test-Path "C:\vm-to-clone")) { New-Item -Path "C:\vm-to-clone" -ItemType Directory | Out-Null }
+      if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
       $LogFile = "C:\log\clone_log.txt"
       $CsvFile = "C:\vm-to-clone\vm_clone_summary.csv"
       $vmInputCsv = "C:\vm-to-clone\vm-to-clone.csv"
-      if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
       "" | Out-File -FilePath $CsvFile -Encoding UTF8
 
       # Import VM list from CSV
@@ -141,6 +142,7 @@ steps:
                   $osDiskId = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.osDisk.managedDisk.id" -o tsv
                   $osType = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.osDisk.osType" -o tsv
                   $dataDiskIds = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.dataDisks[].managedDisk.id" -o tsv
+                  $dataDiskIds = @($dataDiskIds)
               } catch {
                   "[$(Get-Date -Format o)] ❌ Failed to get disk info for $($PSItem.SourceVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to disk info failure"
@@ -185,23 +187,25 @@ steps:
               $newDataDisksFinal = @()
               $lun = 0
               try {
-                  foreach ($dd in $dataDiskIds) {
-                      $existingDataSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name,'$($PSItem.NewVMName)-data$lun-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
-                      $dataSnapId = if ($existingDataSnap) { $existingDataSnap } else {
-                          $snapName = "$($PSItem.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
-                          $id = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku Standard_LRS --query id -o tsv
-                          if (-not $id) { throw "Data snapshot failed for LUN $lun" } else { $id }
-                      }
+                  if ($dataDiskIds -and $dataDiskIds[0]) {
+                      foreach ($dd in $dataDiskIds) {
+                          $existingDataSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name,'$($PSItem.NewVMName)-data$lun-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
+                          $dataSnapId = if ($existingDataSnap) { $existingDataSnap } else {
+                              $snapName = "$($PSItem.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
+                              $id = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku Standard_LRS --query id -o tsv
+                              if (-not $id) { throw "Data snapshot failed for LUN $lun" } else { $id }
+                          }
 
-                      $dataDiskName = "$($PSItem.NewVMName)-data$lun-disk"
-                      $existingDataDisk = az disk list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$dataDiskName'].id" -o tsv
-                      $dataDiskIdNew = if ($existingDataDisk) { $existingDataDisk } else {
-                          $id = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --query id -o tsv
-                          if (-not $id) { throw "Data disk creation failed for LUN $lun" } else { $id }
-                      }
+                          $dataDiskName = "$($PSItem.NewVMName)-data$lun-disk"
+                          $existingDataDisk = az disk list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$dataDiskName'].id" -o tsv
+                          $dataDiskIdNew = if ($existingDataDisk) { $existingDataDisk } else {
+                              $id = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --query id -o tsv
+                              if (-not $id) { throw "Data disk creation failed for LUN $lun" } else { $id }
+                          }
 
-                      $newDataDisksFinal += [PSCustomObject]@{Id=$dataDiskIdNew; Lun=$lun}
-                      $lun++
+                          $newDataDisksFinal += [PSCustomObject]@{Id=$dataDiskIdNew; Lun=$lun}
+                          $lun++
+                      }
                   }
               } catch {
                   "[$(Get-Date -Format o)] ❌ Failed to create/find data disk or snapshot for $($PSItem.NewVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
@@ -255,14 +259,16 @@ steps:
                   }
                   # Delete Data disk snapshots
                   $lun = 0
-                  foreach ($dd in $dataDiskIds) {
-                      $dataSnapName = "$($PSItem.NewVMName)-data$lun-snap"
-                      $dataSnapId = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name, '$dataSnapName')].id" -o tsv
-                      if ($dataSnapId) {
-                          az snapshot delete --ids $dataSnapId
-                          "[$(Get-Date -Format o)] Deleted Data snapshot: $dataSnapId" | Tee-Object -FilePath $using:LogFile -Append
+                  if ($dataDiskIds -and $dataDiskIds[0]) {
+                      foreach ($dd in $dataDiskIds) {
+                          $dataSnapName = "$($PSItem.NewVMName)-data$lun-snap"
+                          $dataSnapId = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name, '$dataSnapName')].id" -o tsv
+                          if ($dataSnapId) {
+                              az snapshot delete --ids $dataSnapId
+                              "[$(Get-Date -Format o)] Deleted Data snapshot: $dataSnapId" | Tee-Object -FilePath $using:LogFile -Append
+                          }
+                          $lun++
                       }
-                      $lun++
                   }
               } catch {
                   "[$(Get-Date -Format o)] ⚠️ Snapshot cleanup failed: $_" | Tee-Object -FilePath $using:LogFile -Append
