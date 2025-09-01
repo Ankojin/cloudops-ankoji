@@ -1,5 +1,9 @@
 # ------------------- Parallel VM Cloning Pipeline with Summary -------------------
 
+variables:
+- group: AZResources
+- group: cloud-subs
+
 parameters:
   - name: subscriptionName
     displayName: 'Source Subscription (BAB_DEV, BAB_SIT, BAB_CORE)'
@@ -17,50 +21,6 @@ parameters:
     displayName: 'Target Resource Group'
     type: string
     default: 'my-target-rg'
-  - name: vnetName
-    displayName: 'VNet Name'
-    type: string
-    default: 'my-vnet'
-  - name: vnetRg
-    displayName: 'VNet Resource Group'
-    type: string
-    default: 'my-vnet-rg'
-  - name: nsgName
-    displayName: 'NSG Name'
-    type: string
-    default: 'my-nsg'
-  - name: nsgRg
-    displayName: 'NSG Resource Group'
-    type: string
-    default: 'my-nsg-rg'
-  - name: bootDiagStorage
-    displayName: 'Boot Diagnostics Storage Account Name'
-    type: string
-    default: 'mybootdiagstorage'
-  - name: singleSourceVM
-    displayName: 'Single Source VM Name (leave empty if using Multi-VMs)'
-    type: string
-    default: ''
-  - name: singleNewVM
-    displayName: 'Single New VM Name'
-    type: string
-    default: ''
-  - name: singleStaticIP
-    displayName: 'Single Static IP'
-    type: string
-    default: ''
-  - name: singleSubnet
-    displayName: 'Single Subnet Name'
-    type: string
-    default: ''
-  - name: singleVMSize
-    displayName: 'Single VM Size'
-    type: string
-    default: ''
-  - name: multiVMs
-    displayName: 'Multi-VMs (comma-separated: SourceVM,NewVM,IP,Subnet,Size per line)'
-    type: string
-    default: ''
 
 trigger: none
 
@@ -81,17 +41,17 @@ steps:
 
       # Source Subscription
       switch ('${{ parameters.subscriptionName }}') {
-          'BAB_DEV' { $srcSub = $env:BAB_DEV_SUBSCRIPTION_ID }
-          'BAB_SIT' { $srcSub = $env:BAB_SIT_SUBSCRIPTION_ID }
-          'BAB_CORE' { $srcSub = $env:BAB_CORE_SUBSCRIPTION_ID }
+          'BAB_DEV' { $srcSub = '$(BAB_DEV_SUBSCRIPTION_ID)' }
+          'BAB_SIT' { $srcSub = '$(BAB_SIT_SUBSCRIPTION_ID)' }
+          'BAB_CORE' { $srcSub = '$(BAB_CORE_SUBSCRIPTION_ID)' }
           default { Write-Error "Invalid source subscription"; exit 1 }
       }
 
       # Target Subscription
       switch ('${{ parameters.targetSubscriptionName }}') {
-          'BAB_DEV' { $tgtSub = $env:BAB_DEV_SUBSCRIPTION_ID }
-          'BAB_SIT' { $tgtSub = $env:BAB_SIT_SUBSCRIPTION_ID }
-          'BAB_CORE' { $tgtSub = $env:BAB_CORE_SUBSCRIPTION_ID }
+          'BAB_DEV' { $tgtSub = '$(BAB_DEV_SUBSCRIPTION_ID)' }
+          'BAB_SIT' { $tgtSub = '$(BAB_SIT_SUBSCRIPTION_ID)' }
+          'BAB_CORE' { $tgtSub = '$(BAB_CORE_SUBSCRIPTION_ID)' }
           default { Write-Error "Invalid target subscription"; exit 1 }
       }
 
@@ -106,7 +66,7 @@ steps:
     AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
     AZURE_TENANT_ID: $(AZURE_TENANT_ID)
 
-# ------------------- Clone VMs -------------------
+# ------------------- Clone VMs from CSV -------------------
 - task: PowerShell@2
   displayName: 'Clone VMs in Parallel with Summary'
   inputs:
@@ -114,85 +74,96 @@ steps:
     pwsh: true
     script: |
       $LogFile = "C:\log\clone_log.txt"
-      $CsvFile = "C:\log\vm_clone_summary.csv"
+      $CsvFile = "C:\vm-clone\vm_clone_summary.csv"
+      $vmInputCsv = "C:\vm-clone\vm-clone.csv"
       if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
       "" | Out-File -FilePath $CsvFile -Encoding UTF8
 
-      $vmList = @()
+      # Import VM list from CSV
+      $vmList = Import-Csv -Path $vmInputCsv
 
-      # --- Prepare VM List
-      if ('${{ parameters.multiVMs }}'.Trim()) {
-          $lines = '${{ parameters.multiVMs }}' -split "`n"
-          foreach ($line in $lines) {
-              $parts = $line.Split(',') | ForEach-Object { $_.Trim() }
-              $vmList += [PSCustomObject]@{
-                  SourceVM = $parts[0]
-                  NewVM = $parts[1]
-                  IP = $parts[2]
-                  Subnet = $parts[3]
-                  Size = $parts[4]
-              }
+      # Select target environment variables
+      switch ('${{ parameters.targetSubscriptionName }}') {
+          'BAB_DEV' {
+              $vnetName = '$(DEV_VNETName)'
+              $vnetRg = '$(DEV_VNETRG)'
+              $nsgName = '$(DEV_NSGName)'
+              $nsgRg = '$(DEV_NSGRG)'
+              $bootDiagStorage = '$(DEV_BootDiagStorage)'
           }
-      } elseif ('${{ parameters.singleSourceVM }}'.Trim()) {
-          $vmList += [PSCustomObject]@{
-              SourceVM = '${{ parameters.singleSourceVM }}'
-              NewVM = '${{ parameters.singleNewVM }}'
-              IP = '${{ parameters.singleStaticIP }}'
-              Subnet = '${{ parameters.singleSubnet }}'
-              Size = '${{ parameters.singleVMSize }}'
+          'BAB_SIT' {
+              $vnetName = '$(SIT_VNETName)'
+              $vnetRg = '$(SIT_VNETRG)'
+              $nsgName = '$(SIT_NSGName)'
+              $nsgRg = '$(SIT_NSGRG)'
+              $bootDiagStorage = '$(SIT_BootDiagStorage)'
           }
-      } else {
-          Write-Error "No VM defined"
-          exit 1
+          'BAB_CORE' {
+              $vnetName = '$(CORE_VNETName)'
+              $vnetRg = '$(CORE_VNETRG)'
+              $nsgName = '$(CORE_NSGName)'
+              $nsgRg = '$(CORE_NSGRG)'
+              $bootDiagStorage = '$(CORE_BootDiagStorage)'
+          }
+          default { throw "Invalid target subscription" }
+      }
+
+      # Get subscriptions from variable group
+      switch ('${{ parameters.subscriptionName }}') {
+          'BAB_DEV' { $srcSub = '$(BAB_DEV_SUBSCRIPTION_ID)' }
+          'BAB_SIT' { $srcSub = '$(BAB_SIT_SUBSCRIPTION_ID)' }
+          'BAB_CORE' { $srcSub = '$(BAB_CORE_SUBSCRIPTION_ID)' }
+      }
+      switch ('${{ parameters.targetSubscriptionName }}') {
+          'BAB_DEV' { $tgtSub = '$(BAB_DEV_SUBSCRIPTION_ID)' }
+          'BAB_SIT' { $tgtSub = '$(BAB_SIT_SUBSCRIPTION_ID)' }
+          'BAB_CORE' { $tgtSub = '$(BAB_CORE_SUBSCRIPTION_ID)' }
       }
 
       $ThrottleLimit = 4  # Adjust number of parallel VMs
 
       $vmList | ForEach-Object -Parallel {
-          param($vm, $LogFile, $CsvFile, $srcSub, $tgtSub)
+          param($vm, $LogFile, $CsvFile, $srcSub, $tgtSub, $vnetName, $vnetRg, $nsgName, $nsgRg, $bootDiagStorage)
 
           try {
-              "[$(Get-Date -Format o)] Starting clone: $($vm.SourceVM) -> $($vm.NewVM)" | Tee-Object -FilePath $LogFile -Append
+              "[$(Get-Date -Format o)] Starting clone: $($vm.SourceVMName) -> $($vm.NewVMName)" | Tee-Object -FilePath $LogFile -Append
 
               # ------------------- OS Disk -------------------
               az account set --subscription $srcSub
-              $osDiskId = az vm show -g '${{ parameters.resourceGroupName }}' -n $($vm.SourceVM) --query "storageProfile.osDisk.managedDisk.id" -o tsv
-              $osType = az vm show -g '${{ parameters.resourceGroupName }}' -n $($vm.SourceVM) --query "storageProfile.osDisk.osType" -o tsv
-              $dataDiskIds = az vm show -g '${{ parameters.resourceGroupName }}' -n $($vm.SourceVM) --query "storageProfile.dataDisks[].managedDisk.id" -o tsv
+              $osDiskId = az vm show -g '${{ parameters.resourceGroupName }}' -n $($vm.SourceVMName) --query "storageProfile.osDisk.managedDisk.id" -o tsv
+              $osType = az vm show -g '${{ parameters.resourceGroupName }}' -n $($vm.SourceVMName) --query "storageProfile.osDisk.osType" -o tsv
+              $dataDiskIds = az vm show -g '${{ parameters.resourceGroupName }}' -n $($vm.SourceVMName) --query "storageProfile.dataDisks[].managedDisk.id" -o tsv
 
               az account set --subscription $tgtSub
               $location = az group show -n '${{ parameters.targetResourceGroupName }}' --query location -o tsv
 
               # --- OS snapshot: use latest if exists
-              $existingOsSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name, '$($vm.NewVM)-os-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
-              if ($existingOsSnap) { $osSnapId = $existingOsSnap; "[$(Get-Date -Format o)] Using existing OS snapshot: $osSnapId" | Tee-Object -FilePath $LogFile -Append }
+              $existingOsSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name, '$($vm.NewVMName)-os-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
+              if ($existingOsSnap) { $osSnapId = $existingOsSnap }
               else {
-                  $osSnap = "${vm.NewVM}-os-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
+                  $osSnap = "$($vm.NewVMName)-os-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
                   $osSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $osSnap --source $osDiskId --location $location --sku Standard_LRS --query id -o tsv
                   if (-not $osSnapId) { throw "OS snapshot creation failed" }
               }
 
-              # --- OS Disk: use existing if available
-              $osDiskName = "${vm.NewVM}-osdisk"
+              $osDiskName = "$($vm.NewVMName)-osdisk"
               $existingOsDisk = az disk list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$osDiskName'].id" -o tsv
               $osDiskIdNew = if ($existingOsDisk) { $existingOsDisk } else {
                   $diskId = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName --source $osSnapId --location $location --query id -o tsv
                   if (-not $diskId) { throw "OS disk creation failed" } else { $diskId }
               }
 
-              # ------------------- Data Disks -------------------
               $newDataDisksFinal = @()
               $lun = 0
               foreach ($dd in $dataDiskIds) {
-                  $existingDataSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name,'$($vm.NewVM)-data$lun-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
+                  $existingDataSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name,'$($vm.NewVMName)-data$lun-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
                   $dataSnapId = if ($existingDataSnap) { $existingDataSnap } else {
-                      $snapName = "${vm.NewVM}-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
+                      $snapName = "$($vm.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
                       $id = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku Standard_LRS --query id -o tsv
                       if (-not $id) { throw "Data snapshot failed for LUN $lun" } else { $id }
                   }
 
-                  # Data disk
-                  $dataDiskName = "${vm.NewVM}-data$lun-disk"
+                  $dataDiskName = "$($vm.NewVMName)-data$lun-disk"
                   $existingDataDisk = az disk list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$dataDiskName'].id" -o tsv
                   $dataDiskIdNew = if ($existingDataDisk) { $existingDataDisk } else {
                       $id = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --query id -o tsv
@@ -203,36 +174,32 @@ steps:
                   $lun++
               }
 
-              # ------------------- NIC -------------------
-              $subnetId = az network vnet subnet show -g '${{ parameters.vnetRg }}' --vnet-name '${{ parameters.vnetName }}' -n $($vm.Subnet) --query id -o tsv
-              $nsgId = az network nsg show -g '${{ parameters.nsgRg }}' -n '${{ parameters.nsgName }}' --query id -o tsv
-              $nicName = "${vm.NewVM}-nic"
+              $subnetId = az network vnet subnet show -g $using:vnetRg --vnet-name $using:vnetName -n $($vm.SubnetName) --query id -o tsv
+              $nsgId = az network nsg show -g $using:nsgRg -n $using:nsgName --query id -o tsv
+              $nicName = "$($vm.NewVMName)-nic"
               $existingNic = az network nic list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$nicName'].id" -o tsv
               $nicId = if ($existingNic) { $existingNic } else {
-                  $id = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --private-ip-address $($vm.IP) --network-security-group $nsgId --query id -o tsv
+                  $id = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --private-ip-address $($vm.StaticIp) --network-security-group $nsgId --query id -o tsv
                   if (-not $id) { throw "NIC creation failed" } else { $id }
               }
 
-              # ------------------- VM -------------------
-              $vmCreate = az vm create -g '${{ parameters.targetResourceGroupName }}' -n $($vm.NewVM) --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osType --size $($vm.Size) --boot-diagnostics-storage "https://${{ parameters.bootDiagStorage }}.blob.core.windows.net/"
+              $vmCreate = az vm create -g '${{ parameters.targetResourceGroupName }}' -n $($vm.NewVMName) --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osType --size $($vm.VMSize) --boot-diagnostics-storage "https://$using:bootDiagStorage.blob.core.windows.net/"
               if (-not $?) { throw "VM creation failed" }
 
-              # Attach data disks
               foreach ($disk in $newDataDisksFinal) {
-                  az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($vm.NewVM) --name $disk.Id --lun $disk.Lun
+                  az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($vm.NewVMName) --name $disk.Id --lun $disk.Lun
               }
 
-              # ------------------- CSV Export -------------------
               foreach ($disk in $newDataDisksFinal) {
-                  "$($vm.NewVM),$($vm.SourceVM),$($vm.IP),$($vm.Subnet),$($vm.Size),$($disk.Id),$($disk.Lun)" | Out-File -FilePath $CsvFile -Append
+                  "$($vm.NewVMName),$($vm.SourceVMName),$($vm.StaticIp),$($vm.SubnetName),$($vm.VMSize),$($disk.Id),$($disk.Lun)" | Out-File -FilePath $CsvFile -Append
               }
 
-              "[$(Get-Date -Format o)] VM clone completed: $($vm.NewVM)" | Tee-Object -FilePath $LogFile -Append
+              "[$(Get-Date -Format o)] VM clone completed: $($vm.NewVMName)" | Tee-Object -FilePath $LogFile -Append
           } catch {
-              "[$(Get-Date -Format o)] ❌ Failed cloning $($vm.SourceVM): $_" | Tee-Object -FilePath $LogFile -Append
+              "[$(Get-Date -Format o)] ❌ Failed cloning $($vm.SourceVMName): $_" | Tee-Object -FilePath $LogFile -Append
               throw "Stopping pipeline due to failure"
           }
-      } -ThrottleLimit $ThrottleLimit -ArgumentList $LogFile, $CsvFile, $srcSub, $tgtSub
+      } -ThrottleLimit $ThrottleLimit -ArgumentList $LogFile, $CsvFile, $srcSub, $tgtSub, $vnetName, $vnetRg, $nsgName, $nsgRg, $bootDiagStorage
 
 # ------------------- Final Summary Table -------------------
 - task: PowerShell@2
@@ -242,7 +209,7 @@ steps:
     pwsh: true
     script: |
       $LogFile = "C:\log\clone_log.txt"
-      $CsvFile = "C:\log\vm_clone_summary.csv"
+      $CsvFile = "C:\vm-clone\vm_clone_summary.csv"
 
       "[$(Get-Date -Format o)] 🎉 All VM cloning tasks completed. Generating summary table..." | Tee-Object -FilePath $LogFile -Append
 
@@ -278,6 +245,6 @@ steps:
 - task: PublishBuildArtifacts@1
   displayName: 'Publish VM Clone Summary Artifact'
   inputs:
-    PathtoPublish: 'C:\log\vm_clone_summary.csv'
+    PathtoPublish: 'C:\vm-clone\vm_clone_summary.csv'
     ArtifactName: 'VMCloneSummary'
     publishLocation: 'Container'
