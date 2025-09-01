@@ -59,6 +59,10 @@ steps:
           -u $env:AZURE_CLIENT_ID `
           -p $env:AZURE_CLIENT_SECRET `
           --tenant $env:AZURE_TENANT_ID | Tee-Object -FilePath $LogFile -Append
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Azure CLI login failed"
+          exit 1
+      }
       az account set --subscription $srcSub | Tee-Object -FilePath $LogFile -Append
       "[$(Get-Date -Format o)] Azure CLI login successful. Source subscription: $srcSub, Target subscription: $tgtSub" | Tee-Object -FilePath $LogFile -Append
   env:
@@ -80,7 +84,12 @@ steps:
       "" | Out-File -FilePath $CsvFile -Encoding UTF8
 
       # Import VM list from CSV
-      $vmList = Import-Csv -Path $vmInputCsv
+      if (Test-Path $vmInputCsv) {
+          Write-Host "Importing VM definitions from CSV: $vmInputCsv"
+          $vmList = Import-Csv -Path $vmInputCsv
+      } else {
+          throw "CSV file with VM definitions not found at $vmInputCsv. Please provide the file."
+      }
 
       # Select target environment variables
       switch ('${{ parameters.targetSubscriptionName }}') {
@@ -123,54 +132,52 @@ steps:
       $ThrottleLimit = 4  # Adjust number of parallel VMs
 
       $vmList | ForEach-Object -Parallel {
-          param($vm, $LogFile, $CsvFile, $srcSub, $tgtSub, $vnetName, $vnetRg, $nsgName, $nsgRg, $bootDiagStorage)
-
           try {
-              "[$(Get-Date -Format o)] Starting clone: $($vm.SourceVMName) -> $($vm.NewVMName)" | Tee-Object -FilePath $LogFile -Append
+              "[$(Get-Date -Format o)] Starting clone: $($PSItem.SourceVMName) -> $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
 
               # ------------------- OS Disk -------------------
-              az account set --subscription $srcSub
+              az account set --subscription $using:srcSub
               try {
-                  $osDiskId = az vm show -g '${{ parameters.resourceGroupName }}' -n $($vm.SourceVMName) --query "storageProfile.osDisk.managedDisk.id" -o tsv
-                  $osType = az vm show -g '${{ parameters.resourceGroupName }}' -n $($vm.SourceVMName) --query "storageProfile.osDisk.osType" -o tsv
-                  $dataDiskIds = az vm show -g '${{ parameters.resourceGroupName }}' -n $($vm.SourceVMName) --query "storageProfile.dataDisks[].managedDisk.id" -o tsv
+                  $osDiskId = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.osDisk.managedDisk.id" -o tsv
+                  $osType = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.osDisk.osType" -o tsv
+                  $dataDiskIds = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.dataDisks[].managedDisk.id" -o tsv
               } catch {
-                  "[$(Get-Date -Format o)] ❌ Failed to get disk info for $($vm.SourceVMName): $_" | Tee-Object -FilePath $LogFile -Append
+                  "[$(Get-Date -Format o)] ❌ Failed to get disk info for $($PSItem.SourceVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to disk info failure"
               }
 
-              az account set --subscription $tgtSub
+              az account set --subscription $using:tgtSub
               try {
                   $location = az group show -n '${{ parameters.targetResourceGroupName }}' --query location -o tsv
               } catch {
-                  "[$(Get-Date -Format o)] ❌ Failed to get location for RG ${{ parameters.targetResourceGroupName }}: $_" | Tee-Object -FilePath $LogFile -Append
+                  "[$(Get-Date -Format o)] ❌ Failed to get location for RG ${{ parameters.targetResourceGroupName }}: $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to location fetch failure"
               }
 
               # --- OS snapshot: use latest if exists
               try {
-                  $existingOsSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name, '$($vm.NewVMName)-os-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
+                  $existingOsSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name, '$($PSItem.NewVMName)-os-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
                   if ($existingOsSnap) { $osSnapId = $existingOsSnap }
                   else {
-                      $osSnap = "$($vm.NewVMName)-os-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
+                      $osSnap = "$($PSItem.NewVMName)-os-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
                       $osSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $osSnap --source $osDiskId --location $location --sku Standard_LRS --query id -o tsv
                       if (-not $osSnapId) { throw "OS snapshot creation failed" }
                   }
               } catch {
-                  "[$(Get-Date -Format o)] ❌ Failed to create or find OS snapshot for $($vm.NewVMName): $_" | Tee-Object -FilePath $LogFile -Append
+                  "[$(Get-Date -Format o)] ❌ Failed to create or find OS snapshot for $($PSItem.NewVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to OS snapshot failure"
               }
 
               # --- OS Disk: use existing if available
               try {
-                  $osDiskName = "$($vm.NewVMName)-osdisk"
+                  $osDiskName = "$($PSItem.NewVMName)-osdisk"
                   $existingOsDisk = az disk list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$osDiskName'].id" -o tsv
                   $osDiskIdNew = if ($existingOsDisk) { $existingOsDisk } else {
                       $diskId = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName --source $osSnapId --location $location --query id -o tsv
                       if (-not $diskId) { throw "OS disk creation failed" } else { $diskId }
                   }
               } catch {
-                  "[$(Get-Date -Format o)] ❌ Failed to create or find OS disk for $($vm.NewVMName): $_" | Tee-Object -FilePath $LogFile -Append
+                  "[$(Get-Date -Format o)] ❌ Failed to create or find OS disk for $($PSItem.NewVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to OS disk failure"
               }
 
@@ -179,14 +186,14 @@ steps:
               $lun = 0
               try {
                   foreach ($dd in $dataDiskIds) {
-                      $existingDataSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name,'$($vm.NewVMName)-data$lun-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
+                      $existingDataSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name,'$($PSItem.NewVMName)-data$lun-snap')]|sort_by(@,&creationData.sourceResourceId)[-1].id" -o tsv
                       $dataSnapId = if ($existingDataSnap) { $existingDataSnap } else {
-                          $snapName = "$($vm.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
+                          $snapName = "$($PSItem.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
                           $id = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku Standard_LRS --query id -o tsv
                           if (-not $id) { throw "Data snapshot failed for LUN $lun" } else { $id }
                       }
 
-                      $dataDiskName = "$($vm.NewVMName)-data$lun-disk"
+                      $dataDiskName = "$($PSItem.NewVMName)-data$lun-disk"
                       $existingDataDisk = az disk list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$dataDiskName'].id" -o tsv
                       $dataDiskIdNew = if ($existingDataDisk) { $existingDataDisk } else {
                           $id = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --query id -o tsv
@@ -197,46 +204,46 @@ steps:
                       $lun++
                   }
               } catch {
-                  "[$(Get-Date -Format o)] ❌ Failed to create/find data disk or snapshot for $($vm.NewVMName): $_" | Tee-Object -FilePath $LogFile -Append
+                  "[$(Get-Date -Format o)] ❌ Failed to create/find data disk or snapshot for $($PSItem.NewVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to data disk/snapshot failure"
               }
 
               # ------------------- NIC -------------------
               try {
-                  $subnetId = az network vnet subnet show -g $using:vnetRg --vnet-name $using:vnetName -n $($vm.SubnetName) --query id -o tsv
+                  $subnetId = az network vnet subnet show -g $using:vnetRg --vnet-name $using:vnetName -n $($PSItem.SubnetName) --query id -o tsv
                   $nsgId = az network nsg show -g $using:nsgRg -n $using:nsgName --query id -o tsv
-                  $nicName = "$($vm.NewVMName)-nic"
+                  $nicName = "$($PSItem.NewVMName)-nic"
                   $existingNic = az network nic list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$nicName'].id" -o tsv
                   $nicId = if ($existingNic) { $existingNic } else {
-                      $id = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --private-ip-address $($vm.StaticIp) --network-security-group $nsgId --query id -o tsv
+                      $id = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --private-ip-address $($PSItem.StaticIp) --network-security-group $nsgId --query id -o tsv
                       if (-not $id) { throw "NIC creation failed" } else { $id }
                   }
               } catch {
-                  "[$(Get-Date -Format o)] ❌ Failed to create/find NIC for $($vm.NewVMName): $_" | Tee-Object -FilePath $LogFile -Append
+                  "[$(Get-Date -Format o)] ❌ Failed to create/find NIC for $($PSItem.NewVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to NIC failure"
               }
 
               # ------------------- VM -------------------
               try {
-                  $vmCreate = az vm create -g '${{ parameters.targetResourceGroupName }}' -n $($vm.NewVMName) --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osType --size $($vm.VMSize) --boot-diagnostics-storage "https://$using:bootDiagStorage.blob.core.windows.net/"
+                  $vmCreate = az vm create -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osType --size $($PSItem.VMSize) --boot-diagnostics-storage "https://$using:bootDiagStorage.blob.core.windows.net/"
                   if (-not $?) { throw "VM creation failed" }
               } catch {
-                  "[$(Get-Date -Format o)] ❌ Failed to create VM $($vm.NewVMName): $_" | Tee-Object -FilePath $LogFile -Append
+                  "[$(Get-Date -Format o)] ❌ Failed to create VM $($PSItem.NewVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to VM creation failure"
               }
 
               # Attach data disks
               try {
                   foreach ($disk in $newDataDisksFinal) {
-                      az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($vm.NewVMName) --name $disk.Id --lun $disk.Lun
+                      az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($PSItem.NewVMName) --name $disk.Id --lun $disk.Lun
                   }
               } catch {
-                  "[$(Get-Date -Format o)] ❌ Failed to attach data disks to $($vm.NewVMName): $_" | Tee-Object -FilePath $LogFile -Append
+                  "[$(Get-Date -Format o)] ❌ Failed to attach data disks to $($PSItem.NewVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
                   throw "Stopping pipeline due to disk attach failure"
               }
 
               foreach ($disk in $newDataDisksFinal) {
-                  "$($vm.NewVMName),$($vm.SourceVMName),$($vm.StaticIp),$($vm.SubnetName),$($vm.VMSize),$($disk.Id),$($disk.Lun)" | Out-File -FilePath $CsvFile -Append
+                  "$($PSItem.NewVMName),$($PSItem.SourceVMName),$($PSItem.StaticIp),$($PSItem.SubnetName),$($PSItem.VMSize),$($disk.Id),$($disk.Lun)" | Out-File -FilePath $using:CsvFile -Append
               }
 
               # ------------------- Cleanup: Delete Snapshots -------------------
@@ -244,29 +251,29 @@ steps:
                   # Delete OS snapshot
                   if ($osSnapId) {
                       az snapshot delete --ids $osSnapId
-                      "[$(Get-Date -Format o)] Deleted OS snapshot: $osSnapId" | Tee-Object -FilePath $LogFile -Append
+                      "[$(Get-Date -Format o)] Deleted OS snapshot: $osSnapId" | Tee-Object -FilePath $using:LogFile -Append
                   }
                   # Delete Data disk snapshots
                   $lun = 0
                   foreach ($dd in $dataDiskIds) {
-                      $dataSnapName = "$($vm.NewVMName)-data$lun-snap"
+                      $dataSnapName = "$($PSItem.NewVMName)-data$lun-snap"
                       $dataSnapId = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name, '$dataSnapName')].id" -o tsv
                       if ($dataSnapId) {
                           az snapshot delete --ids $dataSnapId
-                          "[$(Get-Date -Format o)] Deleted Data snapshot: $dataSnapId" | Tee-Object -FilePath $LogFile -Append
+                          "[$(Get-Date -Format o)] Deleted Data snapshot: $dataSnapId" | Tee-Object -FilePath $using:LogFile -Append
                       }
                       $lun++
                   }
               } catch {
-                  "[$(Get-Date -Format o)] ⚠️ Snapshot cleanup failed: $_" | Tee-Object -FilePath $LogFile -Append
+                  "[$(Get-Date -Format o)] ⚠️ Snapshot cleanup failed: $_" | Tee-Object -FilePath $using:LogFile -Append
               }
 
-              "[$(Get-Date -Format o)] VM clone completed: $($vm.NewVMName)" | Tee-Object -FilePath $LogFile -Append
+              "[$(Get-Date -Format o)] VM clone completed: $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
           } catch {
-              "[$(Get-Date -Format o)] ❌ Failed cloning $($vm.SourceVMName): $_" | Tee-Object -FilePath $LogFile -Append
+              "[$(Get-Date -Format o)] ❌ Failed cloning $($PSItem.SourceVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
               throw "Stopping pipeline due to failure"
           }
-      } -ThrottleLimit $ThrottleLimit -ArgumentList $LogFile, $CsvFile, $srcSub, $tgtSub, $vnetName, $vnetRg, $nsgName, $nsgRg, $bootDiagStorage
+      } -ThrottleLimit $ThrottleLimit
 
 # ------------------- Final Summary Table -------------------
 - task: PowerShell@2
