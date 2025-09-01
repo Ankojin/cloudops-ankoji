@@ -87,7 +87,7 @@ steps:
       # Import VM list from CSV
       if (Test-Path $vmInputCsv) {
           Write-Host "Importing VM definitions from CSV: $vmInputCsv"
-          # Remove StaticIp from header and import
+          # Import only required columns (no StaticIp)
           $vmList = Import-Csv -Path $vmInputCsv | Select-Object SourceVMName,NewVMName,SubnetName,VMSize
       } else {
           throw "CSV file with VM definitions not found at $vmInputCsv. Please provide the file."
@@ -249,10 +249,15 @@ steps:
                           throw "Stopping pipeline due to missing SubnetName for $($PSItem.NewVMName)"
                       }
 
+                      # Dynamic IP: do NOT specify --private-ip-address
                       $nicCreateResult = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --query id -o tsv 2>&1
                       "[$(Get-Date -Format o)] az network nic create output: $nicCreateResult" | Tee-Object -FilePath $using:LogFile -Append
+
+                      if (-not $nicCreateResult -or $nicCreateResult.Trim() -eq "") {
+                          throw "NIC creation returned no output. Check if all required parameters are correct and you have permission to create NICs in this subnet."
+                      }
                       $nicId = $nicCreateResult.Trim()
-                      if (-not $nicId -or $nicId -like "*ERROR*") { throw "NIC creation failed: $nicCreateResult" }
+                      if ($nicId -like "*ERROR*") { throw "NIC creation failed: $nicCreateResult" }
                       "[$(Get-Date -Format o)] Created NIC for $($PSItem.NewVMName): $nicId" | Tee-Object -FilePath $using:LogFile -Append
                   }
 
