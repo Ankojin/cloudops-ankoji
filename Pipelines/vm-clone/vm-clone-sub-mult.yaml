@@ -136,6 +136,12 @@ steps:
           try {
               "[$(Get-Date -Format o)] Starting clone: $($PSItem.SourceVMName) -> $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
 
+              # Validate required fields
+              if (-not $PSItem.SourceVMName -or -not $PSItem.NewVMName -or -not $PSItem.StaticIp -or -not $PSItem.SubnetName -or -not $PSItem.VMSize) {
+                  "[$(Get-Date -Format o)] ❌ Stopping pipeline: Missing required fields for VM: $($PSItem | ConvertTo-Json -Compress)" | Tee-Object -FilePath $using:LogFile -Append
+                  throw "Stopping pipeline due to missing required fields"
+              }
+
               # ------------------- OS Disk -------------------
               az account set --subscription $using:srcSub
               try {
@@ -214,13 +220,33 @@ steps:
 
               # ------------------- NIC -------------------
               try {
-                  $subnetId = az network vnet subnet show -g $using:vnetRg --vnet-name $using:vnetName -n $($PSItem.SubnetName) --query id -o tsv
-                  $nsgId = az network nsg show -g $using:nsgRg -n $using:nsgName --query id -o tsv
                   $nicName = "$($PSItem.NewVMName)-nic"
                   $existingNic = az network nic list -g '${{ parameters.targetResourceGroupName }}' --query "[?name=='$nicName'].id" -o tsv
-                  $nicId = if ($existingNic) { $existingNic } else {
-                      $id = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --private-ip-address $($PSItem.StaticIp) --network-security-group $nsgId --query id -o tsv
-                      if (-not $id) { throw "NIC creation failed" } else { $id }
+
+                  if ($existingNic) {
+                      $nicId = $existingNic
+                      "[$(Get-Date -Format o)] NIC already exists for $($PSItem.NewVMName): $nicId. Will use existing NIC." | Tee-Object -FilePath $using:LogFile -Append
+                  } else {
+                      $subnetId = az network vnet subnet show -g $using:vnetRg --vnet-name $using:vnetName -n $($PSItem.SubnetName) --query id -o tsv
+                      $nsgId = az network nsg show -g $using:nsgRg -n $using:nsgName --query id -o tsv
+
+                      # Stop pipeline if any required NIC parameter is missing
+                      if (-not $subnetId) {
+                          "[$(Get-Date -Format o)] ❌ Stopping pipeline: SubnetId is empty for $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
+                          throw "Stopping pipeline due to missing SubnetId"
+                      }
+                      if (-not $nsgId) {
+                          "[$(Get-Date -Format o)] ❌ Stopping pipeline: NSGId is empty for $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
+                          throw "Stopping pipeline due to missing NSGId"
+                      }
+                      if (-not $PSItem.StaticIp) {
+                          "[$(Get-Date -Format o)] ❌ Stopping pipeline: StaticIp is empty for $($PSItem.NewVMName)" | Tee-Object -FilePath $using:LogFile -Append
+                          throw "Stopping pipeline due to missing StaticIp"
+                      }
+
+                      $nicId = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --private-ip-address $($PSItem.StaticIp) --network-security-group $nsgId --query id -o tsv
+                      if (-not $nicId) { throw "NIC creation failed" }
+                      "[$(Get-Date -Format o)] Created NIC for $($PSItem.NewVMName): $nicId" | Tee-Object -FilePath $using:LogFile -Append
                   }
               } catch {
                   "[$(Get-Date -Format o)] ❌ Failed to create/find NIC for $($PSItem.NewVMName): $_" | Tee-Object -FilePath $using:LogFile -Append
