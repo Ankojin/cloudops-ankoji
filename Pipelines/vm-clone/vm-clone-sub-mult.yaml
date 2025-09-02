@@ -215,7 +215,7 @@ steps:
                   Run-Command $vmCreateCmd
                   # Stop the VM immediately after creation
                   Run-Command "az vm deallocate -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --no-wait"
-                  Run-Command "az vm wait -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --deallocated"
+                  Run-Command "az vm wait -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --custom 'instanceView.statuses[?code==`PowerState/deallocated`]'"
               } catch {
                   if ($nicId -and -not $dryRun) { Run-Command "az network nic delete --ids $nicId" }
                   Log-Error "VM creation error for $($PSItem.NewVMName): $_"
