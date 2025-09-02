@@ -199,7 +199,7 @@ steps:
                   $subnetId = Run-Command "az network vnet subnet show -g $vnetRg --vnet-name $vnetName -n $($PSItem.SubnetName) --query id -o tsv"
                   $nsgId = Run-Command "az network nsg show -g $nsgRg -n $nsgName --query id -o tsv"
                   if (-not $subnetId -or -not $nsgId) { Log-Error "Subnet or NSG ID missing for $($PSItem.NewVMName)"; continue }
-                  $nicId = Run-Command "az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --query `"id`" -o tsv" "dryrun-nic-id"
+                  $nicId = Run-Command "az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --query `"NewNIC.id`" -o tsv" "dryrun-nic-id"
                   if (-not $nicId) { Log-Error "NIC creation failed for $($PSItem.NewVMName)"; continue }
                   $nicId = $nicId.Trim()
                   $privateIp = Run-Command "az network nic show --ids $nicId --query `"ipConfigurations[0].privateIpAddress`" -o tsv" "dryrun-ip"
@@ -248,6 +248,7 @@ steps:
 
       if ($global:ErrorCount -gt 0) {
         Write-Warning "$global:ErrorCount errors occurred during VM cloning. See log for details."
+        exit 1   # <-- This will fail the step and stop the pipeline
       } else {
         Write-Host "All VM cloning tasks completed successfully."
       }
