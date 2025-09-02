@@ -114,9 +114,7 @@ steps:
       if (-not (Test-Path "C:\vm-to-clone")) { New-Item -Path "C:\vm-to-clone" -ItemType Directory | Out-Null }
       if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
       $LogFile = "C:\log\clone_log.txt"
-      $CsvFile = "C:\vm-to-clone\vm_clone_summary.csv"
       $vmInputCsv = "C:\vm-to-clone\vm-to-clone.csv"
-      "" | Out-File -FilePath $CsvFile -Encoding UTF8
 
       if (Test-Path $vmInputCsv) {
           Write-Host "Importing VM definitions from CSV: $vmInputCsv"
@@ -229,20 +227,31 @@ steps:
               foreach ($disk in $newDataDisksFinal) {
                   try {
                       Run-Command "az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($PSItem.NewVMName) --name $($disk.Id) --lun $($disk.Lun)"
-                      "$($PSItem.NewVMName),$($PSItem.SourceVMName),$($PSItem.SubnetName),$($PSItem.VMSize),$privateIp,$($disk.Id),$($disk.Lun)" | Out-File -FilePath $CsvFile -Append
                   } catch {
                       Log-Error "Failed to attach disk $($disk.Id) to $($PSItem.NewVMName): $_"
                   }
               }
 
-              # Start the VM after all disks are attached
+              # Delete OS snapshot after VM and disks are created
+              if ($osSnapId -and -not $dryRun) {
+                  Run-Command "az snapshot delete --ids $osSnapId"
+              }
+
+              # Delete data disk snapshots after VM and disks are created
+              foreach ($dd in $dataDiskIds) {
+                  $snapNamePattern = "$($PSItem.NewVMName)-data"
+                  $dataSnapId = Run-Command "az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query \"[?contains(name,'$snapNamePattern')].id\" -o tsv"
+                  if ($dataSnapId -and -not $dryRun) {
+                      Run-Command "az snapshot delete --ids $dataSnapId"
+                  }
+              }
+
+              # Start the VM after all disks are attached and snapshots are deleted
               try {
                   Run-Command "az vm start -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName)"
               } catch {
                   Log-Error "Failed to start VM $($PSItem.NewVMName): $_"
               }
-
-              "[$(Get-Date -Format o)] VM clone completed: $($PSItem.NewVMName)" | Tee-Object -FilePath $LogFile -Append
           } catch {
               Log-Error "❌ Failed cloning $($PSItem.SourceVMName): $_"
               continue
