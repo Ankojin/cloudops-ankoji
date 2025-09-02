@@ -239,7 +239,7 @@ steps:
 
               # Delete data disk snapshots after VM and disks are created
               $snapNamePattern = "$($PSItem.NewVMName)-data"
-              $dataSnapIdsRaw = Run-Command "az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query \"[?contains(name, '$snapNamePattern')].id\" -o tsv"
+              $dataSnapIdsRaw = Run-Command 'az snapshot list -g "${{ parameters.targetResourceGroupName }}" --query "[?contains(name, `"' + $snapNamePattern + '`")].id" -o tsv"'
               if ($dataSnapIdsRaw -and $dataSnapIdsRaw.Trim() -ne "" -and -not $dryRun) {
                   $dataSnapIds = $dataSnapIdsRaw -split "`r?`n"
                   foreach ($snapId in $dataSnapIds) {
@@ -267,11 +267,3 @@ steps:
       } else {
         Write-Host "All VM cloning tasks completed successfully."
       }
-
-# # ------------------- Publish Summary as Artifact -------------------
-# - task: PublishBuildArtifacts@1
-#   displayName: 'Publish VM Clone Summary Artifact'
-#   inputs:
-#     PathtoPublish: 'C:\vm-to-clone\vm_clone_summary.csv'
-#     ArtifactName: 'VMCloneSummary'
-#     publishLocation: 'Container'
