@@ -157,7 +157,7 @@ steps:
       }
 
       foreach ($PSItem in $vmList) {
-          $osTypeParam = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.osDisk.osType" -o tsv
+          $osTypeParam = Run-Command "az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query storageProfile.osDisk.osType -o tsv"
           "Detected OS type: $osTypeParam" | Tee-Object -FilePath $LogFile -Append
 
           $nicId = $null
@@ -180,7 +180,7 @@ steps:
 
               # Data disks
               $newDataDisksFinal = @(); $lun=0
-              if ($dataDiskIds -and $dataDiskIds[0]) {
+              if ($dataDiskIds -and $dataDiskIds[0] -ne "") {
                   foreach ($dd in $dataDiskIds) {
                       $snapName = "$($PSItem.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
                       $dataSnapId = Run-Command "az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku Standard_LRS --query id -o tsv" "dryrun-data-snap-id"
@@ -238,11 +238,13 @@ steps:
               }
 
               # Delete data disk snapshots after VM and disks are created
-              foreach ($dd in $dataDiskIds) {
-                  $snapNamePattern = "$($PSItem.NewVMName)-data"
-                  $dataSnapId = Run-Command "az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query \"[?contains(name,'$snapNamePattern')].id\" -o tsv"
-                  if ($dataSnapId -and -not $dryRun) {
-                      Run-Command "az snapshot delete --ids $dataSnapId"
+              $snapNamePattern = "$($PSItem.NewVMName)-data"
+              $dataSnapIds = Run-Command "az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query \"[?contains(name,'$snapNamePattern')].id\" -o tsv"
+              if ($dataSnapIds -and -not $dryRun) {
+                  $dataSnapIds -split "`n" | ForEach-Object {
+                      if ($_ -ne "") {
+                          Run-Command "az snapshot delete --ids $_"
+                      }
                   }
               }
 
