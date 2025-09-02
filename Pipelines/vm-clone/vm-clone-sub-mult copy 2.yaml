@@ -256,10 +256,10 @@ steps:
         Write-Host "All VM cloning tasks completed successfully."
       }
 
-# # ------------------- Publish Summary as Artifact -------------------
-# - task: PublishBuildArtifacts@1
-#   displayName: 'Publish VM Clone Summary Artifact'
-#   inputs:
-#     PathtoPublish: 'C:\vm-to-clone\vm_clone_summary.csv'
-#     ArtifactName: 'VMCloneSummary'
-#     publishLocation: 'Container'
+# ------------------- Publish Summary as Artifact -------------------
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish VM Clone Summary Artifact'
+  inputs:
+    PathtoPublish: 'C:\vm-to-clone\vm_clone_summary.csv'
+    ArtifactName: 'VMCloneSummary'
+    publishLocation: 'Container'
