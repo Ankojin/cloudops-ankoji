@@ -239,11 +239,12 @@ steps:
 
               # Delete data disk snapshots after VM and disks are created
               $snapNamePattern = "$($PSItem.NewVMName)-data"
-              $dataSnapIds = Run-Command "az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query \"[?contains(name,'$snapNamePattern')].id\" -o tsv"
-              if ($dataSnapIds -and $dataSnapIds.Trim() -ne "" -and -not $dryRun) {
-                  $dataSnapIds -split "`n" | ForEach-Object {
-                      if ($_ -and $_.Trim() -ne "") {
-                          Run-Command "az snapshot delete --ids $_"
+              $dataSnapIdsRaw = Run-Command "az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query \"[?contains(name,'$snapNamePattern')].id\" -o tsv"
+              if ($dataSnapIdsRaw -and $dataSnapIdsRaw.Trim() -ne "" -and -not $dryRun) {
+                  $dataSnapIds = $dataSnapIdsRaw -split "`r?`n"
+                  foreach ($snapId in $dataSnapIds) {
+                      if ($snapId -and $snapId.Trim() -ne "") {
+                          Run-Command "az snapshot delete --ids $snapId"
                       }
                   }
               }
