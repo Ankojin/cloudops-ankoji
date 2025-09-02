@@ -1,2 +1,2 @@
 ﻿SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
-DAADOAGAPPDWV01,DAADOAGAPPDWV01-clone,10.189.67.21,snet-core-shared-app-01,Standard_D2s_v6
+DARECDBORILV1-test,DARECDBORILV1,10.189.67.145,snet-sit-nonpci-db-02,Standard_D2s_v5
