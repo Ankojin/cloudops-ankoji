@@ -28,10 +28,6 @@ parameters:
     values:
       - linux
       - windows
-  - name: dryRun
-    displayName: 'Dry Run (no changes, just log actions)'
-    type: boolean
-    default: false
 
 trigger: none
 
