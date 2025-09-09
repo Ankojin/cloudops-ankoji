@@ -28,10 +28,6 @@ parameters:
     values:
       - linux
       - windows
-  - name: dryRun
-    displayName: 'Dry Run (no changes, just log actions)'
-    type: boolean
-    default: false
 
 trigger: none
 
@@ -90,7 +86,6 @@ steps:
     script: |
       $ErrorActionPreference = "Continue"
       $global:ErrorCount = 0
-      $dryRun = [System.Convert]::ToBoolean('${{ parameters.dryRun }}')
 
       function Log-Error {
         param($msg)
@@ -98,25 +93,10 @@ steps:
         $global:ErrorCount++
       }
 
-      function Run-Command {
-        param(
-          [string]$cmd,
-          [string]$dryValue = ""
-        )
-        if ($dryRun) {
-          Write-Host "[Dry-Run] $cmd"
-          return $dryValue
-        } else {
-          return Invoke-Expression $cmd
-        }
-      }
-
       if (-not (Test-Path "C:\vm-to-clone")) { New-Item -Path "C:\vm-to-clone" -ItemType Directory | Out-Null }
       if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
       $LogFile = "C:\log\clone_log.txt"
-      $CsvFile = "C:\vm-to-clone\vm_clone_summary.csv"
       $vmInputCsv = "C:\vm-to-clone\vm-to-clone.csv"
-      "" | Out-File -FilePath $CsvFile -Encoding UTF8
 
       if (Test-Path $vmInputCsv) {
           Write-Host "Importing VM definitions from CSV: $vmInputCsv"
@@ -159,7 +139,7 @@ steps:
       }
 
       foreach ($PSItem in $vmList) {
-          $osTypeParam = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.osDisk.osType" -o tsv
+          $osTypeParam = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query storageProfile.osDisk.osType -o tsv
           "Detected OS type: $osTypeParam" | Tee-Object -FilePath $LogFile -Append
 
           $nicId = $null
@@ -167,27 +147,27 @@ steps:
               "[$(Get-Date -Format o)] Starting clone: $($PSItem.SourceVMName) -> $($PSItem.NewVMName)" | Tee-Object -FilePath $LogFile -Append
 
               # ------------------- OS/Data Disk logic -------------------
-              Run-Command "az account set --subscription $srcSub"
-              $osDiskId = Run-Command "az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query `"storageProfile.osDisk.managedDisk.id`" -o tsv"
-              $dataDiskIds = @(Run-Command "az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query `"storageProfile.dataDisks[].managedDisk.id`" -o tsv")
+              az account set --subscription $srcSub
+              $osDiskId = az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.osDisk.managedDisk.id" -o tsv
+              $dataDiskIds = @(az vm show -g '${{ parameters.resourceGroupName }}' -n $($PSItem.SourceVMName) --query "storageProfile.dataDisks[].managedDisk.id" -o tsv)
 
-              Run-Command "az account set --subscription $tgtSub"
-              $location = Run-Command "az group show -n '${{ parameters.targetResourceGroupName }}' --query location -o tsv"
+              az account set --subscription $tgtSub
+              $location = az group show -n '${{ parameters.targetResourceGroupName }}' --query location -o tsv
 
               # OS snapshot & disk creation
               $osSnap = "$($PSItem.NewVMName)-os-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
-              $osSnapId = Run-Command "az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $osSnap --source $osDiskId --location $location --sku Standard_LRS --query id -o tsv" "dryrun-os-snap-id"
+              $osSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $osSnap --source $osDiskId --location $location --sku Standard_LRS --query id -o tsv
               $osDiskName = "$($PSItem.NewVMName)-osdisk"
-              $osDiskIdNew = Run-Command "az disk create -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName --source $osSnapId --location $location --query id -o tsv" "dryrun-os-disk-id"
+              $osDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName --source $osSnapId --location $location --query id -o tsv
 
               # Data disks
               $newDataDisksFinal = @(); $lun=0
-              if ($dataDiskIds -and $dataDiskIds[0]) {
+              if ($dataDiskIds -and $dataDiskIds[0] -ne "") {
                   foreach ($dd in $dataDiskIds) {
                       $snapName = "$($PSItem.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
-                      $dataSnapId = Run-Command "az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku Standard_LRS --query id -o tsv" "dryrun-data-snap-id"
+                      $dataSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku Standard_LRS --query id -o tsv
                       $dataDiskName = "$($PSItem.NewVMName)-data$lun-disk"
-                      $dataDiskIdNew = Run-Command "az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --query id -o tsv" "dryrun-data-disk-id"
+                      $dataDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --query id -o tsv
                       $newDataDisksFinal += [PSCustomObject]@{Id=$dataDiskIdNew; Lun=$lun}
                       $lun++
                   }
@@ -196,15 +176,15 @@ steps:
               # ------------------- NIC with cleanup -------------------
               try {
                   $nicName = "$($PSItem.NewVMName)-nic"
-                  $subnetId = Run-Command "az network vnet subnet show -g $vnetRg --vnet-name $vnetName -n $($PSItem.SubnetName) --query id -o tsv"
-                  $nsgId = Run-Command "az network nsg show -g $nsgRg -n $nsgName --query id -o tsv"
+                  $subnetId = az network vnet subnet show -g $vnetRg --vnet-name $vnetName -n $($PSItem.SubnetName) --query id -o tsv
+                  $nsgId = az network nsg show -g $nsgRg -n $nsgName --query id -o tsv
                   if (-not $subnetId -or -not $nsgId) { Log-Error "Subnet or NSG ID missing for $($PSItem.NewVMName)"; continue }
-                  $nicId = Run-Command "az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --query 'NewNIC.id' -o tsv" "dryrun-nic-id"
+                  $nicId = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --query 'NewNIC.id' -o tsv
                   if (-not $nicId) { Log-Error "NIC creation failed for $($PSItem.NewVMName)"; continue }
                   $nicId = $nicId.Trim()
-                  $privateIp = Run-Command "az network nic show --ids $nicId --query `"ipConfigurations[0].privateIpAddress`" -o tsv" "dryrun-ip"
+                  $privateIp = az network nic show --ids $nicId --query "ipConfigurations[0].privateIpAddress" -o tsv
               } catch {
-                  if ($nicId -and -not $dryRun) { Run-Command "az network nic delete --ids $nicId" }
+                  if ($nicId) { az network nic delete --ids $nicId }
                   Log-Error "NIC creation error for $($PSItem.NewVMName): $_"
                   continue
               }
@@ -212,15 +192,15 @@ steps:
               # ------------------- VM Creation -------------------
               try {
                   $vmCreateCmd = "az vm create -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osTypeParam --size $($PSItem.VMSize) --boot-diagnostics-storage https://$bootDiagStorage.blob.core.windows.net/"
-                  Run-Command $vmCreateCmd
+                  Invoke-Expression $vmCreateCmd
 
                   # Only deallocate if there are data disks to attach
                   if ($newDataDisksFinal.Count -gt 0) {
-                      Run-Command "az vm deallocate -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --no-wait"
-                      Run-Command "az vm wait -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --custom 'instanceView.statuses[?code==`PowerState/deallocated`]'"
+                      az vm deallocate -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --no-wait
+                      az vm wait -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --custom "instanceView.statuses[?code=='PowerState/deallocated']"
                   }
               } catch {
-                  if ($nicId -and -not $dryRun) { Run-Command "az network nic delete --ids $nicId" }
+                  if ($nicId) { az network nic delete --ids $nicId }
                   Log-Error "VM creation error for $($PSItem.NewVMName): $_"
                   continue
               }
@@ -228,21 +208,35 @@ steps:
               # Attach data disks
               foreach ($disk in $newDataDisksFinal) {
                   try {
-                      Run-Command "az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($PSItem.NewVMName) --name $($disk.Id) --lun $($disk.Lun)"
-                      "$($PSItem.NewVMName),$($PSItem.SourceVMName),$($PSItem.SubnetName),$($PSItem.VMSize),$privateIp,$($disk.Id),$($disk.Lun)" | Out-File -FilePath $CsvFile -Append
+                      az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($PSItem.NewVMName) --name $($disk.Id) --lun $($disk.Lun)
                   } catch {
                       Log-Error "Failed to attach disk $($disk.Id) to $($PSItem.NewVMName): $_"
                   }
               }
 
-              # Start the VM after all disks are attached
+              # Delete OS snapshot after VM and disks are created
+              if ($osSnapId) {
+                  az snapshot delete --ids $osSnapId
+              }
+
+              # Delete data disk snapshots after VM and disks are created
+              $snapNamePattern = "$($PSItem.NewVMName)-data"
+              $dataSnapIdsRaw = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name, '$snapNamePattern')].id" -o tsv
+              if ($dataSnapIdsRaw -and $dataSnapIdsRaw.Trim() -ne "") {
+                  $dataSnapIds = $dataSnapIdsRaw -split "`r?`n"
+                  foreach ($snapId in $dataSnapIds) {
+                      if ($snapId -and $snapId.Trim() -ne "") {
+                          az snapshot delete --ids $snapId
+                      }
+                  }
+              }
+
+              # Start the VM after all disks are attached and snapshots are deleted
               try {
-                  Run-Command "az vm start -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName)"
+                  az vm start -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName)
               } catch {
                   Log-Error "Failed to start VM $($PSItem.NewVMName): $_"
               }
-
-              "[$(Get-Date -Format o)] VM clone completed: $($PSItem.NewVMName)" | Tee-Object -FilePath $LogFile -Append
           } catch {
               Log-Error "❌ Failed cloning $($PSItem.SourceVMName): $_"
               continue
@@ -255,11 +249,3 @@ steps:
       } else {
         Write-Host "All VM cloning tasks completed successfully."
       }
-
-# ------------------- Publish Summary as Artifact -------------------
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish VM Clone Summary Artifact'
-  inputs:
-    PathtoPublish: 'C:\vm-to-clone\vm_clone_summary.csv'
-    ArtifactName: 'VMCloneSummary'
-    publishLocation: 'Container'
