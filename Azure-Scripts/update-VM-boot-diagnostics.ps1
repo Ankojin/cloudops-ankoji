@@ -1,8 +1,8 @@
 # Connect to Azure
-Connect-AzAccount
+#Connect-AzAccount
 
 # Select your subscription (replace with your Subscription ID)
-$SubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
+$SubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
 Select-AzSubscription -SubscriptionId $SubscriptionId
 
 # Set the desired storage account for boot diagnostics (replace with your Storage Account name and Resource Group)
