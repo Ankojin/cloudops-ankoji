@@ -1,14 +1,14 @@
 # ---------------------------- CONFIGURATION ----------------------------
-$sourceSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
-$targetSubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
-$sourceResourceGroup = "bab-sit-mub-swec-rg-01"
-$targetResourceGroup = "bab-dev-mub-swec-rg-01"
+$sourceSubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
+$targetSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
+$sourceResourceGroup = "dev-sde-swec-rg-01"
+$targetResourceGroup = "sit-sde-swec-rg-01"
 $location = "swedencentral"
-$vnetrg  = "bab-dev-nw-swec-rg-01"
-$vnetName = "bab-dev-nw-swec-vnet-nonpci-01"
-$vmSize = "Standard_D2ls_v5"
-$nsgrg = "bab-dev-shp-swec-rg-01"
-$nsgName = "test-ad-join-nsg"
+$vnetrg  = "bab-sit-nw-swec-rg-01"
+$vnetName = "bab-sit-nw-swec-vnet-nonpci-01"
+$vmSize = "Standard_D4ls_v5"
+$nsgrg = "bab-sit-nw-swec-rg-01"
+$nsgName = "ad-join-deny"
 $csvPath = "C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\VM-Clone\vms-to-clone.csv"
 
 # CSV columns: SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
@@ -166,8 +166,8 @@ foreach ($vm in $vmsToClone) {
     }
 
     # ---------------------------- ENABLE BOOT DIAGNOSTICS ----------------------------
-    $bootDiagStorageAccountName = "babdevvmbootdiag02"
-    $bootdiagstracctrg = "bab-dev-vm-boot-diag-swec-rg-01"
+    $bootDiagStorageAccountName = "babsitvmbootdiag02"
+    $bootdiagstracctrg = "bab-sit-vm-boot-diag-swec-rg-01"
     $bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName $bootdiagstracctrg -Name $bootDiagStorageAccountName
 
     if (-not $bootDiagStorageAccount) {

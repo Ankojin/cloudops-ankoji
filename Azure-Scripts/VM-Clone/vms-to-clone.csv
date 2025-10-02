@@ -1,2 +1,2 @@
 ﻿SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
-DARECDBORILV1-test,DARECDBORILV1,10.189.67.145,snet-sit-nonpci-db-02,Standard_D2s_v5
+DASDEDBSQDWV1,DASDESDBSQSWV1,10.189.66.198,snet-sit-nonpci-db-01,Standard_D4ls_v5
