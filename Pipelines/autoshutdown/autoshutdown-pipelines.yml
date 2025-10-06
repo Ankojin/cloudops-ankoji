@@ -40,17 +40,24 @@ jobs:
   # =============================
   - ${{ if eq(parameters.subscriptionName, 'BAB_DEV') }}:
     - script: |
-        echo ##vso[task.setvariable variable=subscription_id]$(BAB_DEV_SUBSCRIPTION_ID:"=%)
+        REM Assign and clean subscription ID in CMD
+        set "tmp=%BAB_DEV_SUBSCRIPTION_ID%"
+        set tmp=%tmp:"=%
+        echo ##vso[task.setvariable variable=subscription_id]%tmp%
       displayName: 'Set Subscription ID for BAB_DEV (clean)'
 
   - ${{ if eq(parameters.subscriptionName, 'BAB_SIT') }}:
     - script: |
-        echo ##vso[task.setvariable variable=subscription_id]$(BAB_SIT_SUBSCRIPTION_ID:"=%)
+        set "tmp=%BAB_SIT_SUBSCRIPTION_ID%"
+        set tmp=%tmp:"=%
+        echo ##vso[task.setvariable variable=subscription_id]%tmp%
       displayName: 'Set Subscription ID for BAB_SIT (clean)'
 
   - ${{ if eq(parameters.subscriptionName, 'BAB_CORE') }}:
     - script: |
-        echo ##vso[task.setvariable variable=subscription_id]$(BAB_CORE_SUBSCRIPTION_ID:"=%)
+        set "tmp=%BAB_CORE_SUBSCRIPTION_ID%"
+        set tmp=%tmp:"=%
+        echo ##vso[task.setvariable variable=subscription_id]%tmp%
       displayName: 'Set Subscription ID for BAB_CORE (clean)'
 
   # =============================
