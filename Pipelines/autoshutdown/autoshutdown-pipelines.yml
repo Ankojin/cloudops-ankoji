@@ -50,11 +50,13 @@ jobs:
     - script: echo "##vso[task.setvariable variable=subscription_id]$(BAB_CORE_SUBSCRIPTION_ID)"
       displayName: 'Set Subscription ID for BAB_CORE'
 
+  #=============================
+  # 🔹 Debug Subscription ID (alternate)
   # =============================
-  # 🔹 Debug Subscription ID
-  # =============================
-  - script: echo "Selected Subscription ID: $(subscription_id)"
-    displayName: 'Debug Subscription ID'
+  - script: |
+      echo $(subscription_id) > subid.txt
+      type subid.txt
+    displayName: 'Debug Subscription ID (alternate)'
 
   # =============================
   # 🔹 Terraform Install
