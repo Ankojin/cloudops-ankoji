@@ -34,13 +34,6 @@ jobs:
   pool:
     name: cloudops-agent
 
-  # ✅ Job-level env — applies to ALL steps in this job
-  env:
-    ARM_CLIENT_ID: $(ARM_CLIENT_ID)
-    ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
-    ARM_TENANT_ID: $(ARM_TENANT_ID)
-    ARM_SUBSCRIPTION_ID: $(subscription_id)
-
   steps:
   # =============================
   # 🔹 Select Subscription
@@ -70,6 +63,11 @@ jobs:
   - script: terraform init
     displayName: 'Terraform Init'
     workingDirectory: Pipelines/autoshutdown
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      ARM_SUBSCRIPTION_ID: $(subscription_id)
 
   # =============================
   # 🔹 Terraform Validate
@@ -77,6 +75,11 @@ jobs:
   - script: terraform validate
     displayName: 'Terraform Validate'
     workingDirectory: Pipelines/autoshutdown
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      ARM_SUBSCRIPTION_ID: $(subscription_id)
 
   # =============================
   # 🔹 Terraform Plan
@@ -92,6 +95,11 @@ jobs:
         -var="time_zone=${{ parameters.time_zone }}"
     displayName: 'Terraform Plan'
     workingDirectory: Pipelines/autoshutdown
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      ARM_SUBSCRIPTION_ID: $(subscription_id)
 
   # =============================
   # 🔹 Terraform Apply
@@ -99,3 +107,8 @@ jobs:
   - script: terraform apply -auto-approve tfplan
     displayName: 'Terraform Apply'
     workingDirectory: Pipelines/autoshutdown
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      ARM_SUBSCRIPTION_ID: $(subscription_id)
