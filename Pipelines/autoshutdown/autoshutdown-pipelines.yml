@@ -4,10 +4,10 @@ pool:
   name: cloudops-agent
 
 parameters:
-  - name: subscription_id
-    displayName: 'Azure Subscription ID'
+  - name: subscriptionName
+    displayName: 'Source Subscription (BAB_DEV, BAB_SIT, BAB_CORE)'
     type: string
-    default: '<your-default-subscription-id>'
+    default: 'BAB_DEV'
   - name: resource_group_name
     displayName: 'Resource Group Name'
     type: string
@@ -23,6 +23,7 @@ parameters:
 
 variables:
 - group: TerraformVariables
+- group: cloud-subs
 
 steps:
 - task: TerraformInstaller@0
