@@ -7,9 +7,11 @@ parameters:
   - name: subscription_id
     displayName: 'Azure Subscription ID'
     type: string
+    default: '<your-default-subscription-id>'
   - name: resource_group_name
     displayName: 'Resource Group Name'
     type: string
+    default: '<your-default-resource-group>'
   - name: shutdown_time
     displayName: 'Shutdown Time (HHmm)'
     type: string
