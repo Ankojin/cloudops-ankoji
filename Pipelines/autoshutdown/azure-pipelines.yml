@@ -1,0 +1,48 @@
+trigger: none
+
+pool:
+  name: cloudops-agent
+
+parameters:
+  - name: subscription_id
+    displayName: 'Azure Subscription ID'
+    type: string
+  - name: resource_group_name
+    displayName: 'Resource Group Name'
+    type: string
+  - name: shutdown_time
+    displayName: 'Shutdown Time (HHmm)'
+    type: string
+    default: '2000'
+  - name: time_zone
+    displayName: 'Time Zone'
+    type: string
+    default: 'Arab Standard Time'
+
+variables:
+- group: TerraformVariables
+
+steps:
+- task: TerraformInstaller@0
+  inputs:
+    terraformVersion: 'latest'
+
+- script: |
+    terraform init
+  displayName: 'Terraform Init'
+
+- script: |
+    terraform validate
+  displayName: 'Terraform Validate'
+
+- script: |
+    terraform plan -out=tfplan \
+      -var="subscription_id=${{ parameters.subscription_id }}" \
+      -var="resource_group_name=${{ parameters.resource_group_name }}" \
+      -var="shutdown_time=${{ parameters.shutdown_time }}" \
+      -var="time_zone=${{ parameters.time_zone }}"
+  displayName: 'Terraform Plan'
+
+- script: |
+    terraform apply -auto-approve tfplan
+  displayName: 'Terraform Apply'
