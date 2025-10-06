@@ -28,71 +28,74 @@ variables:
 - group: TerraformVariables
 - group: cloud-subs
 
-# =============================
-# 🌍 GLOBAL ENV FOR TERRAFORM
-# =============================
-# These variables will be inherited by all Terraform steps
-env:
-  ARM_CLIENT_ID: $(ARM_CLIENT_ID)
-  ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
-  ARM_TENANT_ID: $(ARM_TENANT_ID)
-  ARM_SUBSCRIPTION_ID: $(subscription_id)
+jobs:
+- job: TerraformAutoShutdown
+  displayName: "Terraform Apply Auto-Shutdown"
+  pool:
+    name: cloudops-agent
 
-steps:
-# =============================
-# 🔹 Select Subscription
-# =============================
-- ${{ if eq(parameters.subscriptionName, 'BAB_DEV') }}:
-  - script: echo "##vso[task.setvariable variable=subscription_id]$(BAB_DEV_SUBSCRIPTION_ID)"
-    displayName: 'Set Subscription ID for BAB_DEV'
+  # ✅ Job-level env — applies to ALL steps in this job
+  env:
+    ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+    ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+    ARM_TENANT_ID: $(ARM_TENANT_ID)
+    ARM_SUBSCRIPTION_ID: $(subscription_id)
 
-- ${{ if eq(parameters.subscriptionName, 'BAB_SIT') }}:
-  - script: echo "##vso[task.setvariable variable=subscription_id]$(BAB_SIT_SUBSCRIPTION_ID)"
-    displayName: 'Set Subscription ID for BAB_SIT'
+  steps:
+  # =============================
+  # 🔹 Select Subscription
+  # =============================
+  - ${{ if eq(parameters.subscriptionName, 'BAB_DEV') }}:
+    - script: echo "##vso[task.setvariable variable=subscription_id]$(BAB_DEV_SUBSCRIPTION_ID)"
+      displayName: 'Set Subscription ID for BAB_DEV'
 
-- ${{ if eq(parameters.subscriptionName, 'BAB_CORE') }}:
-  - script: echo "##vso[task.setvariable variable=subscription_id]$(BAB_CORE_SUBSCRIPTION_ID)"
-    displayName: 'Set Subscription ID for BAB_CORE'
+  - ${{ if eq(parameters.subscriptionName, 'BAB_SIT') }}:
+    - script: echo "##vso[task.setvariable variable=subscription_id]$(BAB_SIT_SUBSCRIPTION_ID)"
+      displayName: 'Set Subscription ID for BAB_SIT'
 
-# =============================
-# 🔹 Terraform Install
-# =============================
-- task: TerraformInstaller@0
-  inputs:
-    terraformVersion: 'latest'
+  - ${{ if eq(parameters.subscriptionName, 'BAB_CORE') }}:
+    - script: echo "##vso[task.setvariable variable=subscription_id]$(BAB_CORE_SUBSCRIPTION_ID)"
+      displayName: 'Set Subscription ID for BAB_CORE'
 
-# =============================
-# 🔹 Terraform Init
-# =============================
-- script: terraform init
-  displayName: 'Terraform Init'
-  workingDirectory: Pipelines/autoshutdown
+  # =============================
+  # 🔹 Terraform Install
+  # =============================
+  - task: TerraformInstaller@0
+    inputs:
+      terraformVersion: 'latest'
 
-# =============================
-# 🔹 Terraform Validate
-# =============================
-- script: terraform validate
-  displayName: 'Terraform Validate'
-  workingDirectory: Pipelines/autoshutdown
+  # =============================
+  # 🔹 Terraform Init
+  # =============================
+  - script: terraform init
+    displayName: 'Terraform Init'
+    workingDirectory: Pipelines/autoshutdown
 
-# =============================
-# 🔹 Terraform Plan
-# =============================
-- script: |
-    terraform plan -out=tfplan `
-      -var="subscription_id=$(subscription_id)" `
-      -var="tenant_id=$(ARM_TENANT_ID)" `
-      -var="client_id=$(ARM_CLIENT_ID)" `
-      -var="client_secret=$(ARM_CLIENT_SECRET)" `
-      -var="resource_group_name=${{ parameters.resource_group_name }}" `
-      -var="shutdown_time=${{ parameters.shutdown_time }}" `
-      -var="time_zone=${{ parameters.time_zone }}"
-  displayName: 'Terraform Plan'
-  workingDirectory: Pipelines/autoshutdown
+  # =============================
+  # 🔹 Terraform Validate
+  # =============================
+  - script: terraform validate
+    displayName: 'Terraform Validate'
+    workingDirectory: Pipelines/autoshutdown
 
-# =============================
-# 🔹 Terraform Apply
-# =============================
-- script: terraform apply -auto-approve tfplan
-  displayName: 'Terraform Apply'
-  workingDirectory: Pipelines/autoshutdown
+  # =============================
+  # 🔹 Terraform Plan
+  # =============================
+  - script: |
+      terraform plan -out=tfplan `
+        -var="subscription_id=$(subscription_id)" `
+        -var="tenant_id=$(ARM_TENANT_ID)" `
+        -var="client_id=$(ARM_CLIENT_ID)" `
+        -var="client_secret=$(ARM_CLIENT_SECRET)" `
+        -var="resource_group_name=${{ parameters.resource_group_name }}" `
+        -var="shutdown_time=${{ parameters.shutdown_time }}" `
+        -var="time_zone=${{ parameters.time_zone }}"
+    displayName: 'Terraform Plan'
+    workingDirectory: Pipelines/autoshutdown
+
+  # =============================
+  # 🔹 Terraform Apply
+  # =============================
+  - script: terraform apply -auto-approve tfplan
+    displayName: 'Terraform Apply'
+    workingDirectory: Pipelines/autoshutdown
