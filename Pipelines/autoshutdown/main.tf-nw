@@ -8,34 +8,13 @@ terraform {
 }
 
 provider "azurerm" {
-  features {}
-
-  subscription_id = var.subscription_id
-  tenant_id       = var.tenant_id
-  client_id       = var.client_id
-  client_secret   = var.client_secret
+  features {}  # Azure VM Auto-Shutdown Terraform Module
+  
 }
 
-# ===== Variables =====
 variable "subscription_id" {
   description = "Azure Subscription ID"
   type        = string
-}
-
-variable "tenant_id" {
-  description = "Azure Tenant ID"
-  type        = string
-}
-
-variable "client_id" {
-  description = "Service Principal Client ID"
-  type        = string
-}
-
-variable "client_secret" {
-  description = "Service Principal Client Secret"
-  type        = string
-  sensitive   = true
 }
 
 variable "resource_group_name" {
@@ -55,7 +34,7 @@ variable "time_zone" {
   default     = "Arab Standard Time"
 }
 
-# ===== Data: Fetch all VMs in RG =====
+# Fetch all DevTest Lab VMs in the RG
 data "azurerm_resources" "vms_in_rg" {
   resource_group_name = var.resource_group_name
   type                = "Microsoft.Compute/virtualMachines"
@@ -65,29 +44,23 @@ locals {
   vm_names = [for vm in data.azurerm_resources.vms_in_rg.resources : vm.name]
 }
 
+# Map each VM to azurerm_virtual_machine data source
 data "azurerm_virtual_machine" "vm" {
   for_each            = toset(local.vm_names)
   name                = each.value
   resource_group_name = var.resource_group_name
 }
 
-# ===== Resource: Enable Auto-shutdown =====
+# Enable Auto-shutdown on all VMs
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "shutdown" {
-  for_each              = data.azurerm_virtual_machine.vm
-  virtual_machine_id    = each.value.id
-  location              = each.value.location
-  enabled               = true
+  for_each           = data.azurerm_virtual_machine.vm
+  virtual_machine_id = each.value.id
+  location           = each.value.location
+  enabled            = true
   daily_recurrence_time = var.shutdown_time
-  timezone              = var.time_zone
+  timezone           = var.time_zone
 
   notification_settings {
     enabled = false
   }
-}
-# --------------------------
-# Outputs
-# --------------------------
-output "configured_vms" {
-  description = "VMs that have been configured for auto-shutdown"
-  value       = [for vm in data.azurerm_virtual_machine.vm : vm.name]
 }
