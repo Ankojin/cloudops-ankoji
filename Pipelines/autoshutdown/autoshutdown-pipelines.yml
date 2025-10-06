@@ -29,22 +29,18 @@ steps:
   inputs:
     terraformVersion: 'latest'
 
-- script: |
-    terraform init
+- script: terraform init
   displayName: 'Terraform Init'
+  workingDirectory: Pipelines/autoshutdown
 
-- script: |
-    terraform validate
+- script: terraform validate
   displayName: 'Terraform Validate'
+  workingDirectory: Pipelines/autoshutdown
 
-- script: |
-    terraform plan -out=tfplan \
-      -var="subscription_id=${{ parameters.subscription_id }}" \
-      -var="resource_group_name=${{ parameters.resource_group_name }}" \
-      -var="shutdown_time=${{ parameters.shutdown_time }}" \
-      -var="time_zone=${{ parameters.time_zone }}"
+- script: terraform plan -out=tfplan -var="subscription_id=${{ parameters.subscription_id }}" -var="resource_group_name=${{ parameters.resource_group_name }}" -var="shutdown_time=${{ parameters.shutdown_time }}" -var="time_zone=${{ parameters.time_zone }}"
   displayName: 'Terraform Plan'
+  workingDirectory: Pipelines/autoshutdown
 
-- script: |
-    terraform apply -auto-approve tfplan
+- script: terraform apply -auto-approve tfplan
   displayName: 'Terraform Apply'
+  workingDirectory: Pipelines/autoshutdown
