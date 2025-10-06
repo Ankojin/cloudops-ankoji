@@ -51,6 +51,12 @@ jobs:
       displayName: 'Set Subscription ID for BAB_CORE'
 
   # =============================
+  # 🔹 Debug Subscription ID
+  # =============================
+  - script: echo "Selected Subscription ID: $(subscription_id)"
+    displayName: 'Debug Subscription ID'
+
+  # =============================
   # 🔹 Terraform Install
   # =============================
   - task: TerraformInstaller@0
