@@ -54,6 +54,7 @@ jobs:
   # 🔹 Debug Subscription ID (alternate)
   # =============================
   - script: |
+      echo Selected Subscription ID: $(subscription_id)
       echo $(subscription_id) > subid.txt
       type subid.txt
     displayName: 'Debug Subscription ID (alternate)'
