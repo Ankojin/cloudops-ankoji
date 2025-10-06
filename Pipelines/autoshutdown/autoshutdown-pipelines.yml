@@ -46,10 +46,10 @@ steps:
     terraformVersion: 'latest'
 
 # --- Terraform Commands with Global Environment ---
-- job: Terraform_AutoShutdown
-  displayName: "Terraform - Enable Auto Shutdown"
-  pool:
-    name: cloudops-agent
+# - job: Terraform_AutoShutdown
+#   displayName: "Terraform - Enable Auto Shutdown"
+  # pool:
+  #   name: cloudops-agent
 
   # env:
   #   ARM_CLIENT_ID: $(ARM_CLIENT_ID)
