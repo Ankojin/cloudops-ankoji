@@ -30,7 +30,7 @@ variables:
 
 jobs:
 - job: TerraformAutoShutdown
-  displayName: "Terraform Apply Auto-Shutdown"
+  displayName: "Terraform Apply Azure VM Auto-Shutdown"
   pool:
     name: cloudops-agent
 
@@ -84,15 +84,7 @@ jobs:
   # =============================
   # 🔹 Terraform Plan
   # =============================
-  - script: |
-      terraform plan -out=tfplan ^
-        -var="subscription_id=$(subscription_id)" ^
-        -var="tenant_id=$(ARM_TENANT_ID)" ^
-        -var="client_id=$(ARM_CLIENT_ID)" ^
-        -var="client_secret=$(ARM_CLIENT_SECRET)" ^
-        -var="resource_group_name=${{ parameters.resource_group_name }}" ^
-        -var="shutdown_time=${{ parameters.shutdown_time }}" ^
-        -var="time_zone=${{ parameters.time_zone }}"
+  - script: terraform plan -out=tfplan -var="subscription_id=$(subscription_id)" -var="tenant_id=$(ARM_TENANT_ID)" -var="client_id=$(ARM_CLIENT_ID)" -var="client_secret=$(ARM_CLIENT_SECRET)" -var="resource_group_name=${{ parameters.resource_group_name }}" -var="shutdown_time=${{ parameters.shutdown_time }}" -var="time_zone=${{ parameters.time_zone }}"
     displayName: 'Terraform Plan'
     workingDirectory: Pipelines/autoshutdown
     env:
