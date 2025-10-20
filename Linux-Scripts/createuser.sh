@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # List of users to create
-USERS=("mohnaz-b" "mahsha-b" "abdanw-b")
+USERS=("mqadmin")
 
 # Default password for all users (change in production!)
 DEFAULT_PASS="ChangeMe123"

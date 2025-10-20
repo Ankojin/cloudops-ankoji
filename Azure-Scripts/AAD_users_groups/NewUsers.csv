@@ -1,0 +1,2 @@
+DisplayName,UserPrincipalName,MailNickname,Password,Groups
+John Doe,john.doe@yourdomain.com,john.doe,P@ssw0rd123!,"Finance;HR"

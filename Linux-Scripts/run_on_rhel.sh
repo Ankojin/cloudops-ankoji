@@ -3,7 +3,7 @@
 read -s -p "Enter SSH password: " PASSWORD
 echo
 
-USERNAME="azureadmin"
+USERNAME="Azureadmin"
 
 for HOST in $(cat servers.txt); do
     echo "====== $HOST ======"
