@@ -1,0 +1,79 @@
+trigger: none
+
+pool:
+  name: cloudops-agent
+
+variables:
+- group: cloud-subs
+
+parameters:
+  - name: subscriptionName
+    displayName: 'Azure Subscription (BAB_DEV/BAB_SIT)'
+    type: string
+    default: 'BAB_DEV'
+
+  - name: logicAppPrefix
+    displayName: 'Logic App Prefix (AppName_Env, e.g., ststv2_MUB-dev)'
+    type: string
+    default: 'ststv2_MUB-dev'
+
+  - name: DB_ResourceGroup
+    displayName: 'DB Resource Group'
+    type: string
+    default: 'bab-dev-mub-swec-rg-01'
+
+  - name: DB_VMNames
+    displayName: 'DB VM Names (comma-separated)'
+    type: string
+    default: 'DAMUDBV01'
+
+  - name: APPWEB_ResourceGroup
+    displayName: 'App/Web Resource Group'
+    type: string
+    default: 'bab-dev-mub-swec-rg-01'
+
+  - name: APPWEB_VMNames
+    displayName: 'App/Web VM Names (comma-separated)'
+    type: string
+    default: 'DAMUWV01,DAMUWEB01'
+
+steps:
+- task: AzureCLI@2
+  displayName: 'Deploy DB Logic App (Start/Stop)'
+  inputs:
+    azureSubscription: '${{ parameters.subscriptionName }}'
+    scriptType: 'ps'
+    scriptLocation: 'scriptPath'
+    scriptPath: 'Pipeline/Deploy-LogicApp.ps1'
+    arguments: >
+      -SubscriptionName "${{ parameters.subscriptionName }}"
+      -ResourceGroupName $(LOGICAPP_RG)
+      -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_db"
+      -Location $(LOCATION)
+      -DefinitionFile 'Pipeline/logicapp-startstop.json'
+      -VMResourceGroup "${{ parameters.DB_ResourceGroup }}"
+      -VMNames "${{ parameters.DB_VMNames }}"
+      -StartHour 7
+      -StartMinute 45
+      -StopHour 19
+      -StopMinute 0
+
+- task: AzureCLI@2
+  displayName: 'Deploy App/Web Logic App (Start/Stop)'
+  inputs:
+    azureSubscription: '${{ parameters.subscriptionName }}'
+    scriptType: 'ps'
+    scriptLocation: 'scriptPath'
+    scriptPath: 'Pipeline/Deploy-LogicApp.ps1'
+    arguments: >
+      -SubscriptionName "${{ parameters.subscriptionName }}"
+      -ResourceGroupName $(LOGICAPP_RG)
+      -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_appweb"
+      -Location $(LOCATION)
+      -DefinitionFile 'Pipeline/logicapp-startstop.json'
+      -VMResourceGroup "${{ parameters.APPWEB_ResourceGroup }}"
+      -VMNames "${{ parameters.APPWEB_VMNames }}"
+      -StartHour 8
+      -StartMinute 0
+      -StopHour 19
+      -StopMinute 15
