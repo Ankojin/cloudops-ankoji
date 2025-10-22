@@ -1,0 +1,45 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "ScheduledStartTriggers": {
+        "type": "Recurrence",
+        "recurrence": {
+          "frequency": "Week",
+          "interval": 1,
+          "schedule": {
+            "hours": [],
+            "minutes": [],
+            "weekDays": ["Sunday","Monday","Tuesday","Wednesday","Thursday"]
+          },
+          "timeZone": "Arab Standard Time"
+        }
+      }
+    },
+    "actions": {
+      "StartFunction": {
+        "type": "Scope",
+        "runAfter": {},
+        "actions": {
+          "ScheduledStartFunction": {
+            "type": "Function",
+            "inputs": {
+              "function": {
+                "id": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-auto-weeu-rg-01/providers/Microsoft.Web/sites/bab-core-azfuncapp-stspvm-weeu-01tzr4mnjfkd4ji/functions/Scheduled"
+              },
+              "body": {
+                "Action": "start",
+                "EnableClassic": false,
+                "RequestScopes": {
+                  "ExcludedVMLists": [],
+                  "VMLists": []
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

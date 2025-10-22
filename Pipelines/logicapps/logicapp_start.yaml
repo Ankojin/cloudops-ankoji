@@ -1,0 +1,126 @@
+trigger: none
+
+pool:
+  name: cloudops-agent
+
+variables:
+- group: cloud-subs
+
+parameters:
+  - name: subscriptionName
+    displayName: 'Azure Subscription (type BAB_DEV or BAB_SIT)'
+    type: string
+    default: 'BAB_DEV'
+    values:
+      - BAB_DEV
+      - BAB_SIT
+
+  - name: logicAppPrefix
+    displayName: 'Logic App Prefix (AppName_Env, e.g., BAB_AppName_Env)'
+    type: string
+    default: 'BAB_AppName_Env'
+
+  - name: DB_ResourceGroup
+    displayName: 'DB Resource Group (enter name or leave blank/enter none to skip)'
+    type: string
+    default: 'ResourceGroupNameHere'
+
+  - name: DB_VMNames
+    displayName: 'DB VM Names (comma-separated, enter as VMName1,VMName2 or leave blank/enter none to skip)'
+    type: string
+    default: 'VMName1,VMName2'
+
+  - name: APPWEB_ResourceGroup
+    displayName: 'App/Web Resource Group (enter name or leave blank/enter none to skip)'
+    type: string
+    default: 'ResourceGroupNameHere'
+
+  - name: APPWEB_VMNames
+    displayName: 'App/Web VM Names (comma-separated, enter as VMName1,VMName2 or leave blank/enter none to skip)'
+    type: string
+    default: 'VMName1,VMName2'
+
+  - name: LOGICAPP_SubscriptionName
+    displayName: 'BAB_CORE Logic App Subscription'
+    type: string
+    default: 'BAB_CORE'
+    values:
+      - BAB_CORE
+
+  - name: StartHour
+    displayName: 'Start Hour (0-23)'
+    type: number
+    default: 7
+
+  - name: StartMinute
+    displayName: 'Start Minute (0-59)'
+    type: number
+    default: 0
+
+steps:
+- powershell: |
+    $ErrorActionPreference = "Stop"
+    # Always use BAB_CORE for Logic App deployment
+    $subscriptionId = $env:BAB_CORE_SUBSCRIPTION_ID
+    az login --service-principal `
+        -u $env:AZURE_CLIENT_ID `
+        -p $env:AZURE_CLIENT_SECRET `
+        --tenant $env:AZURE_TENANT_ID
+    az account set --subscription $subscriptionId
+    Write-Host "[$(Get-Date -Format o)] Azure CLI login successful. Using subscription $subscriptionId"
+    Write-Host "##vso[task.setvariable variable=resolvedSubscriptionId]$subscriptionId"
+  displayName: 'Azure CLI Login (Always BAB_CORE)'
+  env:
+    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+    BAB_CORE_SUBSCRIPTION_ID: $(BAB_CORE_SUBSCRIPTION_ID)
+
+- powershell: |
+    $ErrorActionPreference = "Stop"
+    if ("${{ parameters.subscriptionName }}" -eq "BAB_DEV") {
+      Write-Host "##vso[task.setvariable variable=vmSubscriptionId]$env:BAB_DEV_SUBSCRIPTION_ID"
+    } elseif ("${{ parameters.subscriptionName }}" -eq "BAB_SIT") {
+      Write-Host "##vso[task.setvariable variable=vmSubscriptionId]$env:BAB_SIT_SUBSCRIPTION_ID"
+    } else {
+      Write-Error "Invalid subscription: ${{ parameters.subscriptionName }}"
+      exit 1
+    }
+  displayName: 'Set VM Subscription ID'
+  env:
+    BAB_DEV_SUBSCRIPTION_ID: $(BAB_DEV_SUBSCRIPTION_ID)
+    BAB_SIT_SUBSCRIPTION_ID: $(BAB_SIT_SUBSCRIPTION_ID)
+
+- ${{ if and(ne(parameters.DB_VMNames, ''), ne(parameters.DB_VMNames, 'none'), ne(parameters.DB_ResourceGroup, ''), ne(parameters.DB_ResourceGroup, 'none')) }}:
+  - task: PowerShell@2
+    displayName: 'Deploy DB Logic App to (Start Only)'
+    inputs:
+      targetType: 'filePath'
+      filePath: 'Pipelines/logicapps/Deploy-LogicApp_start.ps1'
+      arguments: >
+        -SubscriptionId "$(resolvedSubscriptionId)"
+        -ResourceGroupName "bab-core-auto-weeu-rg-01"
+        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_start_db"
+        -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
+        -VMResourceGroup "${{ parameters.DB_ResourceGroup }}"
+        -VMNames "${{ parameters.DB_VMNames }}"
+        -VMSubscriptionId "$(vmSubscriptionId)"
+        -StartHour ${{ parameters.StartHour }}
+        -StartMinute ${{ parameters.StartMinute }}
+
+- ${{ if and(ne(parameters.APPWEB_VMNames, ''), ne(parameters.APPWEB_VMNames, 'none'), ne(parameters.APPWEB_ResourceGroup, ''), ne(parameters.APPWEB_ResourceGroup, 'none')) }}:
+  - task: PowerShell@2
+    displayName: 'Deploy App/Web Logic App to (Start Only)'
+    inputs:
+      targetType: 'filePath'
+      filePath: 'Pipelines/logicapps/Deploy-LogicApp_start.ps1'
+      arguments: >
+        -SubscriptionId "$(resolvedSubscriptionId)"
+        -ResourceGroupName "bab-core-auto-weeu-rg-01"
+        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_start_appweb"
+        -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
+        -VMResourceGroup "${{ parameters.APPWEB_ResourceGroup }}"
+        -VMNames "${{ parameters.APPWEB_VMNames }}"
+        -VMSubscriptionId "$(vmSubscriptionId)"
+        -StartHour ${{ parameters.StartHour }}
+        -StartMinute ${{ parameters.StartMinute }}
