@@ -40,45 +40,73 @@ parameters:
     type: string
     default: 'VMName1,VMName2'
 
+  - name: LOGICAPP_SubscriptionName
+    displayName: 'BAB_CORE Logic App Subscription'
+    type: string
+    default: 'BAB_CORE'
+    values:
+      - BAB_CORE
+
 steps:
 - powershell: |
     $ErrorActionPreference = "Stop"
-     "[$(Get-Date -Format o)] Logging into Azure CLI with service principal..."
-      if ('${{ parameters.subscriptionName }}' -eq 'BAB_DEV') {
-        $subscriptionId = $env:BAB_DEV_SUBSCRIPTION_ID
-      } elseif ('${{ parameters.subscriptionName }}' -eq 'BAB_SIT') {
-        $subscriptionId = $env:BAB_SIT_SUBSCRIPTION_ID
-      } else {
-        "[$(Get-Date -Format o)] Invalid subscription: ${{ parameters.subscriptionName }}" 
-        Write-Error "Invalid subscription: ${{ parameters.subscriptionName }}"
-        exit 1
-      }
+    "[$(Get-Date -Format o)] Logging into Azure CLI with service principal..."
+    if ("${{ parameters.subscriptionName }}" -eq "BAB_DEV") {
+      $subscriptionId = $env:BAB_DEV_SUBSCRIPTION_ID
+    } elseif ("${{ parameters.subscriptionName }}" -eq "BAB_SIT") {
+      $subscriptionId = $env:BAB_SIT_SUBSCRIPTION_ID
+    } elseif ("${{ parameters.LOGICAPP_SubscriptionName }}" -eq "BAB_CORE") {
+      $subscriptionId = $env:BAB_CORE_SUBSCRIPTION_ID
+    } else {
+      Write-Error "Invalid subscription: ${{ parameters.subscriptionName }}"
+      exit 1
+    }
     az login --service-principal `
         -u $env:AZURE_CLIENT_ID `
         -p $env:AZURE_CLIENT_SECRET `
         --tenant $env:AZURE_TENANT_ID
     az account set --subscription $subscriptionId
     Write-Host "[$(Get-Date -Format o)] Azure CLI login successful. Using subscription $subscriptionId"
+    Write-Host "##vso[task.setvariable variable=resolvedSubscriptionId]$subscriptionId"
   displayName: 'Azure CLI Login'
   env:
     AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
     AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
     AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+    BAB_DEV_SUBSCRIPTION_ID: $(BAB_DEV_SUBSCRIPTION_ID)
+    BAB_SIT_SUBSCRIPTION_ID: $(BAB_SIT_SUBSCRIPTION_ID)
+    BAB_CORE_SUBSCRIPTION_ID: $(BAB_CORE_SUBSCRIPTION_ID)
+
+- powershell: |
+    $ErrorActionPreference = "Stop"
+    if ("${{ parameters.subscriptionName }}" -eq "BAB_DEV") {
+      Write-Host "##vso[task.setvariable variable=vmSubscriptionId]$env:BAB_DEV_SUBSCRIPTION_ID"
+    } elseif ("${{ parameters.subscriptionName }}" -eq "BAB_SIT") {
+      Write-Host "##vso[task.setvariable variable=vmSubscriptionId]$env:BAB_SIT_SUBSCRIPTION_ID"
+    } else {
+      Write-Error "Invalid subscription: ${{ parameters.subscriptionName }}"
+      exit 1
+    }
+  displayName: 'Set VM Subscription ID'
+  env:
+    BAB_DEV_SUBSCRIPTION_ID: $(BAB_DEV_SUBSCRIPTION_ID)
+    BAB_SIT_SUBSCRIPTION_ID: $(BAB_SIT_SUBSCRIPTION_ID)
 
 - ${{ if and(ne(parameters.DB_VMNames, ''), ne(parameters.DB_VMNames, 'none'), ne(parameters.DB_ResourceGroup, ''), ne(parameters.DB_ResourceGroup, 'none')) }}:
   - task: PowerShell@2
-    displayName: 'Deploy DB Logic App (Start/Stop)'
+    displayName: 'Deploy DB Logic App to (Start/Stop)'
     inputs:
       targetType: 'filePath'
       filePath: 'Pipelines/logicapps/Deploy-LogicApp.ps1'
       arguments: >
-        -SubscriptionId "$subscriptionId"
-        -ResourceGroupName $(LOGICAPP_RG)
+        -SubscriptionId "$(resolvedSubscriptionId)"
+        -ResourceGroupName "bab-core-auto-weeu-rg-01"
         -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_db"
         -Location $(LOCATION)
         -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json'
         -VMResourceGroup "${{ parameters.DB_ResourceGroup }}"
         -VMNames "${{ parameters.DB_VMNames }}"
+        -VMSubscriptionId "$(vmSubscriptionId)"
         -StartHour 7
         -StartMinute 45
         -StopHour 19
@@ -86,18 +114,19 @@ steps:
 
 - ${{ if and(ne(parameters.APPWEB_VMNames, ''), ne(parameters.APPWEB_VMNames, 'none'), ne(parameters.APPWEB_ResourceGroup, ''), ne(parameters.APPWEB_ResourceGroup, 'none')) }}:
   - task: PowerShell@2
-    displayName: 'Deploy App/Web Logic App (Start/Stop)'
+    displayName: 'Deploy App/Web Logic App to (Start/Stop)'
     inputs:
       targetType: 'filePath'
       filePath: 'Pipelines/logicapps/Deploy-LogicApp.ps1'
       arguments: >
-        -SubscriptionName "$subscriptionId"
-        -ResourceGroupName $(LOGICAPP_RG)
+        -SubscriptionId "$(resolvedSubscriptionId)"
+        -ResourceGroupName "bab-core-auto-weeu-rg-01"
         -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_appweb"
         -Location $(LOCATION)
         -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json'
         -VMResourceGroup "${{ parameters.APPWEB_ResourceGroup }}"
         -VMNames "${{ parameters.APPWEB_VMNames }}"
+        -VMSubscriptionId "$(vmSubscriptionId)"
         -StartHour 8
         -StartMinute 0
         -StopHour 19

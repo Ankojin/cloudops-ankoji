@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory=$true)][string]$DefinitionFile,
     [Parameter(Mandatory=$true)][string]$VMResourceGroup,
     [Parameter(Mandatory=$true)][string]$VMNames,
+    [Parameter(Mandatory=$true)][string]$VMSubscriptionId, # <-- Add this line
     [int]$StartHour = 8,
     [int]$StartMinute = 0,
     [int]$StopHour = 19,
@@ -28,12 +29,12 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($SubscriptionId)) {
 }
 Write-Host "Resolved Subscription ID: $SubscriptionId"
 
-# Build full VM Resource IDs - Fixed the bug here
+# Build full VM Resource IDs using VMSubscriptionId
 $vmArray = @()
 $vmList = $VMNames -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 
 foreach ($vm in $vmList) {
-    $vmResourceId = "/subscriptions/$SubscriptionId/resourceGroups/$VMResourceGroup/providers/Microsoft.Compute/virtualMachines/$vm"
+    $vmResourceId = "/subscriptions/$VMSubscriptionId/resourceGroups/$VMResourceGroup/providers/Microsoft.Compute/virtualMachines/$vm"
     $vmArray += $vmResourceId
 }
 
