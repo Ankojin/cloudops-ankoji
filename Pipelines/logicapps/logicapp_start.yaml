@@ -15,10 +15,10 @@ parameters:
       - BAB_DEV
       - BAB_SIT
 
-  - name: logicAppPrefix
-    displayName: 'Logic App Prefix (e.g., BAB_RG_Env)'
+  - name: logicAppNamePrefix
+    displayName: 'Logic App Name Prefix (e.g., bab_rg_env)'
     type: string
-    default: 'BAB_RG_Env'
+    default: 'Logic APP Name'
 
   # DB Logic App parameters
   - name: dbResourceGroup
@@ -112,7 +112,7 @@ steps:
       arguments: >
         -SubscriptionId "$(resolvedSubscriptionId)"
         -ResourceGroupName "bab-core-auto-weeu-rg-01"
-        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_db"
+        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_start_db"
         -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
         -VMResourceGroup "${{ parameters.dbResourceGroup }}"
         -VMNames "${{ parameters.dbVmNames }}"
@@ -130,7 +130,7 @@ steps:
       arguments: >
         -SubscriptionId "$(resolvedSubscriptionId)"
         -ResourceGroupName "bab-core-auto-weeu-rg-01"
-        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_appweb"
+        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_start_appweb"
         -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
         -VMResourceGroup "${{ parameters.appWebResourceGroup }}"
         -VMNames "${{ parameters.appWebVmNames }}"
