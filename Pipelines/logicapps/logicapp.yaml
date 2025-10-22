@@ -7,10 +7,14 @@ variables:
 - group: cloud-subs
 
 parameters:
-  - name: subscriptionName
-    displayName: 'Azure Subscription (BAB_DEV/BAB_SIT)'
+  - name: environment
+    displayName: 'Environment (dev/sit/prod)'
     type: string
-    default: 'BAB_DEV'
+    default: 'dev'
+    values:
+    - dev
+    - sit
+    - prod
 
   - name: logicAppPrefix
     displayName: 'Logic App Prefix (AppName_Env, e.g., ststv2_MUB-dev)'
@@ -41,16 +45,16 @@ steps:
 - task: AzureCLI@2
   displayName: 'Deploy DB Logic App (Start/Stop)'
   inputs:
-    azureSubscription: '${{ parameters.subscriptionName }}'
+    azureSubscription: '$(azureServiceConnection)' # Using variable from cloud-subs group
     scriptType: 'ps'
     scriptLocation: 'scriptPath'
-    scriptPath: 'Pipeline/Deploy-LogicApp.ps1'
+    scriptPath: 'Pipelines/logicapps/Deploy-LogicApp.ps1' # Fixed path
     arguments: >
-      -SubscriptionName "${{ parameters.subscriptionName }}"
+      -SubscriptionName "$(subscriptionName)"
       -ResourceGroupName $(LOGICAPP_RG)
       -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_db"
       -Location $(LOCATION)
-      -DefinitionFile 'Pipeline/logicapp-startstop.json'
+      -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json' # Fixed path
       -VMResourceGroup "${{ parameters.DB_ResourceGroup }}"
       -VMNames "${{ parameters.DB_VMNames }}"
       -StartHour 7
@@ -61,16 +65,16 @@ steps:
 - task: AzureCLI@2
   displayName: 'Deploy App/Web Logic App (Start/Stop)'
   inputs:
-    azureSubscription: '${{ parameters.subscriptionName }}'
+    azureSubscription: '$(azureServiceConnection)' # Using variable from cloud-subs group
     scriptType: 'ps'
     scriptLocation: 'scriptPath'
-    scriptPath: 'Pipeline/Deploy-LogicApp.ps1'
+    scriptPath: 'Pipelines/logicapps/Deploy-LogicApp.ps1' # Fixed path
     arguments: >
-      -SubscriptionName "${{ parameters.subscriptionName }}"
+      -SubscriptionName "$(subscriptionName)"
       -ResourceGroupName $(LOGICAPP_RG)
       -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_appweb"
       -Location $(LOCATION)
-      -DefinitionFile 'Pipeline/logicapp-startstop.json'
+      -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json' # Fixed path
       -VMResourceGroup "${{ parameters.APPWEB_ResourceGroup }}"
       -VMNames "${{ parameters.APPWEB_VMNames }}"
       -StartHour 8
