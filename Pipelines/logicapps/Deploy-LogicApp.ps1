@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory=$true)][string]$SubscriptionName,
+    [Parameter(Mandatory=$true)][string]$SubscriptionId,
     [Parameter(Mandatory=$true)][string]$ResourceGroupName,
     [Parameter(Mandatory=$true)][string]$LogicAppName,
     [Parameter(Mandatory=$true)][string]$Location,
@@ -13,8 +13,8 @@ param(
 )
 
 # Set Azure context
-Write-Host "Setting context to subscription: $SubscriptionName"
-$setContextResult = az account set --subscription "$SubscriptionName" --only-show-errors 2>&1
+Write-Host "Setting context to subscription: $SubscriptionId"
+$setContextResult = az account set --subscription "$SubscriptionId" --only-show-errors 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to set Azure context: $setContextResult"
     exit 1
