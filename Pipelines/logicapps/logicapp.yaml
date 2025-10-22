@@ -50,17 +50,8 @@ parameters:
 steps:
 - powershell: |
     $ErrorActionPreference = "Stop"
-    "[$(Get-Date -Format o)] Logging into Azure CLI with service principal..."
-    if ("${{ parameters.subscriptionName }}" -eq "BAB_DEV") {
-      $subscriptionId = $env:BAB_DEV_SUBSCRIPTION_ID
-    } elseif ("${{ parameters.subscriptionName }}" -eq "BAB_SIT") {
-      $subscriptionId = $env:BAB_SIT_SUBSCRIPTION_ID
-    } elseif ("${{ parameters.LOGICAPP_SubscriptionName }}" -eq "BAB_CORE") {
-      $subscriptionId = $env:BAB_CORE_SUBSCRIPTION_ID
-    } else {
-      Write-Error "Invalid subscription: ${{ parameters.subscriptionName }}"
-      exit 1
-    }
+    # Always use BAB_CORE for Logic App deployment
+    $subscriptionId = $env:BAB_CORE_SUBSCRIPTION_ID
     az login --service-principal `
         -u $env:AZURE_CLIENT_ID `
         -p $env:AZURE_CLIENT_SECRET `
@@ -68,13 +59,11 @@ steps:
     az account set --subscription $subscriptionId
     Write-Host "[$(Get-Date -Format o)] Azure CLI login successful. Using subscription $subscriptionId"
     Write-Host "##vso[task.setvariable variable=resolvedSubscriptionId]$subscriptionId"
-  displayName: 'Azure CLI Login'
+  displayName: 'Azure CLI Login (Always BAB_CORE)'
   env:
     AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
     AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
     AZURE_TENANT_ID: $(AZURE_TENANT_ID)
-    BAB_DEV_SUBSCRIPTION_ID: $(BAB_DEV_SUBSCRIPTION_ID)
-    BAB_SIT_SUBSCRIPTION_ID: $(BAB_SIT_SUBSCRIPTION_ID)
     BAB_CORE_SUBSCRIPTION_ID: $(BAB_CORE_SUBSCRIPTION_ID)
 
 - powershell: |

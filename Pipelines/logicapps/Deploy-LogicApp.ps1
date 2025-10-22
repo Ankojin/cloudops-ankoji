@@ -72,37 +72,23 @@ $definition.definition.triggers.StopTrigger.recurrence.schedule.minutes = @($Sto
 $definition.definition.actions.StartFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = $vmArray
 $definition.definition.actions.StopFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = $vmArray
 
-# Save temporary JSON file
-$tempFile = Join-Path $env:TEMP "temp-$($LogicAppName).json"
-try {
-    $definition | ConvertTo-Json -Depth 100 | Out-File $tempFile -Encoding utf8
-    Write-Host "Temporary Logic App definition saved to: $tempFile"
-} catch {
-    Write-Error "Failed to create temporary file: $_"
-    exit 1
-}
+# Save the updated definition to a temp file
+$tempDefFile = [System.IO.Path]::GetTempFileName().Replace('.tmp', "-$LogicAppName.json")
+$definition | ConvertTo-Json -Depth 100 | Out-File -Encoding utf8 $tempDefFile
+Write-Host "Temporary Logic App definition saved to: $tempDefFile"
 
-# Deploy Logic App
+# Deploy the Logic App using the temp file
 Write-Host "Deploying Logic App '$LogicAppName' in resource group '$ResourceGroupName'..."
 $deployResult = az logic workflow create `
-  --name $LogicAppName `
-  --resource-group $ResourceGroupName `
-  --location $Location `
-  --definition "@$tempFile" `
-  --subscription $SubscriptionId `
-  --only-show-errors 2>&1
+    --resource-group "$ResourceGroupName" `
+    --name "$LogicAppName" `
+    --location "$Location" `
+    --definition "@$tempDefFile" `
+    --only-show-errors 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to deploy Logic App: $deployResult"
-    # Clean up temp file
-    if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
     exit 1
-}
-
-# Clean up temp file
-if (Test-Path $tempFile) { 
-    Remove-Item $tempFile -Force 
-    Write-Host "Cleaned up temporary file"
 }
 
 Write-Host "✅ Logic App '$LogicAppName' deployed successfully."
