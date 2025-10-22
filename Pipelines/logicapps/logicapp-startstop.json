@@ -3,7 +3,7 @@
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
     "triggers": {
-      "ScheduledStart": {
+      "ScheduledStartTriggers": {
         "type": "Recurrence",
         "recurrence": {
           "frequency": "Week",
@@ -16,7 +16,7 @@
           "timeZone": "Arab Standard Time"
         }
       },
-      "ScheduledStop": {
+      "ScheduledStopTriggers": {
         "type": "Recurrence",
         "recurrence": {
           "frequency": "Week",
@@ -35,7 +35,7 @@
         "type": "Scope",
         "runAfter": {},
         "actions": {
-          "ScheduledStart": {
+          "ScheduledStartFunction": {
             "type": "Function",
             "inputs": {
               "function": {
@@ -57,7 +57,7 @@
         "type": "Scope",
         "runAfter": {},
         "actions": {
-          "ScheduledStop": {
+          "ScheduledStopFunction": {
             "type": "Function",
             "inputs": {
               "function": {
