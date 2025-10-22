@@ -9,8 +9,8 @@
           "frequency": "Week",
           "interval": 1,
           "schedule": {
-            "hours": [8],
-            "minutes": [0],
+            "hours": [],
+            "minutes": [],
             "weekDays": ["Sunday","Monday","Tuesday","Wednesday","Thursday"]
           },
           "timeZone": "Arab Standard Time"
@@ -22,8 +22,8 @@
           "frequency": "Week",
           "interval": 1,
           "schedule": {
-            "hours": [19],
-            "minutes": [0],
+            "hours": [],
+            "minutes": [],
             "weekDays": ["Sunday","Monday","Tuesday","Wednesday","Thursday"]
           },
           "timeZone": "Arab Standard Time"

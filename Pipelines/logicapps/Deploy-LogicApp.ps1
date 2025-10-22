@@ -63,10 +63,10 @@ try {
 }
 
 # Update start/stop schedules
-$definition.definition.triggers.StartTrigger.recurrence.schedule.hours = @($StartHour)
-$definition.definition.triggers.StartTrigger.recurrence.schedule.minutes = @($StartMinute)
-$definition.definition.triggers.StopTrigger.recurrence.schedule.hours = @($StopHour)
-$definition.definition.triggers.StopTrigger.recurrence.schedule.minutes = @($StopMinute)
+$definition.definition.triggers.ScheduledStart.recurrence.schedule.hours = @($StartHour)
+$definition.definition.triggers.ScheduledStart.recurrence.schedule.minutes = @($StartMinute)
+$definition.definition.triggers.ScheduledStop.recurrence.schedule.hours = @($StopHour)
+$definition.definition.triggers.ScheduledStop.recurrence.schedule.minutes = @($StopMinute)
 
 # Inject VM lists
 $definition.definition.actions.StartFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = $vmArray
