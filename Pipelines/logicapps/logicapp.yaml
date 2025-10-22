@@ -21,7 +21,7 @@ parameters:
     default: 'ststv2_AppName_Env'
 
   - name: DB_ResourceGroup
-    displayName: 'DB Resource Group'
+    displayName: 'DB Resource Group (enter name or leave blank/enter none to skip)'
     type: string
     default: 'ResourceGroupNameHere'
 
@@ -31,7 +31,7 @@ parameters:
     default: 'VMName1,VMName2'
 
   - name: APPWEB_ResourceGroup
-    displayName: 'App/Web Resource Group'
+    displayName: 'App/Web Resource Group (enter name or leave blank/enter none to skip)'
     type: string
     default: 'ResourceGroupNameHere'
 
@@ -56,7 +56,7 @@ steps:
     AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
     AZURE_TENANT_ID: $(AZURE_TENANT_ID)
 
-- ${{ if and(ne(parameters.DB_VMNames, ''), ne(parameters.DB_VMNames, 'none')) }}:
+- ${{ if and(ne(parameters.DB_VMNames, ''), ne(parameters.DB_VMNames, 'none'), ne(parameters.DB_ResourceGroup, ''), ne(parameters.DB_ResourceGroup, 'none')) }}:
   - task: PowerShell@2
     displayName: 'Deploy DB Logic App (Start/Stop)'
     inputs:
@@ -75,7 +75,7 @@ steps:
         -StopHour 19
         -StopMinute 0
 
-- ${{ if and(ne(parameters.APPWEB_VMNames, ''), ne(parameters.APPWEB_VMNames, 'none')) }}:
+- ${{ if and(ne(parameters.APPWEB_VMNames, ''), ne(parameters.APPWEB_VMNames, 'none'), ne(parameters.APPWEB_ResourceGroup, ''), ne(parameters.APPWEB_ResourceGroup, 'none')) }}:
   - task: PowerShell@2
     displayName: 'Deploy App/Web Logic App (Start/Stop)'
     inputs:
