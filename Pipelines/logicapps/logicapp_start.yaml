@@ -8,7 +8,7 @@ variables:
 
 parameters:
   - name: subscriptionName
-    displayName: 'Azure Subscription'
+    displayName: 'Environment (type BAB_DEV or BAB_SIT)'
     type: string
     default: 'BAB_DEV'
     values:
@@ -16,18 +16,18 @@ parameters:
       - BAB_SIT
 
   - name: logicAppPrefix
-    displayName: 'Logic App Prefix (e.g., ststv2_AppName_Env)'
+    displayName: 'Logic App Prefix (e.g., BAB_RG_Env)'
     type: string
-    default: 'ststv2_AppName_Env'
+    default: 'BAB_RG_Env'
 
   # DB Logic App parameters
   - name: dbResourceGroup
-    displayName: 'Database Resource Group'
+    displayName: 'Database Resource Group (enter name or leave blank/enter none to skip)'
     type: string
     default: ''
 
   - name: dbVmNames
-    displayName: 'Database VM Names (comma-separated, e.g., VM1,VM2)'
+    displayName: 'Database VM Names (comma-separated, e.g., VM1,VM2 or leave blank/enter none to skip)'
     type: string
     default: ''
 
@@ -43,12 +43,12 @@ parameters:
 
   # App/Web Logic App parameters
   - name: appWebResourceGroup
-    displayName: 'App/Web Resource Group'
+    displayName: 'App/Web Resource Group (enter name or leave blank/enter none to skip)'
     type: string
     default: ''
 
   - name: appWebVmNames
-    displayName: 'App/Web VM Names (comma-separated, e.g., VM1,VM2)'
+    displayName: 'App/Web VM Names (comma-separated, e.g., VM1,VM2 or leave blank/enter none to skip)'
     type: string
     default: ''
 
