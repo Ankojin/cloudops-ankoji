@@ -7,77 +7,89 @@ variables:
 - group: cloud-subs
 
 parameters:
-  - name: environment
-    displayName: 'Environment (dev/sit/prod)'
+  - name: subscriptionName
+    displayName: 'Azure Subscription (type BAB_DEV or BAB_SIT)'
     type: string
-    default: 'dev'
+    default: 'BAB_DEV'
     values:
-    - dev
-    - sit
-    - prod
+      - BAB_DEV
+      - BAB_SIT
 
   - name: logicAppPrefix
-    displayName: 'Logic App Prefix (AppName_Env, e.g., ststv2_MUB-dev)'
+    displayName: 'Logic App Prefix (AppName_Env, e.g., ststv2_AppName_Env)'
     type: string
-    default: 'ststv2_MUB-dev'
+    default: 'ststv2_AppName_Env'
 
   - name: DB_ResourceGroup
     displayName: 'DB Resource Group'
     type: string
-    default: 'bab-dev-mub-swec-rg-01'
+    default: 'ResourceGroupNameHere'
 
   - name: DB_VMNames
     displayName: 'DB VM Names (comma-separated)'
     type: string
-    default: 'DAMUDBV01'
+    default: 'VMName1,VMName2'
 
   - name: APPWEB_ResourceGroup
     displayName: 'App/Web Resource Group'
     type: string
-    default: 'bab-dev-mub-swec-rg-01'
+    default: 'ResourceGroupNameHere'
 
   - name: APPWEB_VMNames
     displayName: 'App/Web VM Names (comma-separated)'
     type: string
-    default: 'DAMUWV01,DAMUWEB01'
+    default: 'VMName1,VMName2'
 
 steps:
-- task: AzureCLI@2
-  displayName: 'Deploy DB Logic App (Start/Stop)'
-  inputs:
-    azureSubscription: '$(azureServiceConnection)' # Using variable from cloud-subs group
-    scriptType: 'ps'
-    scriptLocation: 'scriptPath'
-    scriptPath: 'Pipelines/logicapps/Deploy-LogicApp.ps1' # Fixed path
-    arguments: >
-      -SubscriptionName "$(subscriptionName)"
-      -ResourceGroupName $(LOGICAPP_RG)
-      -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_db"
-      -Location $(LOCATION)
-      -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json' # Fixed path
-      -VMResourceGroup "${{ parameters.DB_ResourceGroup }}"
-      -VMNames "${{ parameters.DB_VMNames }}"
-      -StartHour 7
-      -StartMinute 45
-      -StopHour 19
-      -StopMinute 0
+- powershell: |
+    $ErrorActionPreference = "Stop"
+    $subscriptionId = "$(subscriptionId)"
+    az login --service-principal `
+        -u $env:AZURE_CLIENT_ID `
+        -p $env:AZURE_CLIENT_SECRET `
+        --tenant $env:AZURE_TENANT_ID
+    az account set --subscription $subscriptionId
+    Write-Host "[$(Get-Date -Format o)] Azure CLI login successful. Using subscription $subscriptionId"
+  displayName: 'Azure CLI Login'
+  env:
+    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
 
-- task: AzureCLI@2
-  displayName: 'Deploy App/Web Logic App (Start/Stop)'
-  inputs:
-    azureSubscription: '$(azureServiceConnection)' # Using variable from cloud-subs group
-    scriptType: 'ps'
-    scriptLocation: 'scriptPath'
-    scriptPath: 'Pipelines/logicapps/Deploy-LogicApp.ps1' # Fixed path
-    arguments: >
-      -SubscriptionName "$(subscriptionName)"
-      -ResourceGroupName $(LOGICAPP_RG)
-      -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_appweb"
-      -Location $(LOCATION)
-      -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json' # Fixed path
-      -VMResourceGroup "${{ parameters.APPWEB_ResourceGroup }}"
-      -VMNames "${{ parameters.APPWEB_VMNames }}"
-      -StartHour 8
-      -StartMinute 0
-      -StopHour 19
-      -StopMinute 15
+- ${{ if ne(parameters.DB_VMNames, '') && ne(parameters.DB_VMNames, 'none') }}:
+  - task: PowerShell@2
+    displayName: 'Deploy DB Logic App (Start/Stop)'
+    inputs:
+      targetType: 'filePath'
+      filePath: 'Pipelines/logicapps/Deploy-LogicApp.ps1'
+      arguments: >
+        -SubscriptionName "$(subscriptionName)"
+        -ResourceGroupName $(LOGICAPP_RG)
+        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_db"
+        -Location $(LOCATION)
+        -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json'
+        -VMResourceGroup "${{ parameters.DB_ResourceGroup }}"
+        -VMNames "${{ parameters.DB_VMNames }}"
+        -StartHour 7
+        -StartMinute 45
+        -StopHour 19
+        -StopMinute 0
+
+- ${{ if ne(parameters.APPWEB_VMNames, '') && ne(parameters.APPWEB_VMNames, 'none') }}:
+  - task: PowerShell@2
+    displayName: 'Deploy App/Web Logic App (Start/Stop)'
+    inputs:
+      targetType: 'filePath'
+      filePath: 'Pipelines/logicapps/Deploy-LogicApp.ps1'
+      arguments: >
+        -SubscriptionName "$(subscriptionName)"
+        -ResourceGroupName $(LOGICAPP_RG)
+        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_appweb"
+        -Location $(LOCATION)
+        -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json'
+        -VMResourceGroup "${{ parameters.APPWEB_ResourceGroup }}"
+        -VMNames "${{ parameters.APPWEB_VMNames }}"
+        -StartHour 8
+        -StartMinute 0
+        -StopHour 19
+        -StopMinute 15
