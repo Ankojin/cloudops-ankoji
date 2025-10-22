@@ -26,7 +26,7 @@ parameters:
     default: 'ResourceGroupNameHere'
 
   - name: DB_VMNames
-    displayName: 'DB VM Names (comma-separated)'
+    displayName: 'DB VM Names (comma-separated, enter as VMName1,VMName2 or leave blank/enter none to skip)'
     type: string
     default: 'VMName1,VMName2'
 
@@ -36,7 +36,7 @@ parameters:
     default: 'ResourceGroupNameHere'
 
   - name: APPWEB_VMNames
-    displayName: 'App/Web VM Names (comma-separated)'
+    displayName: 'App/Web VM Names (comma-separated, enter as VMName1,VMName2 or leave blank/enter none to skip)'
     type: string
     default: 'VMName1,VMName2'
 
@@ -56,7 +56,7 @@ steps:
     AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
     AZURE_TENANT_ID: $(AZURE_TENANT_ID)
 
-- ${{ if ne(parameters.DB_VMNames, '') && ne(parameters.DB_VMNames, 'none') }}:
+- ${{ if and(ne(parameters.DB_VMNames, ''), ne(parameters.DB_VMNames, 'none')) }}:
   - task: PowerShell@2
     displayName: 'Deploy DB Logic App (Start/Stop)'
     inputs:
@@ -75,7 +75,7 @@ steps:
         -StopHour 19
         -StopMinute 0
 
-- ${{ if ne(parameters.APPWEB_VMNames, '') && ne(parameters.APPWEB_VMNames, 'none') }}:
+- ${{ if and(ne(parameters.APPWEB_VMNames, ''), ne(parameters.APPWEB_VMNames, 'none')) }}:
   - task: PowerShell@2
     displayName: 'Deploy App/Web Logic App (Start/Stop)'
     inputs:
