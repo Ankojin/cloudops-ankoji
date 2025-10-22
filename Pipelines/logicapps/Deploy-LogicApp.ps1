@@ -68,16 +68,17 @@ $definition.definition.triggers.ScheduledStart.recurrence.schedule.minutes = @($
 $definition.definition.triggers.ScheduledStop.recurrence.schedule.hours = @($StopHour)
 $definition.definition.triggers.ScheduledStop.recurrence.schedule.minutes = @($StopMinute)
 
-# Inject VM lists
-if (-not $definition.definition.actions.StartFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists) {
-    $definition.definition.actions.StartFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = @()
+# Inject VM lists for StartFunction
+if (-not $definition.definition.actions.StartFunction.actions.ScheduledStart.inputs.body.RequestScopes.VMLists) {
+    $definition.definition.actions.StartFunction.actions.ScheduledStart.inputs.body.RequestScopes.VMLists = @()
 }
-$definition.definition.actions.StartFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = $vmArray
+$definition.definition.actions.StartFunction.actions.ScheduledStart.inputs.body.RequestScopes.VMLists = $vmArray
 
-if (-not $definition.definition.actions.StopFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists) {
-    $definition.definition.actions.StopFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = @()
+# Inject VM lists for StopFunction
+if (-not $definition.definition.actions.StopFunction.actions.ScheduledStop.inputs.body.RequestScopes.VMLists) {
+    $definition.definition.actions.StopFunction.actions.ScheduledStop.inputs.body.RequestScopes.VMLists = @()
 }
-$definition.definition.actions.StopFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = $vmArray
+$definition.definition.actions.StopFunction.actions.ScheduledStop.inputs.body.RequestScopes.VMLists = $vmArray
 
 # Save the updated definition to a temp file
 $tempDefFile = [System.IO.Path]::GetTempFileName().Replace('.tmp', "-$LogicAppName.json")
