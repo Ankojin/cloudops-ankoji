@@ -43,7 +43,16 @@ parameters:
 steps:
 - powershell: |
     $ErrorActionPreference = "Stop"
-    $subscriptionId = "$(subscriptionId)"
+     "[$(Get-Date -Format o)] Logging into Azure CLI with service principal..."
+      if ('${{ parameters.subscriptionName }}' -eq 'BAB_DEV') {
+        $subscriptionId = $env:BAB_DEV_SUBSCRIPTION_ID
+      } elseif ('${{ parameters.subscriptionName }}' -eq 'BAB_SIT') {
+        $subscriptionId = $env:BAB_SIT_SUBSCRIPTION_ID
+      } else {
+        "[$(Get-Date -Format o)] Invalid subscription: ${{ parameters.subscriptionName }}" 
+        Write-Error "Invalid subscription: ${{ parameters.subscriptionName }}"
+        exit 1
+      }
     az login --service-principal `
         -u $env:AZURE_CLIENT_ID `
         -p $env:AZURE_CLIENT_SECRET `
