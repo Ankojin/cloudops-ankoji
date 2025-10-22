@@ -69,7 +69,14 @@ $definition.definition.triggers.ScheduledStop.recurrence.schedule.hours = @($Sto
 $definition.definition.triggers.ScheduledStop.recurrence.schedule.minutes = @($StopMinute)
 
 # Inject VM lists
+if (-not $definition.definition.actions.StartFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists) {
+    $definition.definition.actions.StartFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = @()
+}
 $definition.definition.actions.StartFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = $vmArray
+
+if (-not $definition.definition.actions.StopFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists) {
+    $definition.definition.actions.StopFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = @()
+}
 $definition.definition.actions.StopFunction.actions.Scheduled.inputs.body.RequestScopes.VMLists = $vmArray
 
 # Save the updated definition to a temp file
