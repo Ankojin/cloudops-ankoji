@@ -35,7 +35,7 @@
         "type": "Scope",
         "runAfter": {},
         "actions": {
-          "Scheduled": {
+          "ScheduledStart": {
             "type": "Function",
             "inputs": {
               "function": {
@@ -57,7 +57,7 @@
         "type": "Scope",
         "runAfter": {},
         "actions": {
-          "Scheduled": {
+          "ScheduledStop": {
             "type": "Function",
             "inputs": {
               "function": {
