@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory=$true)][string]$SubscriptionId,
     [Parameter(Mandatory=$true)][string]$ResourceGroupName,
     [Parameter(Mandatory=$true)][string]$LogicAppName,
-    [Parameter(Mandatory=$true)][string]$Location,
+    # [Parameter(Mandatory=$false)][string]$Location,
     [Parameter(Mandatory=$true)][string]$DefinitionFile,
     [Parameter(Mandatory=$true)][string]$VMResourceGroup,
     [Parameter(Mandatory=$true)][string]$VMNames,
@@ -82,7 +82,6 @@ Write-Host "Deploying Logic App '$LogicAppName' in resource group '$ResourceGrou
 $deployResult = az logic workflow create `
     --resource-group "$ResourceGroupName" `
     --name "$LogicAppName" `
-    --location "$Location" `
     --definition "@$tempDefFile" `
     --only-show-errors 2>&1
 
