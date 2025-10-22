@@ -91,7 +91,6 @@ steps:
         -SubscriptionId "$(resolvedSubscriptionId)"
         -ResourceGroupName "bab-core-auto-weeu-rg-01"
         -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_db"
-        # -Location $(LOCATION)
         -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json'
         -VMResourceGroup "${{ parameters.DB_ResourceGroup }}"
         -VMNames "${{ parameters.DB_VMNames }}"
@@ -111,7 +110,6 @@ steps:
         -SubscriptionId "$(resolvedSubscriptionId)"
         -ResourceGroupName "bab-core-auto-weeu-rg-01"
         -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_appweb"
-        # -Location $(LOCATION)
         -DefinitionFile 'Pipelines/logicapps/logicapp-startstop.json'
         -VMResourceGroup "${{ parameters.APPWEB_ResourceGroup }}"
         -VMNames "${{ parameters.APPWEB_VMNames }}"
