@@ -8,7 +8,7 @@ variables:
 
 parameters:
   - name: subscriptionName
-    displayName: 'Environment (type BAB_DEV or BAB_SIT)'
+    displayName: 'Environment (BAB_DEV or BAB_SIT)'
     type: string
     default: 'BAB_DEV'
     values:
@@ -22,47 +22,46 @@ parameters:
 
   # DB Logic App parameters
   - name: dbResourceGroup
-    displayName: 'Database Resource Group (enter name or leave blank/enter none to skip)'
+    displayName: 'Database Resource Group (enter name or "none" to skip)'
     type: string
-    default: ''
+    default: 'none'
 
   - name: dbVmNames
-    displayName: 'Database VM Names (comma-separated, e.g., VM1,VM2 or leave blank/enter none to skip)'
+    displayName: 'Database VM Names (comma-separated, e.g., VM1,VM2 or "none" to skip)'
     type: string
-    default: ''
+    default: 'none'
 
   - name: dbStartHour
-    displayName: 'DB Start Hour (0-23)'
+    displayName: 'DB Start Hour (0-23, only required if deploying DB)'
     type: number
     default: 7
 
   - name: dbStartMinute
-    displayName: 'DB Start Minute (0-59)'
+    displayName: 'DB Start Minute (0-59, only required if deploying DB)'
     type: number
     default: 0
 
   # App/Web Logic App parameters
   - name: appWebResourceGroup
-    displayName: 'App/Web Resource Group (enter name or leave blank/enter none to skip)'
+    displayName: 'App/Web Resource Group (enter name or "none" to skip)'
     type: string
-    default: ''
+    default: 'none'
 
   - name: appWebVmNames
-    displayName: 'App/Web VM Names (comma-separated, e.g., VM1,VM2 or leave blank/enter none to skip)'
+    displayName: 'App/Web VM Names (comma-separated, e.g., VM1,VM2 or "none" to skip)'
     type: string
-    default: ''
+    default: 'none'
 
   - name: appWebStartHour
-    displayName: 'App/Web Start Hour (0-23)'
+    displayName: 'App/Web Start Hour (0-23, only required if deploying App/Web)'
     type: number
     default: 8
 
   - name: appWebStartMinute
-    displayName: 'App/Web Start Minute (0-59)'
+    displayName: 'App/Web Start Minute (0-59, only required if deploying App/Web)'
     type: number
     default: 0
 
-  # Logic App Subscription (dropdown)
   - name: logicAppSubscription
     displayName: 'Logic App Subscription'
     type: string
@@ -103,6 +102,7 @@ steps:
     BAB_DEV_SUBSCRIPTION_ID: $(BAB_DEV_SUBSCRIPTION_ID)
     BAB_SIT_SUBSCRIPTION_ID: $(BAB_SIT_SUBSCRIPTION_ID)
 
+# Deploy DB Logic App only if parameters are provided
 - ${{ if and(ne(parameters.dbVmNames, ''), ne(parameters.dbVmNames, 'none'), ne(parameters.dbResourceGroup, ''), ne(parameters.dbResourceGroup, 'none')) }}:
   - task: PowerShell@2
     displayName: 'Deploy Database Logic App (Start Only)'
@@ -120,6 +120,7 @@ steps:
         -StartHour ${{ parameters.dbStartHour }}
         -StartMinute ${{ parameters.dbStartMinute }}
 
+# Deploy App/Web Logic App only if parameters are provided
 - ${{ if and(ne(parameters.appWebVmNames, ''), ne(parameters.appWebVmNames, 'none'), ne(parameters.appWebResourceGroup, ''), ne(parameters.appWebResourceGroup, 'none')) }}:
   - task: PowerShell@2
     displayName: 'Deploy App/Web Logic App (Start Only)'
@@ -136,3 +137,36 @@ steps:
         -VMSubscriptionId "$(vmSubscriptionId)"
         -StartHour ${{ parameters.appWebStartHour }}
         -StartMinute ${{ parameters.appWebStartMinute }}
+
+# Summary step to show what was deployed
+- powershell: |
+    $ErrorActionPreference = "Continue"
+    Write-Host "`n========================================="
+    Write-Host "Deployment Summary"
+    Write-Host "=========================================`n"
+    
+    $dbDeployed = "${{ parameters.dbVmNames }}" -ne "" -and "${{ parameters.dbVmNames }}" -ne "none" -and "${{ parameters.dbResourceGroup }}" -ne "" -and "${{ parameters.dbResourceGroup }}" -ne "none"
+    $appWebDeployed = "${{ parameters.appWebVmNames }}" -ne "" -and "${{ parameters.appWebVmNames }}" -ne "none" -and "${{ parameters.appWebResourceGroup }}" -ne "" -and "${{ parameters.appWebResourceGroup }}" -ne "none"
+    
+    if ($dbDeployed) {
+      Write-Host "✅ Database Logic App Deployed"
+      Write-Host "   - Resource Group: ${{ parameters.dbResourceGroup }}"
+      Write-Host "   - VMs: ${{ parameters.dbVmNames }}"
+      Write-Host "   - Start Schedule: ${{ parameters.dbStartHour }}:${{ parameters.dbStartMinute }}"
+    } else {
+      Write-Host "⏭️  Database Logic App Skipped"
+    }
+    
+    Write-Host ""
+    
+    if ($appWebDeployed) {
+      Write-Host "✅ App/Web Logic App Deployed"
+      Write-Host "   - Resource Group: ${{ parameters.appWebResourceGroup }}"
+      Write-Host "   - VMs: ${{ parameters.appWebVmNames }}"
+      Write-Host "   - Start Schedule: ${{ parameters.appWebStartHour }}:${{ parameters.appWebStartMinute }}"
+    } else {
+      Write-Host "⏭️  App/Web Logic App Skipped"
+    }
+    
+    Write-Host "`n=========================================`n"
+  displayName: 'Deployment Summary'
