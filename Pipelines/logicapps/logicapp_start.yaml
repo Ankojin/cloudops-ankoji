@@ -69,6 +69,11 @@ parameters:
     values:
       - BAB_CORE
 
+  - name: weekDays
+    displayName: 'Days to Run (comma-separated: Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday)'
+    type: string
+    default: 'Sunday,Monday,Tuesday,Wednesday,Thursday'
+
 steps:
 - powershell: |
     $ErrorActionPreference = "Stop"
@@ -112,13 +117,14 @@ steps:
       arguments: >
         -SubscriptionId "$(resolvedSubscriptionId)"
         -ResourceGroupName "bab-core-auto-weeu-rg-01"
-        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_start_db"
+        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_db"
         -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
         -VMResourceGroup "${{ parameters.dbResourceGroup }}"
         -VMNames "${{ parameters.dbVmNames }}"
         -VMSubscriptionId "$(vmSubscriptionId)"
         -StartHour ${{ parameters.dbStartHour }}
         -StartMinute ${{ parameters.dbStartMinute }}
+        -WeekDays "${{ parameters.weekDays }}"
 
 # Deploy App/Web Logic App only if parameters are provided
 - ${{ if and(ne(parameters.appWebVmNames, ''), ne(parameters.appWebVmNames, 'none'), ne(parameters.appWebResourceGroup, ''), ne(parameters.appWebResourceGroup, 'none')) }}:
@@ -130,13 +136,14 @@ steps:
       arguments: >
         -SubscriptionId "$(resolvedSubscriptionId)"
         -ResourceGroupName "bab-core-auto-weeu-rg-01"
-        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_start_appweb"
+        -LogicAppName "${{ parameters.logicAppPrefix }}_vms_Scheduled_appweb"
         -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
         -VMResourceGroup "${{ parameters.appWebResourceGroup }}"
         -VMNames "${{ parameters.appWebVmNames }}"
         -VMSubscriptionId "$(vmSubscriptionId)"
         -StartHour ${{ parameters.appWebStartHour }}
         -StartMinute ${{ parameters.appWebStartMinute }}
+        -WeekDays "${{ parameters.weekDays }}"
 
 # Summary step to show what was deployed
 - powershell: |

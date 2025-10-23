@@ -11,7 +11,7 @@
           "schedule": {
             "hours": [],
             "minutes": [],
-            "weekDays": ["Sunday","Monday","Tuesday","Wednesday","Thursday"]
+            "weekDays": []
           },
           "timeZone": "Arab Standard Time"
         }

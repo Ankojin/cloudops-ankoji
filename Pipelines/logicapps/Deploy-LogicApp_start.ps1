@@ -7,8 +7,11 @@ param(
     [Parameter(Mandatory=$true)][string]$VMNames,
     [Parameter(Mandatory=$true)][string]$VMSubscriptionId,
     [int]$StartHour = 7,
-    [int]$StartMinute = 0
+    [int]$StartMinute = 0,
+    [string]$WeekDays = "Sunday,Monday,Tuesday,Wednesday,Thursday"
 )
+
+$ErrorActionPreference = "Stop"
 
 # Set Azure context
 Write-Host "Setting context to subscription: $SubscriptionId"
@@ -25,6 +28,25 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($SubscriptionId)) {
     exit 1
 }
 Write-Host "Resolved Subscription ID: $SubscriptionId"
+
+# Parse weekdays
+$weekDaysArray = $WeekDays -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+$validDays = @("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+$invalidDays = $weekDaysArray | Where-Object { $_ -notin $validDays }
+
+if ($invalidDays.Count -gt 0) {
+    Write-Error "Invalid weekday(s) found: $($invalidDays -join ', '). Valid days are: $($validDays -join ', ')"
+    exit 1
+}
+
+if ($weekDaysArray.Count -eq 0) {
+    Write-Error "No valid weekdays provided"
+    exit 1
+}
+
+Write-Host "Schedule will run on: $($weekDaysArray -join ', ')"
+$startTimeFormatted = "{0}:{1:D2}" -f $StartHour, $StartMinute
+Write-Host "Start time: $startTimeFormatted"
 
 # Build full VM Resource IDs using VMSubscriptionId
 $vmArray = @()
@@ -59,11 +81,12 @@ try {
     exit 1
 }
 
-# Update start schedule only
+# Update start schedule
 $definition.definition.triggers.ScheduledStartTriggers.recurrence.schedule.hours = @($StartHour)
 $definition.definition.triggers.ScheduledStartTriggers.recurrence.schedule.minutes = @($StartMinute)
+$definition.definition.triggers.ScheduledStartTriggers.recurrence.schedule.weekDays = $weekDaysArray
 
-# Inject VM lists for StartFunction only
+# Inject VM lists for StartFunction
 if (-not $definition.definition.actions.StartFunction.actions.ScheduledStartFunction.inputs.body.RequestScopes.VMLists) {
     $definition.definition.actions.StartFunction.actions.ScheduledStartFunction.inputs.body.RequestScopes.VMLists = @()
 }
@@ -88,3 +111,5 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "✅ Logic App '$LogicAppName' deployed successfully."
+$scheduleFormatted = "{0}:{1:D2}" -f $StartHour, $StartMinute
+Write-Host "   Schedule: $($weekDaysArray -join ', ') at $scheduleFormatted"
