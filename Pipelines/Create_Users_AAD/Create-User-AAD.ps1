@@ -231,28 +231,104 @@ foreach ($envVar in $requiredEnvVars) {
 Write-Log "Environment variables validated" "SUCCESS"
 
 # Validate CSV file paths
-if ($OperationType -ne "Create Service Account (GUI Input)") {
-    Write-Log "Validating CSV file paths..." "INFO"
-    
-    if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath) -or -not (Test-Path $UsersCsvFilePath)) {
-        Write-Log "Users CSV file not found or path empty: $UsersCsvFilePath" "ERROR"
-        exit 1
+Write-Log -Level "INFO" -Message "Validating CSV file paths..."
+
+# CSV validation should only happen for operations that require CSV files
+switch ($OperationType) {
+    "Create Service Account" {
+        Write-Log -Level "INFO" -Message "Service Account creation does not require CSV files"
+        # Skip CSV validation for service accounts
     }
-    Write-Log "Users CSV file validated: $UsersCsvFilePath" "SUCCESS"
     
-    # Validate Groups CSV if required for operation
-    $requiresGroupsCsv = @(
-        "Add Existing Admin Studio Users to Admin Studio Groups",
-        "Create New ABIC Users and Add to ABIC Groups",
-        "Add Existing ABIC Users to ABIC Groups"
-    )
-    
-    if ($OperationType -in $requiresGroupsCsv) {
-        if ([string]::IsNullOrWhiteSpace($GroupsCsvFilePath) -or -not (Test-Path $GroupsCsvFilePath)) {
-            Write-Log "Groups CSV file not found or path empty: $GroupsCsvFilePath" "ERROR"
-            exit 1
+    "Create Normal AVD Users" {
+        if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Users CSV file path is required for AVD user creation"
+            throw "UsersCsvFilePath parameter is required for operation: $OperationType"
         }
-        Write-Log "Groups CSV file validated: $GroupsCsvFilePath" "SUCCESS"
+        
+        if (-not (Test-Path -Path $UsersCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Users CSV file not found: $UsersCsvFilePath"
+            throw "Users CSV file not found: $UsersCsvFilePath"
+        }
+        
+        Write-Log -Level "SUCCESS" -Message "Users CSV file validated: $UsersCsvFilePath"
+    }
+    
+    "Add Existing Admin Studio Users to Admin Studio Groups" {
+        if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Users CSV file path is required for Admin Studio operation"
+            throw "UsersCsvFilePath parameter is required for operation: $OperationType"
+        }
+        
+        if ([string]::IsNullOrWhiteSpace($GroupsCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Groups CSV file path is required for Admin Studio operation"
+            throw "GroupsCsvFilePath parameter is required for operation: $OperationType"
+        }
+        
+        if (-not (Test-Path -Path $UsersCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Users CSV file not found: $UsersCsvFilePath"
+            throw "Users CSV file not found: $UsersCsvFilePath"
+        }
+        
+        if (-not (Test-Path -Path $GroupsCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Groups CSV file not found: $GroupsCsvFilePath"
+            throw "Groups CSV file not found: $GroupsCsvFilePath"
+        }
+        
+        Write-Log -Level "SUCCESS" -Message "Admin Studio CSV files validated"
+    }
+    
+    "Create New ABIC Users and Add to ABIC Groups" {
+        if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Users CSV file path is required for ABIC user creation"
+            throw "UsersCsvFilePath parameter is required for operation: $OperationType"
+        }
+        
+        if ([string]::IsNullOrWhiteSpace($GroupsCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Groups CSV file path is required for ABIC operation"
+            throw "GroupsCsvFilePath parameter is required for operation: $OperationType"
+        }
+        
+        if (-not (Test-Path -Path $UsersCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Users CSV file not found: $UsersCsvFilePath"
+            throw "Users CSV file not found: $UsersCsvFilePath"
+        }
+        
+        if (-not (Test-Path -Path $GroupsCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Groups CSV file not found: $GroupsCsvFilePath"
+            throw "Groups CSV file not found: $GroupsCsvFilePath"
+        }
+        
+        Write-Log -Level "SUCCESS" -Message "ABIC CSV files validated"
+    }
+    
+    "Add Existing ABIC Users to ABIC Groups" {
+        if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Users CSV file path is required for ABIC operation"
+            throw "UsersCsvFilePath parameter is required for operation: $OperationType"
+        }
+        
+        if ([string]::IsNullOrWhiteSpace($GroupsCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Groups CSV file path is required for ABIC operation"
+            throw "GroupsCsvFilePath parameter is required for operation: $OperationType"
+        }
+        
+        if (-not (Test-Path -Path $UsersCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Users CSV file not found: $UsersCsvFilePath"
+            throw "Users CSV file not found: $UsersCsvFilePath"
+        }
+        
+        if (-not (Test-Path -Path $GroupsCsvFilePath)) {
+            Write-Log -Level "ERROR" -Message "Groups CSV file not found: $GroupsCsvFilePath"
+            throw "Groups CSV file not found: $GroupsCsvFilePath"
+        }
+        
+        Write-Log -Level "SUCCESS" -Message "ABIC CSV files validated"
+    }
+    
+    default {
+        Write-Log -Level "ERROR" -Message "Unknown operation type: $OperationType"
+        throw "Invalid operation type: $OperationType"
     }
 }
 
