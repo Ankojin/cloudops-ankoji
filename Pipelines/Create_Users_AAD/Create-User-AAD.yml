@@ -29,14 +29,14 @@ parameters:
   displayName: 'Select Operation Type'
   type: string
   values:
-  - 'Create Service Account (GUI Input)'
+  - 'Create Service Account'
   - 'Create Normal AVD Users and Add to Hardcoded Group'
   - 'Add Existing Admin Studio Users to Admin Studio Groups'
   - 'Create New ABIC Users and Add to ABIC Groups'
   - 'Add Existing ABIC Users to ABIC Groups'
-  default: 'Create Service Account (GUI Input)'
+  default: 'Create Service Account'
 
-# Parameters for Service Account Creation (GUI Input)
+# Parameters for Service Account Creation
 - name: serviceAccountUPN
   displayName: '[Service Account] UPN (e.g., svc-account@contoso.com)'
   type: string
