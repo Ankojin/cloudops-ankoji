@@ -1,0 +1,62 @@
+trigger: none
+
+variables:
+- group: cloud-subs  # Variable group containing AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID
+
+parameters:
+- name: csvFilePath
+  displayName: 'CSV File Path'
+  type: string
+  default: 'Pipelines/Create_Users_AVD/users.csv'
+
+- name: groupNames
+  displayName: 'Groups (semicolon-separated)'
+  type: string
+  default: ''
+
+pool:
+  name: cloudops-agent
+
+steps:
+- task: PowerShell@2
+  displayName: 'Azure CLI Login'
+  inputs:
+    targetType: 'inline'
+    pwsh: true
+    script: |
+      $LogFile = "C:\log\user_creation_log.txt"
+      if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
+      "" | Out-File -FilePath $LogFile -Encoding utf8
+      
+      "[$(Get-Date -Format o)] Logging into Azure CLI with service principal..." | Tee-Object -FilePath $LogFile -Append
+      
+      az login --service-principal `
+        -u $env:AZURE_CLIENT_ID `
+        -p $env:AZURE_CLIENT_SECRET `
+        --tenant $env:AZURE_TENANT_ID | Tee-Object -FilePath $LogFile -Append
+      
+      "[$(Get-Date -Format o)] Azure CLI login successful" | Tee-Object -FilePath $LogFile -Append
+  env:
+    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+
+- task: PowerShell@2
+  displayName: 'Create Azure AD Users'
+  inputs:
+    targetType: 'filePath'
+    filePath: '$(Build.SourcesDirectory)/Pipelines/Create_Users_AVD/AVD-User-Creation.ps1'
+    arguments: '-CsvFilePath "$(Build.SourcesDirectory)/${{ parameters.csvFilePath }}" -GroupNames "${{ parameters.groupNames }}"'
+    pwsh: true
+  env:
+    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish User Creation Logs'
+  condition: always()
+  inputs:
+    PathtoPublish: 'C:\log\user_creation_log.txt'
+    ArtifactName: 'UserCreationLogs'
+    publishLocation: 'Container'
