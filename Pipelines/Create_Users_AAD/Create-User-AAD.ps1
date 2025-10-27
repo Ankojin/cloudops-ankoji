@@ -1,9 +1,9 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [ValidateSet(
-        "Create Service Account (GUI Input)",
-        "Create Normal AVD Users and Add to Hardcoded Group",
+        "Create Service Account",
+        "Create Normal AVD Users",
         "Add Existing Admin Studio Users to Admin Studio Groups",
         "Create New ABIC Users and Add to ABIC Groups",
         "Add Existing ABIC Users to ABIC Groups"
@@ -314,7 +314,7 @@ try {
 # Execute operation based on type
 try {
     switch ($OperationType) {
-        "Create Service Account (GUI Input)" {
+        "Create Service Account" {
             Write-Log "Executing: Create Service Account (GUI Input)" "INFO"
             Write-Log "Service Account: $ServiceAccountUPN" "INFO"
             Write-Log "Target Group: $ServiceAccountGroup" "INFO"
@@ -384,7 +384,7 @@ try {
             }
         }
         
-        "Create Normal AVD Users and Add to Hardcoded Group" {
+        "Create Normal AVD Users" {
             Write-Log "Executing: Create Normal AVD Users and Add to Hardcoded Group" "INFO"
             Write-Log "Hardcoded Group: $HardcodedAVDGroup" "INFO"
             
