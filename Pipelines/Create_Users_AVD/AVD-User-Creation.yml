@@ -1,7 +1,7 @@
 trigger: none
 
 variables:
-- group: cloud-subs  # Variable group containing AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID
+- group: cloud-subs
 
 parameters:
 - name: csvFilePath
@@ -19,27 +19,42 @@ pool:
 
 steps:
 - task: PowerShell@2
-  displayName: 'Azure CLI Login'
+  displayName: 'Validate Inputs'
   inputs:
     targetType: 'inline'
     pwsh: true
     script: |
-      $LogFile = "C:\log\user_creation_log.txt"
-      if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
-      "" | Out-File -FilePath $LogFile -Encoding utf8
+      $csvPath = "$(Build.SourcesDirectory)/${{ parameters.csvFilePath }}"
+      $groups = "${{ parameters.groupNames }}"
       
-      "[$(Get-Date -Format o)] Logging into Azure CLI with service principal..." | Tee-Object -FilePath $LogFile -Append
+      Write-Host "Validating CSV file..." -ForegroundColor Cyan
+      if (-not (Test-Path $csvPath)) {
+        Write-Error "CSV file not found: $csvPath"
+        exit 1
+      }
       
-      az login --service-principal `
-        -u $env:AZURE_CLIENT_ID `
-        -p $env:AZURE_CLIENT_SECRET `
-        --tenant $env:AZURE_TENANT_ID | Tee-Object -FilePath $LogFile -Append
+      $users = Import-Csv -Path $csvPath
+      if ($users.Count -eq 0) {
+        Write-Error "CSV file is empty"
+        exit 1
+      }
       
-      "[$(Get-Date -Format o)] Azure CLI login successful" | Tee-Object -FilePath $LogFile -Append
-  env:
-    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
-    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
-    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+      $requiredColumns = @('DisplayName', 'UserPrincipalName', 'Password')
+      $csvColumns = $users[0].PSObject.Properties.Name
+      $missingColumns = $requiredColumns | Where-Object { $_ -notin $csvColumns }
+      
+      if ($missingColumns) {
+        Write-Error "Missing required columns: $($missingColumns -join ', ')"
+        exit 1
+      }
+      
+      Write-Host "Found $($users.Count) users" -ForegroundColor Green
+      
+      if ([string]::IsNullOrWhiteSpace($groups)) {
+        Write-Warning "No groups specified"
+      } else {
+        Write-Host "Groups: $groups" -ForegroundColor Green
+      }
 
 - task: PowerShell@2
   displayName: 'Create Azure AD Users'
@@ -54,7 +69,7 @@ steps:
     AZURE_TENANT_ID: $(AZURE_TENANT_ID)
 
 - task: PublishBuildArtifacts@1
-  displayName: 'Publish User Creation Logs'
+  displayName: 'Publish Logs'
   condition: always()
   inputs:
     PathtoPublish: 'C:\log\user_creation_log.txt'
