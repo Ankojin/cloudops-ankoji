@@ -1,0 +1,355 @@
+trigger: none
+
+variables:
+- group: cloud-subs
+- name: AVDGroup
+  value: 'BAB_VDI_DT_Shared_Pool'
+- name: defaultServiceAccountGroup
+  value: 'ALBTests service accounts'
+- name: logPath
+  value: 'C:\log'
+- name: logFileName
+  value: 'user_management_log.txt'
+# CSV file paths relative to repository root
+- name: avdUsersCsvPath
+  value: 'Pipelines/Create_Users_AAD/AVD-users.csv'
+- name: adminStudioUsersCsvPath
+  value: 'Pipelines/Create_Users_AAD/Admin-Studio-Users.csv'
+- name: adminStudioGroupsCsvPath
+  value: 'Pipelines/Create_Users_AAD/Admin-Studio-Groups.csv'
+- name: abicNewUsersCsvPath
+  value: 'Pipelines/Create_Users_AAD/ABIC-Users.csv'
+- name: abicGroupsCsvPath
+  value: 'Pipelines/Create_Users_AAD/ABIC-Groups.csv'
+- name: abicExistingUsersCsvPath
+  value: 'Pipelines/Create_Users_AAD/ABIC-Existing-Users.csv'
+
+parameters:
+- name: operationType
+  displayName: 'Select Operation Type'
+  type: string
+  values:
+  - 'Create Service Account (GUI Input)'
+  - 'Create Normal AVD Users and Add to Hardcoded Group'
+  - 'Add Existing Admin Studio Users to Admin Studio Groups'
+  - 'Create New ABIC Users and Add to ABIC Groups'
+  - 'Add Existing ABIC Users to ABIC Groups'
+  default: 'Create Service Account (GUI Input)'
+
+# Parameters for Service Account Creation (GUI Input)
+- name: serviceAccountUPN
+  displayName: '[Service Account] UPN (e.g., svc-account@contoso.com)'
+  type: string
+  default: ''
+
+- name: serviceAccountDisplayName
+  displayName: '[Service Account] Display Name'
+  type: string
+  default: ''
+
+- name: serviceAccountPassword
+  displayName: '[Service Account] Password (min 8 chars, complexity required)'
+  type: string
+  default: ''
+
+- name: serviceAccountGroup
+  displayName: '[Service Account] Group Name'
+  type: string
+  default: 'ALBTests service accounts'
+
+# Parameters for CSV-based operations
+- name: csvFilePath
+  displayName: '[CSV] Users File Path (leave empty for default)'
+  type: string
+  default: ''
+
+- name: groupsCsvFilePath
+  displayName: '[CSV] Groups File Path (leave empty for default)'
+  type: string
+  default: ''
+
+pool:
+  name: cloudops-agent
+
+steps:
+- task: PowerShell@2
+  displayName: 'Determine CSV Paths and Validate'
+  inputs:
+    targetType: 'inline'
+    pwsh: true
+    errorActionPreference: 'stop'
+    script: |
+      $ErrorActionPreference = 'Stop'
+      $operationType = "${{ parameters.operationType }}"
+      $csvFilePathParam = "${{ parameters.csvFilePath }}"
+      $groupsCsvFilePathParam = "${{ parameters.groupsCsvFilePath }}"
+      
+      Write-Host "========================================" -ForegroundColor Cyan
+      Write-Host "Azure AD User Management - CSV Validation" -ForegroundColor Cyan
+      Write-Host "========================================" -ForegroundColor Cyan
+      Write-Host "Operation: $operationType" -ForegroundColor Cyan
+      
+      # Determine CSV paths based on operation type
+      $usersCsvPath = ""
+      $groupsCsvPath = ""
+      $expectedUserColumns = ""
+      $expectedGroupColumns = ""
+      
+      switch ($operationType) {
+        "Create Service Account (GUI Input)" {
+          Write-Host "No CSV required for this operation" -ForegroundColor Green
+          Write-Host "##vso[task.setvariable variable=ResolvedUsersCsvPath]"
+          Write-Host "##vso[task.setvariable variable=ResolvedGroupsCsvPath]"
+          return
+        }
+        
+        "Create Normal AVD Users and Add to Hardcoded Group" {
+          if ([string]::IsNullOrWhiteSpace($csvFilePathParam)) {
+            $usersCsvPath = "$(Build.SourcesDirectory)/$(avdUsersCsvPath)"
+            Write-Host "Using default AVD users CSV path" -ForegroundColor Yellow
+          } else {
+            $usersCsvPath = "$(Build.SourcesDirectory)/$csvFilePathParam"
+          }
+          $expectedUserColumns = "DisplayName, UserPrincipalName, Password"
+          Write-Host "Target Group: $(AVDGroup) (hardcoded)" -ForegroundColor Cyan
+        }
+        
+        "Add Existing Admin Studio Users to Admin Studio Groups" {
+          # Users CSV
+          if ([string]::IsNullOrWhiteSpace($csvFilePathParam)) {
+            $usersCsvPath = "$(Build.SourcesDirectory)/$(adminStudioUsersCsvPath)"
+            Write-Host "Using default Admin Studio users CSV path" -ForegroundColor Yellow
+          } else {
+            $usersCsvPath = "$(Build.SourcesDirectory)/$csvFilePathParam"
+          }
+          $expectedUserColumns = "UserPrincipalName"
+          
+          # Groups CSV
+          if ([string]::IsNullOrWhiteSpace($groupsCsvFilePathParam)) {
+            $groupsCsvPath = "$(Build.SourcesDirectory)/$(adminStudioGroupsCsvPath)"
+            Write-Host "Using default Admin Studio groups CSV path" -ForegroundColor Yellow
+          } else {
+            $groupsCsvPath = "$(Build.SourcesDirectory)/$groupsCsvFilePathParam"
+          }
+          $expectedGroupColumns = "GroupName"
+        }
+        
+        "Create New ABIC Users and Add to ABIC Groups" {
+          # Users CSV
+          if ([string]::IsNullOrWhiteSpace($csvFilePathParam)) {
+            $usersCsvPath = "$(Build.SourcesDirectory)/$(abicNewUsersCsvPath)"
+            Write-Host "Using default ABIC new users CSV path" -ForegroundColor Yellow
+          } else {
+            $usersCsvPath = "$(Build.SourcesDirectory)/$csvFilePathParam"
+          }
+          $expectedUserColumns = "DisplayName, UserPrincipalName, MailNickName, Password, First name, Last name, Job Title, Company name, Department, Employee Type, Manager, Employee ID"
+          
+          # Groups CSV
+          if ([string]::IsNullOrWhiteSpace($groupsCsvFilePathParam)) {
+            $groupsCsvPath = "$(Build.SourcesDirectory)/$(abicGroupsCsvPath)"
+            Write-Host "Using default ABIC groups CSV path" -ForegroundColor Yellow
+          } else {
+            $groupsCsvPath = "$(Build.SourcesDirectory)/$groupsCsvFilePathParam"
+          }
+          $expectedGroupColumns = "GroupName"
+        }
+        
+        "Add Existing ABIC Users to ABIC Groups" {
+          # Users CSV
+          if ([string]::IsNullOrWhiteSpace($csvFilePathParam)) {
+            $usersCsvPath = "$(Build.SourcesDirectory)/$(abicExistingUsersCsvPath)"
+            Write-Host "Using default ABIC existing users CSV path" -ForegroundColor Yellow
+          } else {
+            $usersCsvPath = "$(Build.SourcesDirectory)/$csvFilePathParam"
+          }
+          $expectedUserColumns = "UserPrincipalName"
+          
+          # Groups CSV
+          if ([string]::IsNullOrWhiteSpace($groupsCsvFilePathParam)) {
+            $groupsCsvPath = "$(Build.SourcesDirectory)/$(abicGroupsCsvPath)"
+            Write-Host "Using default ABIC groups CSV path" -ForegroundColor Yellow
+          } else {
+            $groupsCsvPath = "$(Build.SourcesDirectory)/$groupsCsvFilePathParam"
+          }
+          $expectedGroupColumns = "GroupName"
+        }
+      }
+      
+      # Validate Users CSV
+      Write-Host "`nValidating Users CSV..." -ForegroundColor Cyan
+      Write-Host "Users CSV Path: $usersCsvPath" -ForegroundColor Cyan
+      Write-Host "Expected User Columns: $expectedUserColumns" -ForegroundColor Yellow
+      
+      if (-not (Test-Path $usersCsvPath)) {
+        Write-Error "Users CSV file not found: $usersCsvPath"
+        exit 1
+      }
+      
+      try {
+        $usersData = Import-Csv -Path $usersCsvPath -ErrorAction Stop
+        if ($usersData.Count -eq 0) {
+          Write-Error "Users CSV file is empty: $usersCsvPath"
+          exit 1
+        }
+        
+        Write-Host "Users CSV validated: $($usersData.Count) record(s) found" -ForegroundColor Green
+        $actualUserColumns = $usersData[0].PSObject.Properties.Name
+        Write-Host "Actual user columns: $($actualUserColumns -join ', ')" -ForegroundColor Cyan
+        
+        # Store users CSV path
+        Write-Host "##vso[task.setvariable variable=ResolvedUsersCsvPath]$usersCsvPath"
+        
+      } catch {
+        Write-Error "Failed to parse users CSV file: $_"
+        exit 1
+      }
+      
+      # Validate Groups CSV (if required)
+      if (-not [string]::IsNullOrWhiteSpace($groupsCsvPath)) {
+        Write-Host "`nValidating Groups CSV..." -ForegroundColor Cyan
+        Write-Host "Groups CSV Path: $groupsCsvPath" -ForegroundColor Cyan
+        Write-Host "Expected Group Columns: $expectedGroupColumns" -ForegroundColor Yellow
+        
+        if (-not (Test-Path $groupsCsvPath)) {
+          Write-Error "Groups CSV file not found: $groupsCsvPath"
+          exit 1
+        }
+        
+        try {
+          $groupsData = Import-Csv -Path $groupsCsvPath -ErrorAction Stop
+          if ($groupsData.Count -eq 0) {
+            Write-Error "Groups CSV file is empty: $groupsCsvPath"
+            exit 1
+          }
+          
+          Write-Host "Groups CSV validated: $($groupsData.Count) record(s) found" -ForegroundColor Green
+          $actualGroupColumns = $groupsData[0].PSObject.Properties.Name
+          Write-Host "Actual group columns: $($actualGroupColumns -join ', ')" -ForegroundColor Cyan
+          
+          # Store groups CSV path
+          Write-Host "##vso[task.setvariable variable=ResolvedGroupsCsvPath]$groupsCsvPath"
+          
+        } catch {
+          Write-Error "Failed to parse groups CSV file: $_"
+          exit 1
+        }
+      } else {
+        Write-Host "`nNo Groups CSV required for this operation" -ForegroundColor Green
+        Write-Host "##vso[task.setvariable variable=ResolvedGroupsCsvPath]"
+      }
+      
+      Write-Host "`n========================================" -ForegroundColor Green
+      Write-Host "All CSV files validated successfully!" -ForegroundColor Green
+      Write-Host "========================================" -ForegroundColor Green
+
+- task: PowerShell@2
+  displayName: 'Validate Environment and Inputs'
+  inputs:
+    targetType: 'inline'
+    pwsh: true
+    errorActionPreference: 'stop'
+    script: |
+      $ErrorActionPreference = 'Stop'
+      $operationType = "${{ parameters.operationType }}"
+      
+      Write-Host "========================================" -ForegroundColor Cyan
+      Write-Host "Environment and Input Validation" -ForegroundColor Cyan
+      Write-Host "========================================" -ForegroundColor Cyan
+      
+      # Validate environment variables
+      Write-Host "Validating Azure credentials..." -ForegroundColor Cyan
+      if ([string]::IsNullOrWhiteSpace($env:AZURE_CLIENT_ID)) {
+        Write-Error "AZURE_CLIENT_ID environment variable is not set"
+        exit 1
+      }
+      if ([string]::IsNullOrWhiteSpace($env:AZURE_CLIENT_SECRET)) {
+        Write-Error "AZURE_CLIENT_SECRET environment variable is not set"
+        exit 1
+      }
+      if ([string]::IsNullOrWhiteSpace($env:AZURE_TENANT_ID)) {
+        Write-Error "AZURE_TENANT_ID environment variable is not set"
+        exit 1
+      }
+      Write-Host "Azure credentials validated" -ForegroundColor Green
+      
+      # Validate Service Account inputs if needed
+      if ($operationType -eq "Create Service Account (GUI Input)") {
+        $upn = "${{ parameters.serviceAccountUPN }}"
+        $displayName = "${{ parameters.serviceAccountDisplayName }}"
+        $password = "${{ parameters.serviceAccountPassword }}"
+        $group = "${{ parameters.serviceAccountGroup }}"
+        
+        if ([string]::IsNullOrWhiteSpace($upn)) {
+          Write-Error "Service Account UPN is required"
+          exit 1
+        }
+        if ([string]::IsNullOrWhiteSpace($displayName)) {
+          Write-Error "Service Account Display Name is required"
+          exit 1
+        }
+        if ([string]::IsNullOrWhiteSpace($password)) {
+          Write-Error "Service Account Password is required"
+          exit 1
+        }
+        
+        # Validate UPN format
+        if ($upn -notmatch '^[\w\.-]+@[\w\.-]+\.\w+$') {
+          Write-Error "Invalid UPN format: $upn"
+          exit 1
+        }
+        
+        # Validate password complexity
+        $passwordIssues = @()
+        if ($password.Length -lt 8) { $passwordIssues += "Min 8 characters" }
+        if ($password -notmatch '[A-Z]') { $passwordIssues += "Uppercase letter" }
+        if ($password -notmatch '[a-z]') { $passwordIssues += "Lowercase letter" }
+        if ($password -notmatch '[0-9]') { $passwordIssues += "Number" }
+        if ($password -notmatch '[!@#$%^&*(),.?":{}|<>]') { $passwordIssues += "Special character" }
+        
+        if ($passwordIssues.Count -gt 0) {
+          Write-Error "Password must contain: $($passwordIssues -join ', ')"
+          exit 1
+        }
+        
+        Write-Host "Service Account UPN: $upn" -ForegroundColor Green
+        Write-Host "Display Name: $displayName" -ForegroundColor Green
+        Write-Host "Target Group: $group" -ForegroundColor Green
+        Write-Host "Password complexity validated" -ForegroundColor Green
+      }
+      
+      Write-Host "All validations passed!" -ForegroundColor Green
+  env:
+    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+
+- task: PowerShell@2
+  displayName: 'Execute Azure AD Operation'
+  inputs:
+    targetType: 'filePath'
+    filePath: '$(Build.SourcesDirectory)/Pipelines/Create_Users_AAD/Create-User-AAD.ps1'
+    arguments: >
+      -OperationType "${{ parameters.operationType }}"
+      -ServiceAccountUPN "${{ parameters.serviceAccountUPN }}"
+      -ServiceAccountDisplayName "${{ parameters.serviceAccountDisplayName }}"
+      -ServiceAccountPassword "${{ parameters.serviceAccountPassword }}"
+      -ServiceAccountGroup "${{ parameters.serviceAccountGroup }}"
+      -UsersCsvFilePath "$(ResolvedUsersCsvPath)"
+      -GroupsCsvFilePath "$(ResolvedGroupsCsvPath)"
+      -HardcodedAVDGroup "$(AVDGroup)"
+      -LogPath "$(logPath)"
+      -LogFileName "$(logFileName)"
+    pwsh: true
+    errorActionPreference: 'stop'
+  env:
+    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Logs'
+  condition: always()
+  inputs:
+    PathtoPublish: '$(logPath)\$(logFileName)'
+    ArtifactName: 'UserManagementLogs-$(Build.BuildNumber)'
+    publishLocation: 'Container'

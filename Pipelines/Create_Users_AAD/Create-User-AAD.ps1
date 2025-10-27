@@ -19,15 +19,16 @@ param(
     [string]$ServiceAccountDisplayName = "",
     
     [Parameter(Mandatory=$false)]
-    [ValidateLength(8, 256)]
-    [string]$ServiceAccountPassword = "",
+    [SecureString]$ServiceAccountSecurePassword,
     
     [Parameter(Mandatory=$false)]
     [string]$ServiceAccountGroup = "ALBTests service accounts",
     
     [Parameter(Mandatory=$false)]
-    [ValidateScript({Test-Path $_ -PathType Leaf})]
-    [string]$CsvFilePath = "",
+    [string]$UsersCsvFilePath = "",
+    
+    [Parameter(Mandatory=$false)]
+    [string]$GroupsCsvFilePath = "",
     
     [Parameter(Mandatory=$false)]
     [string]$HardcodedAVDGroup = "BAB_VDI_DT_Shared_Pool",
@@ -140,32 +141,76 @@ function Test-PasswordComplexity {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)]
-        [string]$Password
+        [SecureString]$SecurePassword
     )
     
-    $issues = @()
+    # Convert SecureString to plain text for validation only
+    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePassword)
+    try {
+        $plainTextPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        
+        $issues = @()
+        
+        if ($plainTextPassword.Length -lt 8) {
+            $issues += "Password must be at least 8 characters"
+        }
+        if ($plainTextPassword -notmatch '[A-Z]') {
+            $issues += "Password must contain uppercase letter"
+        }
+        if ($plainTextPassword -notmatch '[a-z]') {
+            $issues += "Password must contain lowercase letter"
+        }
+        if ($plainTextPassword -notmatch '[0-9]') {
+            $issues += "Password must contain number"
+        }
+        if ($plainTextPassword -notmatch '[!@#$%^&*(),.?":{}|<>]') {
+            $issues += "Password must contain special character"
+        }
+        
+        if ($issues.Count -gt 0) {
+            throw "Password validation failed: $($issues -join '; ')"
+        }
+        
+        return $true
+    } finally {
+        # Always clear the BSTR to prevent memory leaks
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+    }
+}
+
+function ConvertTo-SecureStringFromPlainText {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$PlainTextPassword
+    )
     
-    if ($Password.Length -lt 8) {
-        $issues += "Password must be at least 8 characters"
-    }
-    if ($Password -notmatch '[A-Z]') {
-        $issues += "Password must contain uppercase letter"
-    }
-    if ($Password -notmatch '[a-z]') {
-        $issues += "Password must contain lowercase letter"
-    }
-    if ($Password -notmatch '[0-9]') {
-        $issues += "Password must contain number"
-    }
-    if ($Password -notmatch '[!@#$%^&*(),.?":{}|<>]') {
-        $issues += "Password must contain special character"
-    }
+    return ConvertTo-SecureString -String $PlainTextPassword -AsPlainText -Force
+}
+
+function Get-PasswordProfileFromSecureString {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [SecureString]$SecurePassword,
+        
+        [Parameter(Mandatory=$false)]
+        [bool]$ForceChangePasswordNextSignIn = $true
+    )
     
-    if ($issues.Count -gt 0) {
-        throw "Password validation failed: $($issues -join '; ')"
+    # Convert SecureString to plain text for API call
+    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePassword)
+    try {
+        $plainTextPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        
+        return @{
+            Password = $plainTextPassword
+            ForceChangePasswordNextSignIn = $ForceChangePasswordNextSignIn
+        }
+    } finally {
+        # Always clear the BSTR
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
     }
-    
-    return $true
 }
 
 Write-Log "========================================" "INFO"
@@ -184,6 +229,32 @@ foreach ($envVar in $requiredEnvVars) {
     }
 }
 Write-Log "Environment variables validated" "SUCCESS"
+
+# Validate CSV file paths
+if ($OperationType -ne "Create Service Account (GUI Input)") {
+    Write-Log "Validating CSV file paths..." "INFO"
+    
+    if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath) -or -not (Test-Path $UsersCsvFilePath)) {
+        Write-Log "Users CSV file not found or path empty: $UsersCsvFilePath" "ERROR"
+        exit 1
+    }
+    Write-Log "Users CSV file validated: $UsersCsvFilePath" "SUCCESS"
+    
+    # Validate Groups CSV if required for operation
+    $requiresGroupsCsv = @(
+        "Add Existing Admin Studio Users to Admin Studio Groups",
+        "Create New ABIC Users and Add to ABIC Groups",
+        "Add Existing ABIC Users to ABIC Groups"
+    )
+    
+    if ($OperationType -in $requiresGroupsCsv) {
+        if ([string]::IsNullOrWhiteSpace($GroupsCsvFilePath) -or -not (Test-Path $GroupsCsvFilePath)) {
+            Write-Log "Groups CSV file not found or path empty: $GroupsCsvFilePath" "ERROR"
+            exit 1
+        }
+        Write-Log "Groups CSV file validated: $GroupsCsvFilePath" "SUCCESS"
+    }
+}
 
 # Install and import required modules
 $modules = @(
@@ -248,8 +319,15 @@ try {
             Write-Log "Service Account: $ServiceAccountUPN" "INFO"
             Write-Log "Target Group: $ServiceAccountGroup" "INFO"
             
-            # Validate password
-            Test-PasswordComplexity -Password $ServiceAccountPassword
+            # Validate secure password
+            if (-not $ServiceAccountSecurePassword) {
+                Write-Log "Service Account password is required" "ERROR"
+                exit 1
+            }
+            
+            # Validate password complexity
+            Test-PasswordComplexity -SecurePassword $ServiceAccountSecurePassword
+            Write-Log "Password complexity validated" "SUCCESS"
             
             # Check if service account exists
             $existingUser = Invoke-WithRetry -OperationName "Check existing user" -ScriptBlock {
@@ -264,10 +342,7 @@ try {
                 
                 $mailNickname = ($ServiceAccountUPN -split '@')[0] -replace '[^a-zA-Z0-9]', ''
                 
-                $passwordProfile = @{
-                    Password = $ServiceAccountPassword
-                    ForceChangePasswordNextSignIn = $false
-                }
+                $passwordProfile = Get-PasswordProfileFromSecureString -SecurePassword $ServiceAccountSecurePassword -ForceChangePasswordNextSignIn $false
                 
                 $newUser = Invoke-WithRetry -OperationName "Create service account" -ScriptBlock {
                     New-MgUser `
@@ -313,7 +388,7 @@ try {
             Write-Log "Executing: Create Normal AVD Users and Add to Hardcoded Group" "INFO"
             Write-Log "Hardcoded Group: $HardcodedAVDGroup" "INFO"
             
-            $avdUsers = Import-Csv -Path $CsvFilePath -ErrorAction Stop
+            $avdUsers = Import-Csv -Path $UsersCsvFilePath -ErrorAction Stop
             Write-Log "Loaded $($avdUsers.Count) AVD users from CSV" "SUCCESS"
             
             # Validate CSV columns
@@ -351,9 +426,12 @@ try {
                         continue
                     }
                     
+                    # Convert plain text password to SecureString
+                    $securePassword = ConvertTo-SecureStringFromPlainText -PlainTextPassword $user.Password
+                    
                     # Validate password complexity
                     try {
-                        Test-PasswordComplexity -Password $user.Password
+                        Test-PasswordComplexity -SecurePassword $securePassword
                     } catch {
                         Write-Log "Password validation failed for $($user.UserPrincipalName): $_" "WARN"
                         $skippedCount++
@@ -373,10 +451,7 @@ try {
                         
                         $mailNickname = ($user.UserPrincipalName -split '@')[0] -replace '[^a-zA-Z0-9]', ''
                         
-                        $passwordProfile = @{
-                            Password = $user.Password
-                            ForceChangePasswordNextSignIn = $true
-                        }
+                        $passwordProfile = Get-PasswordProfileFromSecureString -SecurePassword $securePassword -ForceChangePasswordNextSignIn $true
                         
                         $newUser = Invoke-WithRetry -OperationName "Create AVD user" -ScriptBlock {
                             New-MgUser `
@@ -410,6 +485,11 @@ try {
                     Write-Log "Error processing AVD user $($user.UserPrincipalName): $($_.Exception.Message)" "ERROR"
                     Write-Log "Stack trace: $($_.ScriptStackTrace)" "DEBUG"
                     $failCount++
+                } finally {
+                    # Clear the secure password from memory
+                    if ($securePassword) {
+                        $securePassword.Dispose()
+                    }
                 }
             }
             
@@ -426,74 +506,90 @@ try {
         "Add Existing Admin Studio Users to Admin Studio Groups" {
             Write-Log "Executing: Add Existing Admin Studio Users to Admin Studio Groups" "INFO"
             
-            $userGroupMappings = Import-Csv -Path $CsvFilePath -ErrorAction Stop
-            Write-Log "Loaded $($userGroupMappings.Count) Admin Studio user-group mappings" "SUCCESS"
+            # Load Users CSV
+            $adminUsers = Import-Csv -Path $UsersCsvFilePath -ErrorAction Stop
+            Write-Log "Loaded $($adminUsers.Count) Admin Studio users from CSV" "SUCCESS"
+            
+            # Load Groups CSV
+            $adminGroups = Import-Csv -Path $GroupsCsvFilePath -ErrorAction Stop
+            Write-Log "Loaded $($adminGroups.Count) Admin Studio groups from CSV" "SUCCESS"
             
             # Validate CSV columns
-            $requiredColumns = @('UserPrincipalName', 'GroupName')
-            $csvColumns = $userGroupMappings[0].PSObject.Properties.Name
-            $missingColumns = $requiredColumns | Where-Object { $_ -notin $csvColumns }
+            $requiredUserColumns = @('UserPrincipalName')
+            $csvUserColumns = $adminUsers[0].PSObject.Properties.Name
+            $missingUserColumns = $requiredUserColumns | Where-Object { $_ -notin $csvUserColumns }
             
-            if ($missingColumns) {
-                throw "Missing required columns: $($missingColumns -join ', '). Expected: $($requiredColumns -join ', ')"
+            if ($missingUserColumns) {
+                throw "Missing required user columns: $($missingUserColumns -join ', '). Expected: $($requiredUserColumns -join ', ')"
+            }
+            
+            $requiredGroupColumns = @('GroupName')
+            $csvGroupColumns = $adminGroups[0].PSObject.Properties.Name
+            $missingGroupColumns = $requiredGroupColumns | Where-Object { $_ -notin $csvGroupColumns }
+            
+            if ($missingGroupColumns) {
+                throw "Missing required group columns: $($missingGroupColumns -join ', '). Expected: $($requiredGroupColumns -join ', ')"
             }
             
             $successCount = 0
             $failCount = 0
             
-            foreach ($mapping in $userGroupMappings) {
-                try {
-                    Write-Log "----------------------------------------" "INFO"
-                    Write-Log "Processing: $($mapping.UserPrincipalName) -> $($mapping.GroupName)" "INFO"
-                    
-                    # Get existing Admin Studio user
-                    $user = Invoke-WithRetry -OperationName "Get Admin Studio user" -ScriptBlock {
-                        Get-MgUser -Filter "userPrincipalName eq '$($mapping.UserPrincipalName)'" -ErrorAction Stop
-                    }
-                    
-                    if (-not $user) {
-                        Write-Log "Admin Studio user not found: $($mapping.UserPrincipalName)" "ERROR"
-                        $failCount++
-                        continue
-                    }
-                    Write-Log "Admin Studio user found: $($mapping.UserPrincipalName)" "SUCCESS"
-                    
-                    # Get Admin Studio group
-                    $group = Invoke-WithRetry -OperationName "Get Admin Studio group" -ScriptBlock {
-                        Get-MgGroup -Filter "displayName eq '$($mapping.GroupName)'" -ErrorAction Stop
-                    }
-                    
-                    if (-not $group) {
-                        Write-Log "Admin Studio group not found: $($mapping.GroupName)" "ERROR"
-                        $failCount++
-                        continue
-                    }
-                    Write-Log "Admin Studio group found: $($mapping.GroupName)" "SUCCESS"
-                    
-                    # Add to group
-                    $members = Get-MgGroupMember -GroupId $group.Id
-                    $isMember = $members | Where-Object { $_.Id -eq $user.Id }
-                    
-                    if (-not $isMember) {
-                        Invoke-WithRetry -OperationName "Add user to Admin Studio group" -ScriptBlock {
-                            New-MgGroupMember -GroupId $group.Id -DirectoryObjectId $user.Id -ErrorAction Stop
+            # Add each user to each group
+            foreach ($adminUser in $adminUsers) {
+                foreach ($adminGroup in $adminGroups) {
+                    try {
+                        Write-Log "----------------------------------------" "INFO"
+                        Write-Log "Processing: $($adminUser.UserPrincipalName) -> $($adminGroup.GroupName)" "INFO"
+                        
+                        # Get existing Admin Studio user
+                        $user = Invoke-WithRetry -OperationName "Get Admin Studio user" -ScriptBlock {
+                            Get-MgUser -Filter "userPrincipalName eq '$($adminUser.UserPrincipalName)'" -ErrorAction Stop
                         }
-                        Write-Log "User added to Admin Studio group successfully" "SUCCESS"
-                    } else {
-                        Write-Log "User already in Admin Studio group" "WARN"
+                        
+                        if (-not $user) {
+                            Write-Log "Admin Studio user not found: $($adminUser.UserPrincipalName)" "ERROR"
+                            $failCount++
+                            continue
+                        }
+                        Write-Log "Admin Studio user found: $($adminUser.UserPrincipalName)" "SUCCESS"
+                        
+                        # Get Admin Studio group
+                        $group = Invoke-WithRetry -OperationName "Get Admin Studio group" -ScriptBlock {
+                            Get-MgGroup -Filter "displayName eq '$($adminGroup.GroupName)'" -ErrorAction Stop
+                        }
+                        
+                        if (-not $group) {
+                            Write-Log "Admin Studio group not found: $($adminGroup.GroupName)" "ERROR"
+                            $failCount++
+                            continue
+                        }
+                        Write-Log "Admin Studio group found: $($adminGroup.GroupName)" "SUCCESS"
+                        
+                        # Add to group
+                        $members = Get-MgGroupMember -GroupId $group.Id
+                        $isMember = $members | Where-Object { $_.Id -eq $user.Id }
+                        
+                        if (-not $isMember) {
+                            Invoke-WithRetry -OperationName "Add user to Admin Studio group" -ScriptBlock {
+                                New-MgGroupMember -GroupId $group.Id -DirectoryObjectId $user.Id -ErrorAction Stop
+                            }
+                            Write-Log "User added to Admin Studio group successfully" "SUCCESS"
+                        } else {
+                            Write-Log "User already in Admin Studio group" "WARN"
+                        }
+                        
+                        $successCount++
+                    } catch {
+                        Write-Log "Error processing Admin Studio mapping: $($_.Exception.Message)" "ERROR"
+                        Write-Log "Stack trace: $($_.ScriptStackTrace)" "DEBUG"
+                        $failCount++
                     }
-                    
-                    $successCount++
-                } catch {
-                    Write-Log "Error processing Admin Studio mapping: $($_.Exception.Message)" "ERROR"
-                    Write-Log "Stack trace: $($_.ScriptStackTrace)" "DEBUG"
-                    $failCount++
                 }
             }
             
             Write-Log "========================================" "INFO"
             Write-Log "Admin Studio Users Summary" "INFO"
-            Write-Log "Total: $($userGroupMappings.Count) | Success: $successCount | Failed: $failCount" "INFO"
+            Write-Log "Total Mappings: $($adminUsers.Count * $adminGroups.Count) | Success: $successCount | Failed: $failCount" "INFO"
             Write-Log "========================================" "INFO"
             
             if ($failCount -gt 0) {
@@ -504,16 +600,30 @@ try {
         "Create New ABIC Users and Add to ABIC Groups" {
             Write-Log "Executing: Create New ABIC Users and Add to ABIC Groups" "INFO"
             
-            $abicUsers = Import-Csv -Path $CsvFilePath -ErrorAction Stop
-            Write-Log "Loaded $($abicUsers.Count) new ABIC users" "SUCCESS"
+            # Load Users CSV
+            $abicUsers = Import-Csv -Path $UsersCsvFilePath -ErrorAction Stop
+            Write-Log "Loaded $($abicUsers.Count) new ABIC users from CSV" "SUCCESS"
             
-            # Validate CSV columns
-            $requiredColumns = @('DisplayName', 'UserPrincipalName', 'Password', 'GroupName')
-            $csvColumns = $abicUsers[0].PSObject.Properties.Name
-            $missingColumns = $requiredColumns | Where-Object { $_ -notin $csvColumns }
+            # Load Groups CSV
+            $abicGroups = Import-Csv -Path $GroupsCsvFilePath -ErrorAction Stop
+            Write-Log "Loaded $($abicGroups.Count) ABIC groups from CSV" "SUCCESS"
             
-            if ($missingColumns) {
-                throw "Missing required columns: $($missingColumns -join ', '). Expected: $($requiredColumns -join ', ')"
+            # Validate CSV columns for users
+            $requiredUserColumns = @('DisplayName', 'UserPrincipalName', 'MailNickName', 'Password', 'First name', 'Last name', 'Job Title', 'Company name', 'Department', 'Employee Type', 'Manager', 'Employee ID')
+            $csvUserColumns = $abicUsers[0].PSObject.Properties.Name
+            $missingUserColumns = $requiredUserColumns | Where-Object { $_ -notin $csvUserColumns }
+            
+            if ($missingUserColumns) {
+                throw "Missing required user columns: $($missingUserColumns -join ', '). Expected: $($requiredUserColumns -join ', ')"
+            }
+            
+            # Validate CSV columns for groups
+            $requiredGroupColumns = @('GroupName')
+            $csvGroupColumns = $abicGroups[0].PSObject.Properties.Name
+            $missingGroupColumns = $requiredGroupColumns | Where-Object { $_ -notin $csvGroupColumns }
+            
+            if ($missingGroupColumns) {
+                throw "Missing required group columns: $($missingGroupColumns -join ', '). Expected: $($requiredGroupColumns -join ', ')"
             }
             
             $successCount = 0
@@ -521,6 +631,7 @@ try {
             $skippedCount = 0
             
             foreach ($user in $abicUsers) {
+                $securePassword = $null
                 try {
                     Write-Log "----------------------------------------" "INFO"
                     Write-Log "Processing new ABIC user: $($user.UserPrincipalName)" "INFO"
@@ -532,9 +643,12 @@ try {
                         continue
                     }
                     
+                    # Convert plain text password to SecureString
+                    $securePassword = ConvertTo-SecureStringFromPlainText -PlainTextPassword $user.Password
+                    
                     # Validate password complexity
                     try {
-                        Test-PasswordComplexity -Password $user.Password
+                        Test-PasswordComplexity -SecurePassword $securePassword
                     } catch {
                         Write-Log "Password validation failed for $($user.UserPrincipalName): $_" "WARN"
                         $skippedCount++
@@ -550,52 +664,76 @@ try {
                         Write-Log "ABIC user already exists, using existing: $($user.UserPrincipalName)" "WARN"
                         $userId = $existingUser.Id
                     } else {
-                        Write-Log "Creating new ABIC user..." "INFO"
+                        Write-Log "Creating new ABIC user with full profile..." "INFO"
                         
-                        $mailNickname = ($user.UserPrincipalName -split '@')[0] -replace '[^a-zA-Z0-9]', ''
+                        $passwordProfile = Get-PasswordProfileFromSecureString -SecurePassword $securePassword -ForceChangePasswordNextSignIn $true
                         
-                        $passwordProfile = @{
-                            Password = $user.Password
-                            ForceChangePasswordNextSignIn = $true
+                        # Build user parameters with extended properties
+                        $userParams = @{
+                            DisplayName = $user.DisplayName
+                            UserPrincipalName = $user.UserPrincipalName
+                            PasswordProfile = $passwordProfile
+                            AccountEnabled = $true
+                            MailNickname = $user.MailNickName
+                            GivenName = $user.'First name'
+                            Surname = $user.'Last name'
+                            JobTitle = $user.'Job Title'
+                            CompanyName = $user.'Company name'
+                            Department = $user.Department
+                            EmployeeId = $user.'Employee ID'
+                        }
+                        
+                        # Add manager if provided
+                        if (-not [string]::IsNullOrWhiteSpace($user.Manager)) {
+                            $manager = Get-MgUser -Filter "userPrincipalName eq '$($user.Manager)'" -ErrorAction SilentlyContinue
+                            if ($manager) {
+                                $userParams['Manager'] = @{ "@odata.id" = "https://graph.microsoft.com/v1.0/users/$($manager.Id)" }
+                            } else {
+                                Write-Log "Manager not found: $($user.Manager)" "WARN"
+                            }
+                        }
+                        
+                        # Add employee type if provided
+                        if (-not [string]::IsNullOrWhiteSpace($user.'Employee Type')) {
+                            $userParams['EmployeeType'] = $user.'Employee Type'
                         }
                         
                         $newUser = Invoke-WithRetry -OperationName "Create ABIC user" -ScriptBlock {
-                            New-MgUser `
-                                -DisplayName $user.DisplayName `
-                                -UserPrincipalName $user.UserPrincipalName `
-                                -PasswordProfile $passwordProfile `
-                                -AccountEnabled $true `
-                                -MailNickname $mailNickname `
-                                -ErrorAction Stop
+                            New-MgUser @userParams -ErrorAction Stop
                         }
                         
                         Write-Log "New ABIC user created: $($user.UserPrincipalName) (ID: $($newUser.Id))" "SUCCESS"
                         $userId = $newUser.Id
                     }
                     
-                    # Add to ABIC group
-                    Write-Log "Adding to ABIC group: $($user.GroupName)" "INFO"
-                    
-                    $group = Invoke-WithRetry -OperationName "Get ABIC group" -ScriptBlock {
-                        Get-MgGroup -Filter "displayName eq '$($user.GroupName)'" -ErrorAction Stop
-                    }
-                    
-                    if (-not $group) {
-                        Write-Log "ABIC group not found: $($user.GroupName)" "ERROR"
-                        $failCount++
-                        continue
-                    }
-                    
-                    $members = Get-MgGroupMember -GroupId $group.Id
-                    $isMember = $members | Where-Object { $_.Id -eq $userId }
-                    
-                    if (-not $isMember) {
-                        Invoke-WithRetry -OperationName "Add to ABIC group" -ScriptBlock {
-                            New-MgGroupMember -GroupId $group.Id -DirectoryObjectId $userId -ErrorAction Stop
+                    # Add to all ABIC groups
+                    foreach ($groupEntry in $abicGroups) {
+                        try {
+                            Write-Log "Adding to ABIC group: $($groupEntry.GroupName)" "INFO"
+                            
+                            $group = Invoke-WithRetry -OperationName "Get ABIC group" -ScriptBlock {
+                                Get-MgGroup -Filter "displayName eq '$($groupEntry.GroupName)'" -ErrorAction Stop
+                            }
+                            
+                            if (-not $group) {
+                                Write-Log "ABIC group not found: $($groupEntry.GroupName)" "ERROR"
+                                continue
+                            }
+                            
+                            $members = Get-MgGroupMember -GroupId $group.Id
+                            $isMember = $members | Where-Object { $_.Id -eq $userId }
+                            
+                            if (-not $isMember) {
+                                Invoke-WithRetry -OperationName "Add to ABIC group" -ScriptBlock {
+                                    New-MgGroupMember -GroupId $group.Id -DirectoryObjectId $userId -ErrorAction Stop
+                                }
+                                Write-Log "Added to ABIC group: $($groupEntry.GroupName)" "SUCCESS"
+                            } else {
+                                Write-Log "Already member of ABIC group: $($groupEntry.GroupName)" "WARN"
+                            }
+                        } catch {
+                            Write-Log "Error adding to ABIC group $($groupEntry.GroupName): $($_.Exception.Message)" "ERROR"
                         }
-                        Write-Log "Added to ABIC group: $($user.GroupName)" "SUCCESS"
-                    } else {
-                        Write-Log "Already member of ABIC group: $($user.GroupName)" "WARN"
                     }
                     
                     $successCount++
@@ -603,6 +741,11 @@ try {
                     Write-Log "Error processing ABIC user: $($_.Exception.Message)" "ERROR"
                     Write-Log "Stack trace: $($_.ScriptStackTrace)" "DEBUG"
                     $failCount++
+                } finally {
+                    # Clear the secure password from memory
+                    if ($securePassword) {
+                        $securePassword.Dispose()
+                    }
                 }
             }
             
@@ -619,74 +762,90 @@ try {
         "Add Existing ABIC Users to ABIC Groups" {
             Write-Log "Executing: Add Existing ABIC Users to ABIC Groups" "INFO"
             
-            $abicUserMappings = Import-Csv -Path $CsvFilePath -ErrorAction Stop
-            Write-Log "Loaded $($abicUserMappings.Count) existing ABIC user-group mappings" "SUCCESS"
+            # Load Users CSV
+            $abicUsers = Import-Csv -Path $UsersCsvFilePath -ErrorAction Stop
+            Write-Log "Loaded $($abicUsers.Count) existing ABIC users from CSV" "SUCCESS"
+            
+            # Load Groups CSV
+            $abicGroups = Import-Csv -Path $GroupsCsvFilePath -ErrorAction Stop
+            Write-Log "Loaded $($abicGroups.Count) ABIC groups from CSV" "SUCCESS"
             
             # Validate CSV columns
-            $requiredColumns = @('UserPrincipalName', 'GroupName')
-            $csvColumns = $abicUserMappings[0].PSObject.Properties.Name
-            $missingColumns = $requiredColumns | Where-Object { $_ -notin $csvColumns }
+            $requiredUserColumns = @('UserPrincipalName')
+            $csvUserColumns = $abicUsers[0].PSObject.Properties.Name
+            $missingUserColumns = $requiredUserColumns | Where-Object { $_ -notin $csvUserColumns }
             
-            if ($missingColumns) {
-                throw "Missing required columns: $($missingColumns -join ', '). Expected: $($requiredColumns -join ', ')"
+            if ($missingUserColumns) {
+                throw "Missing required user columns: $($missingUserColumns -join ', '). Expected: $($requiredUserColumns -join ', ')"
+            }
+            
+            $requiredGroupColumns = @('GroupName')
+            $csvGroupColumns = $abicGroups[0].PSObject.Properties.Name
+            $missingGroupColumns = $requiredGroupColumns | Where-Object { $_ -notin $csvGroupColumns }
+            
+            if ($missingGroupColumns) {
+                throw "Missing required group columns: $($missingGroupColumns -join ', '). Expected: $($requiredGroupColumns -join ', ')"
             }
             
             $successCount = 0
             $failCount = 0
             
-            foreach ($mapping in $abicUserMappings) {
-                try {
-                    Write-Log "----------------------------------------" "INFO"
-                    Write-Log "Processing existing ABIC user: $($mapping.UserPrincipalName) -> $($mapping.GroupName)" "INFO"
-                    
-                    # Get existing ABIC user
-                    $user = Invoke-WithRetry -OperationName "Get existing ABIC user" -ScriptBlock {
-                        Get-MgUser -Filter "userPrincipalName eq '$($mapping.UserPrincipalName)'" -ErrorAction Stop
-                    }
-                    
-                    if (-not $user) {
-                        Write-Log "Existing ABIC user not found: $($mapping.UserPrincipalName)" "ERROR"
-                        $failCount++
-                        continue
-                    }
-                    Write-Log "Existing ABIC user found: $($mapping.UserPrincipalName)" "SUCCESS"
-                    
-                    # Get ABIC group
-                    $group = Invoke-WithRetry -OperationName "Get ABIC group" -ScriptBlock {
-                        Get-MgGroup -Filter "displayName eq '$($mapping.GroupName)'" -ErrorAction Stop
-                    }
-                    
-                    if (-not $group) {
-                        Write-Log "ABIC group not found: $($mapping.GroupName)" "ERROR"
-                        $failCount++
-                        continue
-                    }
-                    Write-Log "ABIC group found: $($mapping.GroupName)" "SUCCESS"
-                    
-                    # Add to ABIC group
-                    $members = Get-MgGroupMember -GroupId $group.Id
-                    $isMember = $members | Where-Object { $_.Id -eq $user.Id }
-                    
-                    if (-not $isMember) {
-                        Invoke-WithRetry -OperationName "Add existing ABIC user to group" -ScriptBlock {
-                            New-MgGroupMember -GroupId $group.Id -DirectoryObjectId $user.Id -ErrorAction Stop
+            # Add each user to each group
+            foreach ($abicUser in $abicUsers) {
+                foreach ($abicGroup in $abicGroups) {
+                    try {
+                        Write-Log "----------------------------------------" "INFO"
+                        Write-Log "Processing existing ABIC user: $($abicUser.UserPrincipalName) -> $($abicGroup.GroupName)" "INFO"
+                        
+                        # Get existing ABIC user
+                        $user = Invoke-WithRetry -OperationName "Get existing ABIC user" -ScriptBlock {
+                            Get-MgUser -Filter "userPrincipalName eq '$($abicUser.UserPrincipalName)'" -ErrorAction Stop
                         }
-                        Write-Log "Existing ABIC user added to ABIC group successfully" "SUCCESS"
-                    } else {
-                        Write-Log "Existing ABIC user already in ABIC group" "WARN"
+                        
+                        if (-not $user) {
+                            Write-Log "Existing ABIC user not found: $($abicUser.UserPrincipalName)" "ERROR"
+                            $failCount++
+                            continue
+                        }
+                        Write-Log "Existing ABIC user found: $($abicUser.UserPrincipalName)" "SUCCESS"
+                        
+                        # Get ABIC group
+                        $group = Invoke-WithRetry -OperationName "Get ABIC group" -ScriptBlock {
+                            Get-MgGroup -Filter "displayName eq '$($abicGroup.GroupName)'" -ErrorAction Stop
+                        }
+                        
+                        if (-not $group) {
+                            Write-Log "ABIC group not found: $($abicGroup.GroupName)" "ERROR"
+                            $failCount++
+                            continue
+                        }
+                        Write-Log "ABIC group found: $($abicGroup.GroupName)" "SUCCESS"
+                        
+                        # Add to ABIC group
+                        $members = Get-MgGroupMember -GroupId $group.Id
+                        $isMember = $members | Where-Object { $_.Id -eq $user.Id }
+                        
+                        if (-not $isMember) {
+                            Invoke-WithRetry -OperationName "Add existing ABIC user to group" -ScriptBlock {
+                                New-MgGroupMember -GroupId $group.Id -DirectoryObjectId $user.Id -ErrorAction Stop
+                            }
+                            Write-Log "Existing ABIC user added to ABIC group successfully" "SUCCESS"
+                        } else {
+                            Write-Log "Existing ABIC user already in ABIC group" "WARN"
+                        }
+                        
+                        $successCount++
+                    } catch {
+                        Write-Log "Error processing existing ABIC user: $($_.Exception.Message)" "ERROR"
+                        Write-Log "Stack trace: $($_.ScriptStackTrace)" "DEBUG"
+                        $failCount++
                     }
-                    
-                    $successCount++
-                } catch {
-                    Write-Log "Error processing existing ABIC user: $($_.Exception.Message)" "ERROR"
-                    Write-Log "Stack trace: $($_.ScriptStackTrace)" "DEBUG"
-                    $failCount++
                 }
             }
             
             Write-Log "========================================" "INFO"
             Write-Log "Existing ABIC Users Summary" "INFO"
-            Write-Log "Total: $($abicUserMappings.Count) | Success: $successCount | Failed: $failCount" "INFO"
+            Write-Log "Total Mappings: $($abicUsers.Count * $abicGroups.Count) | Success: $successCount | Failed: $failCount" "INFO"
             Write-Log "========================================" "INFO"
             
             if ($failCount -gt 0) {
