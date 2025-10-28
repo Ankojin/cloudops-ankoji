@@ -1,0 +1,2 @@
+﻿SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
+DAIBGAPWSDLV1,DAIBGAPWSDLV1-upgrade,10.189.56.15,snet-dev-nonpci-web-01,Standard_D2s_v5

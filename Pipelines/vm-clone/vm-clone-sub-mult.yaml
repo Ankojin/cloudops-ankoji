@@ -93,10 +93,11 @@ steps:
         $global:ErrorCount++
       }
 
-      if (-not (Test-Path "C:\vm-to-clone")) { New-Item -Path "C:\vm-to-clone" -ItemType Directory | Out-Null }
       if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory | Out-Null }
       $LogFile = "C:\log\clone_log.txt"
-      $vmInputCsv = "C:\vm-to-clone\vm-to-clone.csv"
+      
+      # Use CSV from repository
+      $vmInputCsv = "$(Build.SourcesDirectory)\Pipelines\vm-clone\vm-to-clone.csv"
 
       if (Test-Path $vmInputCsv) {
           Write-Host "Importing VM definitions from CSV: $vmInputCsv"
