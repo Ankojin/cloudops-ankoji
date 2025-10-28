@@ -26,7 +26,7 @@ variables:
 
 parameters:
 - name: operationType
-  displayName: '🎯 Select Operation Type'
+  displayName: 'Select Operation Type'
   type: string
   values:
   - 'Create Service Account'
@@ -37,57 +37,57 @@ parameters:
   default: 'Create Service Account'
 
 # ============================================
-# SERVICE ACCOUNT PARAMETERS (Option 1)
+# SERVICE ACCOUNT PARAMETERS
 # ============================================
 - name: serviceAccountUPN
-  displayName: '📧 [Option 1 Only] Service Account UPN (leave empty for other options)'
+  displayName: 'Service Account UPN (Option 1 only)'
   type: string
   default: ' '
 
 - name: serviceAccountDisplayName
-  displayName: '👤 [Option 1 Only] Service Account Display Name (leave empty for other options)'
+  displayName: 'Service Account Display Name (Option 1 only)'
   type: string
   default: ' '
 
 - name: serviceAccountPassword
-  displayName: '🔒 [Option 1 Only] Service Account Password (leave empty for other options)'
+  displayName: 'Service Account Password (Option 1 only)'
   type: string
   default: ' '
 
 - name: serviceAccountGroup
-  displayName: '👥 [Option 1 Only] Service Account Group (leave empty for default: ALBTests service accounts)'
+  displayName: 'Service Account Target Group (Option 1 only - leave empty for default)'
   type: string
   default: ' '
 
 # ============================================
-# AVD USERS PARAMETERS (Option 2)
+# AVD USERS PARAMETERS
 # ============================================
 - name: avdTargetGroup
-  displayName: '👥 [Option 2 Only] AVD Target Group (leave empty for default: BAB_VDI_DT_Shared_Pool)'
+  displayName: 'AVD Target Group (Option 2 only - leave empty for default)'
   type: string
   default: ' '
 
 # ============================================
-# ADMIN STUDIO PARAMETERS (Option 3)
+# ADMIN STUDIO PARAMETERS
 # ============================================
 - name: confirmAdminStudioOperation
-  displayName: '✅ [Option 3 Only] Confirm Admin Studio Operation'
+  displayName: 'Confirm Admin Studio Operation (Option 3 only)'
   type: boolean
   default: false
 
 # ============================================
-# NEW ABIC USERS PARAMETERS (Option 4)
+# NEW ABIC USERS PARAMETERS
 # ============================================
 - name: confirmNewABICOperation
-  displayName: '✅ [Option 4 Only] Confirm New ABIC User Creation'
+  displayName: 'Confirm New ABIC User Creation (Option 4 only)'
   type: boolean
   default: false
 
 # ============================================
-# EXISTING ABIC USERS PARAMETERS (Option 5)
+# EXISTING ABIC USERS PARAMETERS
 # ============================================
 - name: confirmExistingABICOperation
-  displayName: '✅ [Option 5 Only] Confirm Existing ABIC User Assignment'
+  displayName: 'Confirm Existing ABIC User Assignment (Option 5 only)'
   type: boolean
   default: false
 
@@ -107,13 +107,13 @@ stages:
         targetType: 'inline'
         pwsh: true
         script: |
-          Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-          Write-Host "║          AZURE AD USER MANAGEMENT OPERATION                    ║" -ForegroundColor Cyan
-          Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+          Write-Host "========================================" -ForegroundColor Cyan
+          Write-Host "Azure AD User Management Operation" -ForegroundColor Cyan
+          Write-Host "========================================" -ForegroundColor Cyan
           Write-Host ""
           
           $operationType = "${{ parameters.operationType }}"
-          Write-Host "🎯 Selected Operation: $operationType" -ForegroundColor Yellow
+          Write-Host "Selected Operation: $operationType" -ForegroundColor Yellow
           Write-Host ""
           
           switch ($operationType) {
@@ -122,17 +122,17 @@ stages:
               $displayName = "${{ parameters.serviceAccountDisplayName }}".Trim()
               $group = "${{ parameters.serviceAccountGroup }}".Trim()
               
-              Write-Host "📋 Operation Details:" -ForegroundColor Cyan
-              Write-Host "   • Type: Service Account Creation (GUI Input)" -ForegroundColor White
-              Write-Host "   • UPN: $(if ([string]::IsNullOrWhiteSpace($upn)) { '[Not Provided]' } else { $upn })" -ForegroundColor White
-              Write-Host "   • Display Name: $(if ([string]::IsNullOrWhiteSpace($displayName)) { '[Not Provided]' } else { $displayName })" -ForegroundColor White
-              Write-Host "   • Target Group: $(if ([string]::IsNullOrWhiteSpace($group)) { '$(defaultServiceAccountGroup) (default)' } else { $group })" -ForegroundColor White
-              Write-Host "   • Password: [SECURED]" -ForegroundColor White
+              Write-Host "Operation Details:" -ForegroundColor Cyan
+              Write-Host "  Type: Service Account Creation (GUI Input)" -ForegroundColor White
+              Write-Host "  UPN: $(if ([string]::IsNullOrWhiteSpace($upn)) { 'Not Provided' } else { $upn })" -ForegroundColor White
+              Write-Host "  Display Name: $(if ([string]::IsNullOrWhiteSpace($displayName)) { 'Not Provided' } else { $displayName })" -ForegroundColor White
+              Write-Host "  Target Group: $(if ([string]::IsNullOrWhiteSpace($group)) { '$(defaultServiceAccountGroup) (default)' } else { $group })" -ForegroundColor White
+              Write-Host "  Password: SECURED" -ForegroundColor White
               Write-Host ""
-              Write-Host "📌 Requirements:" -ForegroundColor Yellow
-              Write-Host "   ✓ Valid UPN (email format)" -ForegroundColor Gray
-              Write-Host "   ✓ Display name" -ForegroundColor Gray
-              Write-Host "   ✓ Complex password (8+ chars, A-Z, a-z, 0-9, special)" -ForegroundColor Gray
+              Write-Host "Requirements:" -ForegroundColor Yellow
+              Write-Host "  - Valid UPN (email format)" -ForegroundColor Gray
+              Write-Host "  - Display name" -ForegroundColor Gray
+              Write-Host "  - Complex password (8+ chars, uppercase, lowercase, number, special char)" -ForegroundColor Gray
             }
             
             "Create Normal AVD Users" {
@@ -141,66 +141,66 @@ stages:
                 $avdGroup = "$(defaultAVDGroup)"
               }
               
-              Write-Host "📋 Operation Details:" -ForegroundColor Cyan
-              Write-Host "   • Type: AVD User Creation from CSV" -ForegroundColor White
-              Write-Host "   • CSV File: $(avdUsersCsvPath)" -ForegroundColor White
-              Write-Host "   • Target Group: $avdGroup" -ForegroundColor White
+              Write-Host "Operation Details:" -ForegroundColor Cyan
+              Write-Host "  Type: AVD User Creation from CSV" -ForegroundColor White
+              Write-Host "  CSV File: $(avdUsersCsvPath)" -ForegroundColor White
+              Write-Host "  Target Group: $avdGroup" -ForegroundColor White
               Write-Host ""
-              Write-Host "📌 CSV Requirements:" -ForegroundColor Yellow
-              Write-Host "   ✓ Columns: DisplayName, UserPrincipalName, Password" -ForegroundColor Gray
-              Write-Host "   ✓ Password complexity enforced per user" -ForegroundColor Gray
+              Write-Host "CSV Requirements:" -ForegroundColor Yellow
+              Write-Host "  - Columns: DisplayName, UserPrincipalName, Password" -ForegroundColor Gray
+              Write-Host "  - Password complexity enforced per user" -ForegroundColor Gray
               
               if ("${{ parameters.avdTargetGroup }}".Trim() -eq "") {
                 Write-Host ""
-                Write-Host "💡 Using default AVD group: $(defaultAVDGroup)" -ForegroundColor Yellow
+                Write-Host "Note: Using default AVD group: $(defaultAVDGroup)" -ForegroundColor Yellow
               }
             }
             
             "Add Existing Admin Studio Users to Admin Studio Groups" {
-              Write-Host "📋 Operation Details:" -ForegroundColor Cyan
-              Write-Host "   • Type: Admin Studio User-Group Assignment" -ForegroundColor White
-              Write-Host "   • Users CSV: $(adminStudioUsersCsvPath)" -ForegroundColor White
-              Write-Host "   • Groups CSV: $(adminStudioGroupsCsvPath)" -ForegroundColor White
-              Write-Host "   • Confirmation: ${{ parameters.confirmAdminStudioOperation }}" -ForegroundColor White
+              Write-Host "Operation Details:" -ForegroundColor Cyan
+              Write-Host "  Type: Admin Studio User-Group Assignment" -ForegroundColor White
+              Write-Host "  Users CSV: $(adminStudioUsersCsvPath)" -ForegroundColor White
+              Write-Host "  Groups CSV: $(adminStudioGroupsCsvPath)" -ForegroundColor White
+              Write-Host "  Confirmation: ${{ parameters.confirmAdminStudioOperation }}" -ForegroundColor White
               Write-Host ""
-              Write-Host "📌 CSV Requirements:" -ForegroundColor Yellow
-              Write-Host "   ✓ Users CSV: UserPrincipalName" -ForegroundColor Gray
-              Write-Host "   ✓ Groups CSV: GroupName" -ForegroundColor Gray
-              Write-Host "   ✓ Users & Groups must exist in Azure AD" -ForegroundColor Gray
+              Write-Host "CSV Requirements:" -ForegroundColor Yellow
+              Write-Host "  - Users CSV: UserPrincipalName" -ForegroundColor Gray
+              Write-Host "  - Groups CSV: GroupName" -ForegroundColor Gray
+              Write-Host "  - Users and Groups must exist in Azure AD" -ForegroundColor Gray
             }
             
             "Create New ABIC Users and Add to ABIC Groups" {
-              Write-Host "📋 Operation Details:" -ForegroundColor Cyan
-              Write-Host "   • Type: New ABIC User Creation with Full Profile" -ForegroundColor White
-              Write-Host "   • Users CSV: $(abicNewUsersCsvPath)" -ForegroundColor White
-              Write-Host "   • Groups CSV: $(abicGroupsCsvPath)" -ForegroundColor White
-              Write-Host "   • Confirmation: ${{ parameters.confirmNewABICOperation }}" -ForegroundColor White
+              Write-Host "Operation Details:" -ForegroundColor Cyan
+              Write-Host "  Type: New ABIC User Creation with Full Profile" -ForegroundColor White
+              Write-Host "  Users CSV: $(abicNewUsersCsvPath)" -ForegroundColor White
+              Write-Host "  Groups CSV: $(abicGroupsCsvPath)" -ForegroundColor White
+              Write-Host "  Confirmation: ${{ parameters.confirmNewABICOperation }}" -ForegroundColor White
               Write-Host ""
-              Write-Host "📌 CSV Requirements:" -ForegroundColor Yellow
-              Write-Host "   ✓ Users CSV: DisplayName, UPN, MailNickName, Password," -ForegroundColor Gray
-              Write-Host "     First/Last name, Job Title, Company, Department," -ForegroundColor Gray
-              Write-Host "     Employee Type, Manager, Employee ID" -ForegroundColor Gray
-              Write-Host "   ✓ Groups CSV: GroupName (must exist in Azure AD)" -ForegroundColor Gray
+              Write-Host "CSV Requirements:" -ForegroundColor Yellow
+              Write-Host "  - Users CSV: DisplayName, UPN, MailNickName, Password," -ForegroundColor Gray
+              Write-Host "    First/Last name, Job Title, Company, Department," -ForegroundColor Gray
+              Write-Host "    Employee Type, Manager, Employee ID" -ForegroundColor Gray
+              Write-Host "  - Groups CSV: GroupName (must exist in Azure AD)" -ForegroundColor Gray
             }
             
             "Add Existing ABIC Users to ABIC Groups" {
-              Write-Host "📋 Operation Details:" -ForegroundColor Cyan
-              Write-Host "   • Type: Existing ABIC User-Group Assignment" -ForegroundColor White
-              Write-Host "   • Users CSV: $(abicExistingUsersCsvPath)" -ForegroundColor White
-              Write-Host "   • Groups CSV: $(abicGroupsCsvPath)" -ForegroundColor White
-              Write-Host "   • Confirmation: ${{ parameters.confirmExistingABICOperation }}" -ForegroundColor White
+              Write-Host "Operation Details:" -ForegroundColor Cyan
+              Write-Host "  Type: Existing ABIC User-Group Assignment" -ForegroundColor White
+              Write-Host "  Users CSV: $(abicExistingUsersCsvPath)" -ForegroundColor White
+              Write-Host "  Groups CSV: $(abicGroupsCsvPath)" -ForegroundColor White
+              Write-Host "  Confirmation: ${{ parameters.confirmExistingABICOperation }}" -ForegroundColor White
               Write-Host ""
-              Write-Host "📌 CSV Requirements:" -ForegroundColor Yellow
-              Write-Host "   ✓ Users CSV: UserPrincipalName" -ForegroundColor Gray
-              Write-Host "   ✓ Groups CSV: GroupName" -ForegroundColor Gray
-              Write-Host "   ✓ Users & Groups must exist in Azure AD" -ForegroundColor Gray
+              Write-Host "CSV Requirements:" -ForegroundColor Yellow
+              Write-Host "  - Users CSV: UserPrincipalName" -ForegroundColor Gray
+              Write-Host "  - Groups CSV: GroupName" -ForegroundColor Gray
+              Write-Host "  - Users and Groups must exist in Azure AD" -ForegroundColor Gray
             }
           }
           
           Write-Host ""
-          Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-          Write-Host "║              Ready to proceed with validation                  ║" -ForegroundColor Green
-          Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+          Write-Host "========================================" -ForegroundColor Green
+          Write-Host "Ready to proceed with validation" -ForegroundColor Green
+          Write-Host "========================================" -ForegroundColor Green
 
     - task: PowerShell@2
       displayName: 'Validate Operation-Specific Requirements'
@@ -212,7 +212,7 @@ stages:
           $ErrorActionPreference = 'Stop'
           $operationType = "${{ parameters.operationType }}"
           
-          Write-Host "🔍 Validating operation-specific requirements..." -ForegroundColor Cyan
+          Write-Host "Validating operation-specific requirements..." -ForegroundColor Cyan
           
           switch ($operationType) {
             "Create Service Account" {
@@ -225,40 +225,41 @@ stages:
               $errors = @()
               
               if ([string]::IsNullOrWhiteSpace($upn)) {
-                $errors += "❌ Service Account UPN is required for Option 1"
+                $errors += "ERROR: Service Account UPN is required for Option 1"
               } elseif ($upn -notmatch '^[\w\.-]+@[\w\.-]+\.\w+$') {
-                $errors += "❌ Invalid UPN format: $upn"
+                $errors += "ERROR: Invalid UPN format: $upn"
               }
               
               if ([string]::IsNullOrWhiteSpace($displayName)) {
-                $errors += "❌ Service Account Display Name is required for Option 1"
+                $errors += "ERROR: Service Account Display Name is required for Option 1"
               }
               
               if ([string]::IsNullOrWhiteSpace($password)) {
-                $errors += "❌ Service Account Password is required for Option 1"
+                $errors += "ERROR: Service Account Password is required for Option 1"
               } else {
-                if ($password.Length -lt 8) { $errors += "❌ Password must be at least 8 characters" }
-                if ($password -notmatch '[A-Z]') { $errors += "❌ Password must contain uppercase letter" }
-                if ($password -notmatch '[a-z]') { $errors += "❌ Password must contain lowercase letter" }
-                if ($password -notmatch '[0-9]') { $errors += "❌ Password must contain number" }
-                if ($password -notmatch '[!@#$%^&*(),.?":{}|<>]') { $errors += "❌ Password must contain special character" }
+                if ($password.Length -lt 8) { $errors += "ERROR: Password must be at least 8 characters" }
+                if ($password -notmatch '[A-Z]') { $errors += "ERROR: Password must contain uppercase letter" }
+                if ($password -notmatch '[a-z]') { $errors += "ERROR: Password must contain lowercase letter" }
+                if ($password -notmatch '[0-9]') { $errors += "ERROR: Password must contain number" }
+                if ($password -notmatch '[!@#$%^&*(),.?":{}|<>]') { $errors += "ERROR: Password must contain special character" }
               }
               
               if ($errors.Count -gt 0) {
-                Write-Host "`n⚠️  Validation Errors Found:" -ForegroundColor Red
+                Write-Host ""
+                Write-Host "Validation Errors Found:" -ForegroundColor Red
                 $errors | ForEach-Object { Write-Host $_ -ForegroundColor Red }
                 Write-Host ""
-                Write-Host "💡 Hint: Fill all [Option 1 Only] fields for Service Account creation" -ForegroundColor Yellow
+                Write-Host "Hint: Fill all Option 1 fields for Service Account creation" -ForegroundColor Yellow
                 exit 1
               }
               
               # Use default group if empty
               if ([string]::IsNullOrWhiteSpace($group)) {
                 $group = "$(defaultServiceAccountGroup)"
-                Write-Host "ℹ️  Using default service account group: $group" -ForegroundColor Cyan
+                Write-Host "INFO: Using default service account group: $group" -ForegroundColor Cyan
               }
               
-              Write-Host "✅ Service Account parameters validated" -ForegroundColor Green
+              Write-Host "SUCCESS: Service Account parameters validated" -ForegroundColor Green
               Write-Host "##vso[task.setvariable variable=ResolvedServiceAccountGroup;isOutput=true]$group"
             }
             
@@ -267,42 +268,42 @@ stages:
               $avdGroup = "${{ parameters.avdTargetGroup }}".Trim()
               if ([string]::IsNullOrWhiteSpace($avdGroup)) {
                 $avdGroup = "$(defaultAVDGroup)"
-                Write-Host "ℹ️  Using default AVD group: $avdGroup" -ForegroundColor Cyan
+                Write-Host "INFO: Using default AVD group: $avdGroup" -ForegroundColor Cyan
               }
               
-              Write-Host "✅ AVD Target Group validated: $avdGroup" -ForegroundColor Green
-              Write-Host "💡 Users from $(avdUsersCsvPath) will be added to: $avdGroup" -ForegroundColor Yellow
+              Write-Host "SUCCESS: AVD Target Group validated: $avdGroup" -ForegroundColor Green
+              Write-Host "Note: Users from $(avdUsersCsvPath) will be added to: $avdGroup" -ForegroundColor Yellow
               Write-Host "##vso[task.setvariable variable=ResolvedAVDGroup;isOutput=true]$avdGroup"
             }
             
             "Add Existing Admin Studio Users to Admin Studio Groups" {
               if (-not [bool]::Parse("${{ parameters.confirmAdminStudioOperation }}")) {
-                Write-Host "❌ Please confirm Admin Studio operation by checking the [Option 3 Only] checkbox" -ForegroundColor Red
-                Write-Host "💡 This operation will assign users from: $(adminStudioUsersCsvPath)" -ForegroundColor Yellow
-                Write-Host "💡 To groups from: $(adminStudioGroupsCsvPath)" -ForegroundColor Yellow
+                Write-Host "ERROR: Please confirm Admin Studio operation by checking the Option 3 checkbox" -ForegroundColor Red
+                Write-Host "Note: This operation will assign users from: $(adminStudioUsersCsvPath)" -ForegroundColor Yellow
+                Write-Host "Note: To groups from: $(adminStudioGroupsCsvPath)" -ForegroundColor Yellow
                 exit 1
               }
-              Write-Host "✅ Admin Studio operation confirmed" -ForegroundColor Green
+              Write-Host "SUCCESS: Admin Studio operation confirmed" -ForegroundColor Green
             }
             
             "Create New ABIC Users and Add to ABIC Groups" {
               if (-not [bool]::Parse("${{ parameters.confirmNewABICOperation }}")) {
-                Write-Host "❌ Please confirm New ABIC User operation by checking the [Option 4 Only] checkbox" -ForegroundColor Red
-                Write-Host "💡 This operation will create users from: $(abicNewUsersCsvPath)" -ForegroundColor Yellow
-                Write-Host "💡 And assign to groups from: $(abicGroupsCsvPath)" -ForegroundColor Yellow
+                Write-Host "ERROR: Please confirm New ABIC User operation by checking the Option 4 checkbox" -ForegroundColor Red
+                Write-Host "Note: This operation will create users from: $(abicNewUsersCsvPath)" -ForegroundColor Yellow
+                Write-Host "Note: And assign to groups from: $(abicGroupsCsvPath)" -ForegroundColor Yellow
                 exit 1
               }
-              Write-Host "✅ New ABIC User operation confirmed" -ForegroundColor Green
+              Write-Host "SUCCESS: New ABIC User operation confirmed" -ForegroundColor Green
             }
             
             "Add Existing ABIC Users to ABIC Groups" {
               if (-not [bool]::Parse("${{ parameters.confirmExistingABICOperation }}")) {
-                Write-Host "❌ Please confirm Existing ABIC User operation by checking the [Option 5 Only] checkbox" -ForegroundColor Red
-                Write-Host "💡 This operation will assign users from: $(abicExistingUsersCsvPath)" -ForegroundColor Yellow
-                Write-Host "💡 To groups from: $(abicGroupsCsvPath)" -ForegroundColor Yellow
+                Write-Host "ERROR: Please confirm Existing ABIC User operation by checking the Option 5 checkbox" -ForegroundColor Red
+                Write-Host "Note: This operation will assign users from: $(abicExistingUsersCsvPath)" -ForegroundColor Yellow
+                Write-Host "Note: To groups from: $(abicGroupsCsvPath)" -ForegroundColor Yellow
                 exit 1
               }
-              Write-Host "✅ Existing ABIC User operation confirmed" -ForegroundColor Green
+              Write-Host "SUCCESS: Existing ABIC User operation confirmed" -ForegroundColor Green
             }
           }
       name: validateOperation
@@ -328,7 +329,7 @@ stages:
           
           switch ($operationType) {
             "Create Service Account" {
-              Write-Host "✅ No CSV files required for Service Account creation" -ForegroundColor Green
+              Write-Host "SUCCESS: No CSV files required for Service Account creation" -ForegroundColor Green
               Write-Host "##vso[task.setvariable variable=ResolvedUsersCsvPath;isOutput=true]"
               Write-Host "##vso[task.setvariable variable=ResolvedGroupsCsvPath;isOutput=true]"
               return
@@ -337,7 +338,7 @@ stages:
             "Create Normal AVD Users" {
               $usersCsvPath = "$(Build.SourcesDirectory)/$(avdUsersCsvPath)"
               $expectedUserColumns = "DisplayName, UserPrincipalName, Password"
-              Write-Host "📄 AVD Users CSV: $usersCsvPath" -ForegroundColor Yellow
+              Write-Host "AVD Users CSV: $usersCsvPath" -ForegroundColor Yellow
             }
             
             "Add Existing Admin Studio Users to Admin Studio Groups" {
@@ -345,8 +346,8 @@ stages:
               $groupsCsvPath = "$(Build.SourcesDirectory)/$(adminStudioGroupsCsvPath)"
               $expectedUserColumns = "UserPrincipalName"
               $expectedGroupColumns = "GroupName"
-              Write-Host "📄 Admin Studio Users CSV: $usersCsvPath" -ForegroundColor Yellow
-              Write-Host "📄 Admin Studio Groups CSV: $groupsCsvPath" -ForegroundColor Yellow
+              Write-Host "Admin Studio Users CSV: $usersCsvPath" -ForegroundColor Yellow
+              Write-Host "Admin Studio Groups CSV: $groupsCsvPath" -ForegroundColor Yellow
             }
             
             "Create New ABIC Users and Add to ABIC Groups" {
@@ -354,8 +355,8 @@ stages:
               $groupsCsvPath = "$(Build.SourcesDirectory)/$(abicGroupsCsvPath)"
               $expectedUserColumns = "DisplayName, UserPrincipalName, MailNickName, Password, First name, Last name, Job Title, Company name, Department, Employee Type, Manager, Employee ID"
               $expectedGroupColumns = "GroupName"
-              Write-Host "📄 New ABIC Users CSV: $usersCsvPath" -ForegroundColor Yellow
-              Write-Host "📄 ABIC Groups CSV: $groupsCsvPath" -ForegroundColor Yellow
+              Write-Host "New ABIC Users CSV: $usersCsvPath" -ForegroundColor Yellow
+              Write-Host "ABIC Groups CSV: $groupsCsvPath" -ForegroundColor Yellow
             }
             
             "Add Existing ABIC Users to ABIC Groups" {
@@ -363,54 +364,57 @@ stages:
               $groupsCsvPath = "$(Build.SourcesDirectory)/$(abicGroupsCsvPath)"
               $expectedUserColumns = "UserPrincipalName"
               $expectedGroupColumns = "GroupName"
-              Write-Host "📄 Existing ABIC Users CSV: $usersCsvPath" -ForegroundColor Yellow
-              Write-Host "📄 ABIC Groups CSV: $groupsCsvPath" -ForegroundColor Yellow
+              Write-Host "Existing ABIC Users CSV: $usersCsvPath" -ForegroundColor Yellow
+              Write-Host "ABIC Groups CSV: $groupsCsvPath" -ForegroundColor Yellow
             }
           }
           
           # Validate Users CSV
-          Write-Host "`n🔍 Validating Users CSV..." -ForegroundColor Cyan
+          Write-Host ""
+          Write-Host "Validating Users CSV..." -ForegroundColor Cyan
           if (-not (Test-Path $usersCsvPath)) {
-            Write-Error "❌ Users CSV not found: $usersCsvPath"
+            Write-Error "ERROR: Users CSV not found: $usersCsvPath"
             exit 1
           }
           
           $usersData = Import-Csv -Path $usersCsvPath
           if ($usersData.Count -eq 0) {
-            Write-Error "❌ Users CSV is empty: $usersCsvPath"
+            Write-Error "ERROR: Users CSV is empty: $usersCsvPath"
             exit 1
           }
           
-          Write-Host "✅ Found $($usersData.Count) user record(s)" -ForegroundColor Green
-          Write-Host "   Expected columns: $expectedUserColumns" -ForegroundColor Gray
-          Write-Host "   Actual columns: $($usersData[0].PSObject.Properties.Name -join ', ')" -ForegroundColor Gray
+          Write-Host "SUCCESS: Found $($usersData.Count) user record(s)" -ForegroundColor Green
+          Write-Host "  Expected columns: $expectedUserColumns" -ForegroundColor Gray
+          Write-Host "  Actual columns: $($usersData[0].PSObject.Properties.Name -join ', ')" -ForegroundColor Gray
           
           Write-Host "##vso[task.setvariable variable=ResolvedUsersCsvPath;isOutput=true]$usersCsvPath"
           
           # Validate Groups CSV if needed
           if (-not [string]::IsNullOrWhiteSpace($groupsCsvPath)) {
-            Write-Host "`n🔍 Validating Groups CSV..." -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "Validating Groups CSV..." -ForegroundColor Cyan
             if (-not (Test-Path $groupsCsvPath)) {
-              Write-Error "❌ Groups CSV not found: $groupsCsvPath"
+              Write-Error "ERROR: Groups CSV not found: $groupsCsvPath"
               exit 1
             }
             
             $groupsData = Import-Csv -Path $groupsCsvPath
             if ($groupsData.Count -eq 0) {
-              Write-Error "❌ Groups CSV is empty: $groupsCsvPath"
+              Write-Error "ERROR: Groups CSV is empty: $groupsCsvPath"
               exit 1
             }
             
-            Write-Host "✅ Found $($groupsData.Count) group record(s)" -ForegroundColor Green
-            Write-Host "   Expected columns: $expectedGroupColumns" -ForegroundColor Gray
-            Write-Host "   Actual columns: $($groupsData[0].PSObject.Properties.Name -join ', ')" -ForegroundColor Gray
+            Write-Host "SUCCESS: Found $($groupsData.Count) group record(s)" -ForegroundColor Green
+            Write-Host "  Expected columns: $expectedGroupColumns" -ForegroundColor Gray
+            Write-Host "  Actual columns: $($groupsData[0].PSObject.Properties.Name -join ', ')" -ForegroundColor Gray
             
             Write-Host "##vso[task.setvariable variable=ResolvedGroupsCsvPath;isOutput=true]$groupsCsvPath"
           } else {
             Write-Host "##vso[task.setvariable variable=ResolvedGroupsCsvPath;isOutput=true]"
           }
           
-          Write-Host "`n✅ All CSV validations completed successfully!" -ForegroundColor Green
+          Write-Host ""
+          Write-Host "SUCCESS: All CSV validations completed successfully" -ForegroundColor Green
       name: csvValidation
 
     - task: PowerShell@2
@@ -420,7 +424,7 @@ stages:
         pwsh: true
         errorActionPreference: 'stop'
         script: |
-          Write-Host "🔐 Validating Azure credentials..." -ForegroundColor Cyan
+          Write-Host "Validating Azure credentials..." -ForegroundColor Cyan
           
           $missingVars = @()
           if ([string]::IsNullOrWhiteSpace($env:AZURE_CLIENT_ID)) { $missingVars += "AZURE_CLIENT_ID" }
@@ -428,12 +432,12 @@ stages:
           if ([string]::IsNullOrWhiteSpace($env:AZURE_TENANT_ID)) { $missingVars += "AZURE_TENANT_ID" }
           
           if ($missingVars.Count -gt 0) {
-            Write-Error "❌ Missing Azure credentials: $($missingVars -join ', ')"
-            Write-Host "💡 Configure these in the 'cloud-subs' variable group" -ForegroundColor Yellow
+            Write-Error "ERROR: Missing Azure credentials: $($missingVars -join ', ')"
+            Write-Host "Note: Configure these in the 'cloud-subs' variable group" -ForegroundColor Yellow
             exit 1
           }
           
-          Write-Host "✅ Azure credentials validated" -ForegroundColor Green
+          Write-Host "SUCCESS: Azure credentials validated" -ForegroundColor Green
       env:
         AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
         AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
@@ -460,9 +464,9 @@ stages:
         script: |
           $ErrorActionPreference = 'Stop'
           
-          Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-          Write-Host "║           EXECUTING AZURE AD OPERATION                        ║" -ForegroundColor Cyan
-          Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+          Write-Host "========================================" -ForegroundColor Cyan
+          Write-Host "Executing Azure AD Operation" -ForegroundColor Cyan
+          Write-Host "========================================" -ForegroundColor Cyan
           
           # Convert password to SecureString if Service Account operation
           $securePassword = $null
@@ -470,7 +474,7 @@ stages:
             $password = "${{ parameters.serviceAccountPassword }}".Trim()
             if (-not [string]::IsNullOrWhiteSpace($password)) {
               $securePassword = ConvertTo-SecureString -String $password -AsPlainText -Force
-              Write-Host "🔐 Password converted to SecureString" -ForegroundColor Green
+              Write-Host "Password converted to SecureString" -ForegroundColor Green
             }
           }
           
@@ -515,25 +519,27 @@ stages:
             $scriptParams['ServiceAccountSecurePassword'] = $securePassword
           }
           
-          Write-Host "🚀 Invoking PowerShell script..." -ForegroundColor Cyan
-          Write-Host "📋 Operation: $($scriptParams.OperationType)" -ForegroundColor Cyan
+          Write-Host "Invoking PowerShell script..." -ForegroundColor Cyan
+          Write-Host "Operation: $($scriptParams.OperationType)" -ForegroundColor Cyan
           
           if ("${{ parameters.operationType }}" -eq "Create Normal AVD Users") {
-            Write-Host "👥 AVD Target Group: $avdGroup" -ForegroundColor Yellow
+            Write-Host "AVD Target Group: $avdGroup" -ForegroundColor Yellow
           } elseif ("${{ parameters.operationType }}" -eq "Create Service Account") {
-            Write-Host "👥 Service Account Group: $svcGroup" -ForegroundColor Yellow
+            Write-Host "Service Account Group: $svcGroup" -ForegroundColor Yellow
           }
           
           try {
             & "$(Build.SourcesDirectory)/Pipelines/Create_Users_AAD/Create-User-AAD.ps1" @scriptParams
             
-            Write-Host "`n╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-            Write-Host "║              ✅ OPERATION COMPLETED SUCCESSFULLY               ║" -ForegroundColor Green
-            Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Green
+            Write-Host "Operation Completed Successfully" -ForegroundColor Green
+            Write-Host "========================================" -ForegroundColor Green
           } catch {
-            Write-Host "`n╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Red
-            Write-Host "║                  ❌ OPERATION FAILED                           ║" -ForegroundColor Red
-            Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Red
+            Write-Host "Operation Failed" -ForegroundColor Red
+            Write-Host "========================================" -ForegroundColor Red
             Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
             throw
           } finally {

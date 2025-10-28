@@ -1,14 +1,2 @@
 ﻿DisplayName,UserPrincipalName,MailNickName,Password,First name,Last name,Job Title,Company name,Department,Employee Type,Manager,Employee ID
-MajedAli Al Hedayan,MajHed-A@albtests.com,MajHed-A,Aa123456,Majed,Ali Al Hedayan,Assistant Vice President-Transformation,ABIC,Brokerage,Permanent, IbrAlr-A@albtests.com,e000545
-BandarSaleh Al Otaibi,BanOta-A@albtests.com,BanOta-A,Aa123456,Bandar,Saleh Al Otaibi,Vice President-Local Trading,ABIC,Brokerage,Permanent, IbrAlr-A@albtests.com,e000690
-AwaisAhmed Hussain,AwaHus-A@albtests.com,AwaHus-A,Aa123456,Awais,Ahmed Hussain,Associate-Transformation,ABIC,Brokerage,Contractor, IbrAlr-A@albtests.com,c940250
-RizwanHajimiya Sayyed,RizSay-A@albtests.com,RizSay-A,Aa123456,Rizwan,Hajimiya Sayyed,"Manager, Brokerage Operation",ABIC,Operations,Contractor, IbrAlr-A@albtests.com,c940209
-TurkiAl-Quaoud,TurAl--A@albtests.com,TurAl--A,Aa123456,Turki,Al-Quaoud,Assistant Manager-Customer Records Management,ABIC,Operations,Permanent, IbrAlr-A@albtests.com,e001684
-HassanAsiri,HasAsi-A@albtests.com,HasAsi-A,Aa123456,Hassan,Asiri,Manager-Asset Management Operation,ABIC,Operations,Permanent, IbrAlr-A@albtests.com,e001477
-AltafIbrahheem Albuhiran,AltAlb-A@albtests.com,AltAlb-A,Aa123456,Altaf,Ibrahheem Albuhiran,Senior Officer-Asset Management Operations,ABIC,Operations,Permanent, IbrAlr-A@albtests.com,e009320
-KhaledMohammed Al Mohainy,Khamoh-A@albtests.com,Khamoh-A,Aa123456,Khaled,Mohammed Al Mohainy,Senior Manager-Customer Care,ABIC,Customer Care,Permanent, IbrAlr-A@albtests.com,e005570
-AhmedKhalid Basager,AhmBas-A@albtests.com,AhmBas-A,Aa123456,Ahmed,Khalid Basager,Senior Officer-Customer Care,ABIC,Customer Care,Permanent, IbrAlr-A@albtests.com,e011638
-IbrahimAhmad Aldraiwesh,IbrAld-A@albtests.com,IbrAld-A,Aa123456,Ibrahim,Ahmad Aldraiwesh,Senior Officer-Risk Management,ABIC,Risk,Permanent, IbrAlr-A@albtests.com,e011226
-AhmedEidan Aleissi,AhmAle-A@albtests.com,AhmAle-A,Aa123456,Ahmed,Eidan Aleissi,Assistant Manager-Financial Accounting & Reconciliations,ABIC,Finance,Permanent, IbrAlr-A@albtests.com,E009436
-SabarinathanA Elavazhagan,SabEla-A@albtests.com,SabEla-A,Aa123456,Sabarinathan,A Elavazhagan,IT Senior Project Manager,ABIC,Information Technology,Contractor, IbrAlr-A@albtests.com,c940215
-MohammedIlliyas Abbas,MohAbb-A@albtests.com,MohAbb-A,Aa123456,Mohammed,Illiyas Abbas,Quality Assurance,ABIC,Information Technology,Contractor, IbrAlr-A@albtests.com,c940244
+Ankoji-ABIC,anknag-a@albtests.com,anknag-a,P@ssw0rd12345,ankojitestabic,abic,cloud,ABIC,IT,consultant,anknag-b@albtests.com,e011011
