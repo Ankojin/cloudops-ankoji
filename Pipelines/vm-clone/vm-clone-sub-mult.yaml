@@ -97,7 +97,7 @@ steps:
       $LogFile = "C:\log\clone_log.txt"
       
       # Use CSV from repository
-      $vmInputCsv = "$(Build.SourcesDirectory)\Pipelines\vm-clone\vm-to-clone.csv"
+      $vmInputCsv = "$(Build.SourcesDirectory)\Pipelines\vm-clone\vms-to-clone.csv"
 
       if (Test-Path $vmInputCsv) {
           Write-Host "Importing VM definitions from CSV: $vmInputCsv"
