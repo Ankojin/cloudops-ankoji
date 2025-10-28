@@ -16,7 +16,8 @@ function IsExcluded($vmName, $excludedNames) {
         return $false
     }
     $excludedList = $excludedNames -split ',' | ForEach-Object { $_.Trim() }
-    return $excludedList -contains $vmName
+    # Use -in with case-insensitive comparison
+    return $excludedList -icontains $vmName
 }
 
 # Ensure log folder exists
