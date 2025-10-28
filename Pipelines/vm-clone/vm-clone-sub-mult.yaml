@@ -287,7 +287,7 @@ steps:
                   $existingNic = az network nic show -g '${{ parameters.targetResourceGroupName }}' -n $nicName 2>$null
                   if ($existingNic) {
                       "Existing NIC '$nicName' found. Deleting for force overwrite..." | Tee-Object -FilePath $LogFile -Append
-                      az network nic delete -g '${{ parameters.targetResourceGroupName }}' -n $nicName --yes
+                      az network nic delete -g '${{ parameters.targetResourceGroupName }}' -n $nicName --no-wait
                       
                       # Wait for deletion to complete (up to 30 seconds)
                       $maxWait = 30
@@ -337,7 +337,7 @@ steps:
                   $errorMsg = $_.Exception.Message
                   if ($nicId) { 
                       "Cleaning up failed NIC..." | Tee-Object -FilePath $LogFile -Append
-                      az network nic delete --ids $nicId --yes --no-wait 2>$null
+                      az network nic delete --ids $nicId --no-wait 2>$null
                   }
                   Log-Error "NIC creation error for $($PSItem.NewVMName): $errorMsg"
                   continue
@@ -391,7 +391,7 @@ steps:
                   # Cleanup NIC if VM creation failed
                   if ($nicId) {
                       "VM creation failed. Deleting NIC '$nicName'..." | Tee-Object -FilePath $LogFile -Append
-                      az network nic delete -g '${{ parameters.targetResourceGroupName }}' -n $nicName --yes --no-wait 2>$null
+                      az network nic delete -g '${{ parameters.targetResourceGroupName }}' -n $nicName --no-wait 2>$null
                   }
                   continue
               }
@@ -428,7 +428,7 @@ steps:
               # Final cleanup attempt for NIC if overall process failed
               if ($nicName) {
                   "Overall process failed. Attempting final NIC cleanup..." | Tee-Object -FilePath $LogFile -Append
-                  az network nic delete -g '${{ parameters.targetResourceGroupName }}' -n $nicName --yes --no-wait 2>$null
+                  az network nic delete -g '${{ parameters.targetResourceGroupName }}' -n $nicName --no-wait 2>$null
               }
               Log-Error "❌ Failed cloning $($PSItem.SourceVMName): $errorMsg"
           }
