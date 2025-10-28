@@ -10,33 +10,42 @@ param(
     )]
     [string]$OperationType,
     
-    [Parameter(Mandatory=$false)]
-    [ValidatePattern('^[\w\.-]+@[\w\.-]+\.\w+$')]
+    # Service Account Parameters (Optional - only required for "Create Service Account")
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyString()]
     [string]$ServiceAccountUPN = "",
     
-    [Parameter(Mandatory=$false)]
-    [ValidateLength(1, 256)]
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyString()]
     [string]$ServiceAccountDisplayName = "",
     
-    [Parameter(Mandatory=$false)]
-    [SecureString]$ServiceAccountSecurePassword,
+    [Parameter(Mandatory = $false)]
+    [AllowNull()]
+    [SecureString]$ServiceAccountSecurePassword = $null,
     
-    [Parameter(Mandatory=$false)]
-    [string]$ServiceAccountGroup = "ALBTests service accounts",
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyString()]
+    [string]$ServiceAccountGroup = "",
     
-    [Parameter(Mandatory=$false)]
+    # CSV File Paths (Optional - operation-specific)
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyString()]
     [string]$UsersCsvFilePath = "",
     
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyString()]
     [string]$GroupsCsvFilePath = "",
     
-    [Parameter(Mandatory=$false)]
-    [string]$HardcodedAVDGroup = "BAB_VDI_DT_Shared_Pool",
+    # AVD Group (Optional - only for AVD operations)
+    [Parameter(Mandatory = $false)]
+    [AllowEmptyString()]
+    [string]$HardcodedAVDGroup = "",
     
-    [Parameter(Mandatory=$false)]
+    # Logging Parameters
+    [Parameter(Mandatory = $false)]
     [string]$LogPath = "C:\log",
     
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [string]$LogFileName = "user_management_log.txt"
 )
 
@@ -242,8 +251,9 @@ switch ($OperationType) {
     }
     
     "Create Normal AVD Users" {
+        # Validate CSV file path
         if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath)) {
-            Write-Log -Level "ERROR" -Message "Users CSV file path is required for AVD user creation"
+            Write-Log -Level "ERROR" -Message "UsersCsvFilePath is required for AVD user creation"
             throw "UsersCsvFilePath parameter is required for operation: $OperationType"
         }
         
@@ -252,17 +262,18 @@ switch ($OperationType) {
             throw "Users CSV file not found: $UsersCsvFilePath"
         }
         
-        Write-Log -Level "SUCCESS" -Message "Users CSV file validated: $UsersCsvFilePath"
+        Write-Log -Level "SUCCESS" -Message "AVD users CSV file validated: $UsersCsvFilePath"
     }
     
     "Add Existing Admin Studio Users to Admin Studio Groups" {
+        # Validate both CSV file paths
         if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath)) {
-            Write-Log -Level "ERROR" -Message "Users CSV file path is required for Admin Studio operation"
+            Write-Log -Level "ERROR" -Message "UsersCsvFilePath is required for Admin Studio operation"
             throw "UsersCsvFilePath parameter is required for operation: $OperationType"
         }
         
         if ([string]::IsNullOrWhiteSpace($GroupsCsvFilePath)) {
-            Write-Log -Level "ERROR" -Message "Groups CSV file path is required for Admin Studio operation"
+            Write-Log -Level "ERROR" -Message "GroupsCsvFilePath is required for Admin Studio operation"
             throw "GroupsCsvFilePath parameter is required for operation: $OperationType"
         }
         
@@ -280,13 +291,14 @@ switch ($OperationType) {
     }
     
     "Create New ABIC Users and Add to ABIC Groups" {
+        # Validate both CSV file paths
         if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath)) {
-            Write-Log -Level "ERROR" -Message "Users CSV file path is required for ABIC user creation"
+            Write-Log -Level "ERROR" -Message "UsersCsvFilePath is required for ABIC user creation"
             throw "UsersCsvFilePath parameter is required for operation: $OperationType"
         }
         
         if ([string]::IsNullOrWhiteSpace($GroupsCsvFilePath)) {
-            Write-Log -Level "ERROR" -Message "Groups CSV file path is required for ABIC operation"
+            Write-Log -Level "ERROR" -Message "GroupsCsvFilePath is required for ABIC operation"
             throw "GroupsCsvFilePath parameter is required for operation: $OperationType"
         }
         
@@ -304,13 +316,14 @@ switch ($OperationType) {
     }
     
     "Add Existing ABIC Users to ABIC Groups" {
+        # Validate both CSV file paths
         if ([string]::IsNullOrWhiteSpace($UsersCsvFilePath)) {
-            Write-Log -Level "ERROR" -Message "Users CSV file path is required for ABIC operation"
+            Write-Log -Level "ERROR" -Message "UsersCsvFilePath is required for ABIC operation"
             throw "UsersCsvFilePath parameter is required for operation: $OperationType"
         }
         
         if ([string]::IsNullOrWhiteSpace($GroupsCsvFilePath)) {
-            Write-Log -Level "ERROR" -Message "Groups CSV file path is required for ABIC operation"
+            Write-Log -Level "ERROR" -Message "GroupsCsvFilePath is required for ABIC operation"
             throw "GroupsCsvFilePath parameter is required for operation: $OperationType"
         }
         
@@ -332,6 +345,8 @@ switch ($OperationType) {
         throw "Invalid operation type: $OperationType"
     }
 }
+
+Write-Log -Level "SUCCESS" -Message "All parameter validations passed"
 
 # Install and import required modules
 $modules = @(
