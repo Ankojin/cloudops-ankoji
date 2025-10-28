@@ -193,6 +193,11 @@ steps:
               if (-not $osDiskSku) { $osDiskSku = "Standard_LRS" }
               "Original OS disk SKU: $osDiskSku" | Tee-Object -FilePath $LogFile -Append
 
+              # Hardcoded SKUs for cloning
+              $snapshotSku = "Standard_LRS"  # Snapshots always use Standard_LRS (cost-effective)
+              $targetDiskSku = "StandardSSD_LRS"  # All cloned disks use StandardSSD_LRS (balanced performance)
+              "Target snapshot SKU: $snapshotSku | Target disk SKU: $targetDiskSku" | Tee-Object -FilePath $LogFile -Append
+
               az account set --subscription $tgtSub
               $location = az group show -n '${{ parameters.targetResourceGroupName }}' --query location -o tsv
 
@@ -207,32 +212,57 @@ steps:
               $clonedDate = Get-Date -Format 'yyyy-MM-dd'
               $tags = "Environment=${{ parameters.targetSubscriptionName }} SourceVM=$($PSItem.SourceVMName) ClonedDate=$clonedDate ClonedBy=AzureDevOps ManagedBy=CloudOps"
 
-              # OS snapshot & disk creation with original SKU
+              # OS snapshot with Standard_LRS, disk creation with StandardSSD_LRS
               $osSnap = "$($PSItem.NewVMName)-os-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
-              $osSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $osSnap --source $osDiskId --location $location --sku $osDiskSku --tags $tags --query id -o tsv
+              $osSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $osSnap --source $osDiskId --location $location --sku $snapshotSku --tags $tags --query id -o tsv
+              if (-not $osSnapId) {
+                  Log-Error "OS snapshot creation failed for $($PSItem.NewVMName)"
+                  continue
+              }
+              "Created OS snapshot '$osSnap' with SKU: $snapshotSku" | Tee-Object -FilePath $LogFile -Append
+              
               $osDiskName = "$($PSItem.NewVMName)-osdisk"
-              $osDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName --source $osSnapId --location $location --sku $osDiskSku --tags $tags --query id -o tsv
-              "Created OS disk '$osDiskName' with SKU: $osDiskSku" | Tee-Object -FilePath $LogFile -Append
+              $osDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName --source $osSnapId --location $location --sku $targetDiskSku --tags $tags --query id -o tsv
+              if (-not $osDiskIdNew) {
+                  Log-Error "OS disk creation failed for $($PSItem.NewVMName)"
+                  continue
+              }
+              "Created OS disk '$osDiskName' with SKU: $targetDiskSku" | Tee-Object -FilePath $LogFile -Append
 
-              # Data disks with original SKU preservation
+              # Data disks with hardcoded SKUs
               $newDataDisksFinal = @(); $lun=0
               if ($dataDiskIds -and $dataDiskIds[0] -ne "") {
                   foreach ($dd in $dataDiskIds) {
-                      # Switch to source subscription to get disk SKU
+                      # Switch to source subscription to get disk info
                       az account set --subscription $srcSub
                       $dataDiskSku = az disk show --ids $dd --query "sku.name" -o tsv
                       if (-not $dataDiskSku) { $dataDiskSku = "Standard_LRS" }
                       $dataDiskSize = az disk show --ids $dd --query "diskSizeGb" -o tsv
-                      "Data disk $lun | Original SKU: $dataDiskSku | Size: $dataDiskSize GB" | Tee-Object -FilePath $LogFile -Append
+                      "Data disk $lun | Source SKU: $dataDiskSku | Size: $dataDiskSize GB | Target: $targetDiskSku" | Tee-Object -FilePath $LogFile -Append
                       
                       # Switch back to target subscription for creation
                       az account set --subscription $tgtSub
                       $snapName = "$($PSItem.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
-                      $dataSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku $dataDiskSku --tags $tags --query id -o tsv
+                      $dataSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku $snapshotSku --tags $tags --query id -o tsv
+                      
+                      if (-not $dataSnapId) {
+                          Log-Error "Data disk snapshot creation failed for disk $lun"
+                          $lun++
+                          continue
+                      }
+                      "Created data snapshot '$snapName' with SKU: $snapshotSku" | Tee-Object -FilePath $LogFile -Append
+                      
                       $dataDiskName = "$($PSItem.NewVMName)-data$lun-disk"
-                      $dataDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --sku $dataDiskSku --tags $tags --query id -o tsv
+                      $dataDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --sku $targetDiskSku --tags $tags --query id -o tsv
+                      
+                      if (-not $dataDiskIdNew) {
+                          Log-Error "Data disk creation failed for disk $lun"
+                          $lun++
+                          continue
+                      }
+                      
                       $newDataDisksFinal += [PSCustomObject]@{Id=$dataDiskIdNew; Lun=$lun}
-                      "Created data disk '$dataDiskName' with SKU: $dataDiskSku" | Tee-Object -FilePath $LogFile -Append
+                      "Created data disk '$dataDiskName' with SKU: $targetDiskSku" | Tee-Object -FilePath $LogFile -Append
                       $lun++
                   }
               }
