@@ -214,22 +214,54 @@ steps:
 
               # OS snapshot with Standard_LRS, disk creation with StandardSSD_LRS
               $osSnap = "$($PSItem.NewVMName)-os-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
-              $osSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $osSnap --source $osDiskId --location $location --sku $snapshotSku --tags $tags --query id -o tsv
-              if (-not $osSnapId) {
-                  Log-Error "OS snapshot creation failed for $($PSItem.NewVMName)"
-                  continue
-              }
-              "Created OS snapshot '$osSnap' with SKU: $snapshotSku" | Tee-Object -FilePath $LogFile -Append
               
+              # Check if OS disk already exists - skip creation if it does
               $osDiskName = "$($PSItem.NewVMName)-osdisk"
-              $osDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName --source $osSnapId --location $location --sku $targetDiskSku --tags $tags --query id -o tsv
-              if (-not $osDiskIdNew) {
-                  Log-Error "OS disk creation failed for $($PSItem.NewVMName)"
-                  continue
+              $existingOsDisk = az disk show -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName 2>$null
+              
+              if ($existingOsDisk) {
+                  "⚠️ OS disk '$osDiskName' already exists. Skipping snapshot and disk creation." | Tee-Object -FilePath $LogFile -Append
+                  $osDiskIdNew = az disk show -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName --query id -o tsv
+                  "Using existing OS disk ID: $osDiskIdNew" | Tee-Object -FilePath $LogFile -Append
+              } else {
+                  # Check if OS snapshot already exists
+                  $existingOsSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?starts_with(name, '$($PSItem.NewVMName)-os-snap')].{Name:name, Id:id}" -o json 2>$null | ConvertFrom-Json
+                  
+                  if ($existingOsSnap -and $existingOsSnap.Count -gt 0) {
+                      "⚠️ Found existing OS snapshot: $($existingOsSnap[0].Name). Skipping snapshot creation." | Tee-Object -FilePath $LogFile -Append
+                      $osSnapId = $existingOsSnap[0].Id
+                      "Using existing OS snapshot ID: $osSnapId" | Tee-Object -FilePath $LogFile -Append
+                  } else {
+                      # Create new snapshot if none exists
+                      $osSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $osSnap --source $osDiskId --location $location --sku $snapshotSku --tags $tags --query id -o tsv
+                      if (-not $osSnapId) {
+                          Log-Error "OS snapshot creation failed for $($PSItem.NewVMName)"
+                          continue
+                      }
+                      "Created OS snapshot '$osSnap' with SKU: $snapshotSku" | Tee-Object -FilePath $LogFile -Append
+                  }
+                  
+                  # Create new disk from snapshot
+                  $osDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $osDiskName --source $osSnapId --location $location --sku $targetDiskSku --tags $tags --query id -o tsv
+                  if (-not $osDiskIdNew) {
+                      Log-Error "OS disk creation failed for $($PSItem.NewVMName)"
+                      # Cleanup snapshot if disk creation failed (only if we created it)
+                      if ($osSnapId -and -not $existingOsSnap) {
+                          "Cleaning up failed snapshot..." | Tee-Object -FilePath $LogFile -Append
+                          az snapshot delete --ids $osSnapId --no-wait 2>$null
+                      }
+                      continue
+                  }
+                  "Created OS disk '$osDiskName' with SKU: $targetDiskSku" | Tee-Object -FilePath $LogFile -Append
+                  
+                  # Delete snapshot immediately after successful disk creation (only if we created it)
+                  if ($osSnapId -and -not $existingOsSnap) {
+                      "Deleting OS snapshot: $osSnap (no longer needed)" | Tee-Object -FilePath $LogFile -Append
+                      az snapshot delete --ids $osSnapId --no-wait 2>$null
+                  }
               }
-              "Created OS disk '$osDiskName' with SKU: $targetDiskSku" | Tee-Object -FilePath $LogFile -Append
 
-              # Data disks with hardcoded SKUs
+              # Data disks with hardcoded SKUs - skip if they exist
               $newDataDisksFinal = @(); $lun=0
               if ($dataDiskIds -and $dataDiskIds[0] -ne "") {
                   foreach ($dd in $dataDiskIds) {
@@ -242,27 +274,61 @@ steps:
                       
                       # Switch back to target subscription for creation
                       az account set --subscription $tgtSub
-                      $snapName = "$($PSItem.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
-                      $dataSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku $snapshotSku --tags $tags --query id -o tsv
                       
-                      if (-not $dataSnapId) {
-                          Log-Error "Data disk snapshot creation failed for disk $lun"
-                          $lun++
-                          continue
-                      }
-                      "Created data snapshot '$snapName' with SKU: $snapshotSku" | Tee-Object -FilePath $LogFile -Append
-                      
+                      # Check if data disk already exists - skip creation if it does
                       $dataDiskName = "$($PSItem.NewVMName)-data$lun-disk"
-                      $dataDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --sku $targetDiskSku --tags $tags --query id -o tsv
+                      $existingDataDisk = az disk show -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName 2>$null
                       
-                      if (-not $dataDiskIdNew) {
-                          Log-Error "Data disk creation failed for disk $lun"
-                          $lun++
-                          continue
+                      if ($existingDataDisk) {
+                          "⚠️ Data disk '$dataDiskName' already exists. Skipping snapshot and disk creation." | Tee-Object -FilePath $LogFile -Append
+                          $dataDiskIdNew = az disk show -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --query id -o tsv
+                          $newDataDisksFinal += [PSCustomObject]@{Id=$dataDiskIdNew; Lun=$lun}
+                          "Using existing data disk ID: $dataDiskIdNew at LUN $lun" | Tee-Object -FilePath $LogFile -Append
+                      } else {
+                          # Check if data disk snapshot already exists
+                          $existingDataSnap = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?starts_with(name, '$($PSItem.NewVMName)-data$lun-snap')].{Name:name, Id:id}" -o json 2>$null | ConvertFrom-Json
+                          
+                          if ($existingDataSnap -and $existingDataSnap.Count -gt 0) {
+                              "⚠️ Found existing data snapshot: $($existingDataSnap[0].Name). Skipping snapshot creation." | Tee-Object -FilePath $LogFile -Append
+                              $dataSnapId = $existingDataSnap[0].Id
+                              "Using existing data snapshot ID: $dataSnapId" | Tee-Object -FilePath $LogFile -Append
+                          } else {
+                              # Create new snapshot if none exists
+                              $snapName = "$($PSItem.NewVMName)-data$lun-snap-$(Get-Date -Format 'yyyyMMddHHmmss')"
+                              $dataSnapId = az snapshot create -g '${{ parameters.targetResourceGroupName }}' -n $snapName --source $dd --location $location --sku $snapshotSku --tags $tags --query id -o tsv
+                              
+                              if (-not $dataSnapId) {
+                                  Log-Error "Data disk snapshot creation failed for disk $lun"
+                                  $lun++
+                                  continue
+                              }
+                              "Created data snapshot '$snapName' with SKU: $snapshotSku" | Tee-Object -FilePath $LogFile -Append
+                          }
+                          
+                          # Create new disk from snapshot
+                          $dataDiskIdNew = az disk create -g '${{ parameters.targetResourceGroupName }}' -n $dataDiskName --source $dataSnapId --location $location --sku $targetDiskSku --tags $tags --query id -o tsv
+                          
+                          if (-not $dataDiskIdNew) {
+                              Log-Error "Data disk creation failed for disk $lun"
+                              # Cleanup snapshot if disk creation failed (only if we created it)
+                              if ($dataSnapId -and -not $existingDataSnap) {
+                                  "Cleaning up failed snapshot..." | Tee-Object -FilePath $LogFile -Append
+                                  az snapshot delete --ids $dataSnapId --no-wait 2>$null
+                              }
+                              $lun++
+                              continue
+                          }
+                          
+                          $newDataDisksFinal += [PSCustomObject]@{Id=$dataDiskIdNew; Lun=$lun}
+                          "Created data disk '$dataDiskName' with SKU: $targetDiskSku" | Tee-Object -FilePath $LogFile -Append
+                          
+                          # Delete snapshot immediately after successful disk creation (only if we created it)
+                          if ($dataSnapId -and -not $existingDataSnap) {
+                              "Deleting data snapshot: $snapName (no longer needed)" | Tee-Object -FilePath $LogFile -Append
+                              az snapshot delete --ids $dataSnapId --no-wait 2>$null
+                          }
                       }
                       
-                      $newDataDisksFinal += [PSCustomObject]@{Id=$dataDiskIdNew; Lun=$lun}
-                      "Created data disk '$dataDiskName' with SKU: $targetDiskSku" | Tee-Object -FilePath $LogFile -Append
                       $lun++
                   }
               }
@@ -283,56 +349,47 @@ steps:
                       continue
                   }
 
-                  # Check if NIC already exists and delete it (force overwrite)
+                  # Check if NIC already exists - skip creation if it does
                   $existingNic = az network nic show -g '${{ parameters.targetResourceGroupName }}' -n $nicName 2>$null
                   if ($existingNic) {
-                      "Existing NIC '$nicName' found. Deleting for force overwrite..." | Tee-Object -FilePath $LogFile -Append
-                      az network nic delete -g '${{ parameters.targetResourceGroupName }}' -n $nicName --no-wait
-                      
-                      # Wait for deletion to complete (up to 30 seconds)
-                      $maxWait = 30
-                      $waited = 0
-                      while ((az network nic show -g '${{ parameters.targetResourceGroupName }}' -n $nicName 2>$null) -and ($waited -lt $maxWait)) {
-                          Start-Sleep -Seconds 2
-                          $waited += 2
-                      }
-                      if ($waited -ge $maxWait) {
-                          Log-Error "Timeout waiting for NIC deletion"
-                          continue
-                      }
-                  }
-
-                  # Create NIC with static IP from CSV (if provided) or dynamic IP
-                  if ($staticIp) {
-                      # Get subnet address prefix for validation logging
-                      $subnetPrefix = az network vnet subnet show -g $vnetRg --vnet-name $vnetName -n $subnetName --query "addressPrefix" -o tsv
-                      "Attempting to create NIC with static IP: $staticIp (Subnet: $subnetPrefix)" | Tee-Object -FilePath $LogFile -Append
-                      
-                      # Let Azure validate the IP
-                      $nicCreateResult = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --private-ip-address $staticIp --tags $tags --query 'NewNIC.id' -o tsv 2>&1
-                      
-                      if ($LASTEXITCODE -ne 0) {
-                          Log-Error "Static IP $staticIp validation failed for subnet $subnetPrefix. Error: $nicCreateResult"
-                          "Retrying NIC creation with dynamic IP allocation..." | Tee-Object -FilePath $LogFile -Append
-                          
-                          $nicId = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv
-                      } else {
-                          $nicId = $nicCreateResult
-                      }
+                      "⚠️ NIC '$nicName' already exists. Skipping NIC creation and using existing NIC." | Tee-Object -FilePath $LogFile -Append
+                      $nicId = az network nic show -g '${{ parameters.targetResourceGroupName }}' -n $nicName --query id -o tsv
+                      $privateIp = az network nic show --ids $nicId --query "ipConfigurations[0].privateIpAddress" -o tsv
+                      $ipAllocation = az network nic show --ids $nicId --query "ipConfigurations[0].privateIpAllocationMethod" -o tsv
+                      "Using existing NIC | Name: $nicName | IP: $privateIp | Allocation: $ipAllocation" | Tee-Object -FilePath $LogFile -Append
                   } else {
-                      "Creating NIC with dynamic IP (no static IP provided in CSV)" | Tee-Object -FilePath $LogFile -Append
-                      $nicId = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv
-                  }
+                      # Create NIC with static IP from CSV (if provided) or dynamic IP
+                      if ($staticIp) {
+                          # Get subnet address prefix for validation logging
+                          $subnetPrefix = az network vnet subnet show -g $vnetRg --vnet-name $vnetName -n $subnetName --query "addressPrefix" -o tsv
+                          "Attempting to create NIC with static IP: $staticIp (Subnet: $subnetPrefix)" | Tee-Object -FilePath $LogFile -Append
+                          
+                          # Let Azure validate the IP
+                          $nicCreateResult = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --private-ip-address $staticIp --tags $tags --query 'NewNIC.id' -o tsv 2>&1
+                          
+                          if ($LASTEXITCODE -ne 0) {
+                              Log-Error "Static IP $staticIp validation failed for subnet $subnetPrefix. Error: $nicCreateResult"
+                              "Retrying NIC creation with dynamic IP allocation..." | Tee-Object -FilePath $LogFile -Append
+                              
+                              $nicId = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv
+                          } else {
+                              $nicId = $nicCreateResult
+                          }
+                      } else {
+                          "Creating NIC with dynamic IP (no static IP provided in CSV)" | Tee-Object -FilePath $LogFile -Append
+                          $nicId = az network nic create -g '${{ parameters.targetResourceGroupName }}' -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv
+                      }
 
-                  if (-not $nicId) { 
-                      Log-Error "NIC creation failed for $($PSItem.NewVMName)"
-                      continue 
+                      if (-not $nicId) { 
+                          Log-Error "NIC creation failed for $($PSItem.NewVMName)"
+                          continue 
+                      }
+                      
+                      $nicId = $nicId.Trim()
+                      $privateIp = az network nic show --ids $nicId --query "ipConfigurations[0].privateIpAddress" -o tsv
+                      $ipAllocation = az network nic show --ids $nicId --query "ipConfigurations[0].privateIpAllocationMethod" -o tsv
+                      "✅ NIC created successfully | Name: $nicName | IP: $privateIp | Allocation: $ipAllocation | Subnet: $subnetName" | Tee-Object -FilePath $LogFile -Append
                   }
-                  
-                  $nicId = $nicId.Trim()
-                  $privateIp = az network nic show --ids $nicId --query "ipConfigurations[0].privateIpAddress" -o tsv
-                  $ipAllocation = az network nic show --ids $nicId --query "ipConfigurations[0].privateIpAllocationMethod" -o tsv
-                  "✅ NIC created successfully | Name: $nicName | IP: $privateIp | Allocation: $ipAllocation | Subnet: $subnetName" | Tee-Object -FilePath $LogFile -Append
               } catch {
                   $errorMsg = $_.Exception.Message
                   if ($nicId) { 
@@ -345,88 +402,105 @@ steps:
 
               # ------------------- VM Creation -------------------
               try {
-                  "Creating VM: $($PSItem.NewVMName) with size $($PSItem.VMSize)..." | Tee-Object -FilePath $LogFile -Append
-                  $vmCreateCmd = "az vm create -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osTypeParam --size $($PSItem.VMSize) --boot-diagnostics-storage https://$bootDiagStorage.blob.core.windows.net/ --tags `"$tags`""
-                  Invoke-Expression $vmCreateCmd | Tee-Object -FilePath $LogFile -Append
-
-                  if ($LASTEXITCODE -ne 0) {
-                      throw "VM creation command failed with exit code $LASTEXITCODE"
-                  }
-
-                  # Apply tags to VM
-                  try {
-                      $vmResourceId = "/subscriptions/$tgtSub/resourceGroups/${{ parameters.targetResourceGroupName }}/providers/Microsoft.Compute/virtualMachines/$($PSItem.NewVMName)"
-                      az resource tag --ids $vmResourceId --tags $tags | Tee-Object -FilePath $LogFile -Append
-                  } catch {
-                      Log-Error "Failed to apply tags to VM $($PSItem.NewVMName): $_"
-                  }
-
-                  # Attach data disks (if any)
-                  if ($newDataDisksFinal.Count -gt 0) {
-                      "Attaching $($newDataDisksFinal.Count) data disk(s) to VM..." | Tee-Object -FilePath $LogFile -Append
+                  # Check if VM already exists - skip creation if it does
+                  $existingVm = az vm show -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) 2>$null
+                  if ($existingVm) {
+                      "⚠️ VM '$($PSItem.NewVMName)' already exists. Skipping VM creation." | Tee-Object -FilePath $LogFile -Append
+                      $vmState = az vm get-instance-view -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --query "instanceView.statuses[?starts_with(code, 'PowerState/')].displayStatus" -o tsv
+                      "Existing VM state: $vmState" | Tee-Object -FilePath $LogFile -Append
                       
-                      # Deallocate VM before attaching disks
-                      az vm deallocate -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --no-wait
-                      az vm wait -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --custom "instanceView.statuses[?code=='PowerState/deallocated']"
+                      # Check if data disks need to be attached
+                      $attachedDisks = az vm show -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --query "storageProfile.dataDisks[].name" -o tsv
+                      $attachedDiskCount = if ($attachedDisks) { ($attachedDisks -split "`r?`n").Count } else { 0 }
                       
-                      foreach ($disk in $newDataDisksFinal) {
-                          try {
-                              az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($PSItem.NewVMName) --name $($disk.Id) --lun $($disk.Lun)
-                              "Attached data disk at LUN $($disk.Lun)" | Tee-Object -FilePath $LogFile -Append
-                          } catch {
-                              Log-Error "Failed to attach disk $($disk.Id) at LUN $($disk.Lun): $_"
+                      if ($newDataDisksFinal.Count -gt $attachedDiskCount) {
+                          "Found $($newDataDisksFinal.Count - $attachedDiskCount) unattached data disk(s). Attaching to existing VM..." | Tee-Object -FilePath $LogFile -Append
+                          
+                          # Deallocate VM before attaching disks
+                          if ($vmState -ne "VM deallocated") {
+                              az vm deallocate -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --no-wait
+                              az vm wait -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --custom "instanceView.statuses[?code=='PowerState/deallocated']"
                           }
+                          
+                          foreach ($disk in $newDataDisksFinal) {
+                              # Check if this LUN is already attached
+                              $existingLun = az vm show -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --query "storageProfile.dataDisks[?lun==$($disk.Lun)].lun" -o tsv
+                              if (-not $existingLun) {
+                                  try {
+                                      az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($PSItem.NewVMName) --name $($disk.Id) --lun $($disk.Lun)
+                                      "Attached data disk at LUN $($disk.Lun)" | Tee-Object -FilePath $LogFile -Append
+                                  } catch {
+                                      Log-Error "Failed to attach disk $($disk.Id) at LUN $($disk.Lun): $_"
+                                  }
+                              } else {
+                                  "Data disk at LUN $($disk.Lun) already attached. Skipping." | Tee-Object -FilePath $LogFile -Append
+                              }
+                          }
+                          
+                          # Start VM after attaching disks
+                          az vm start -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName)
+                          "VM started after data disk attachment" | Tee-Object -FilePath $LogFile -Append
                       }
-                      
-                      # Start VM after attaching disks
-                      az vm start -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName)
-                      "VM started after data disk attachment" | Tee-Object -FilePath $LogFile -Append
-                  }
+                  } else {
+                      # Create new VM
+                      "Creating VM: $($PSItem.NewVMName) with size $($PSItem.VMSize)..." | Tee-Object -FilePath $LogFile -Append
+                      $vmCreateCmd = "az vm create -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osTypeParam --size $($PSItem.VMSize) --boot-diagnostics-storage https://$bootDiagStorage.blob.core.windows.net/ --tags `"$tags`""
+                      Invoke-Expression $vmCreateCmd | Tee-Object -FilePath $LogFile -Append
 
-                  "✅ VM $($PSItem.NewVMName) created successfully with NIC: $nicName" | Tee-Object -FilePath $LogFile -Append
+                      if ($LASTEXITCODE -ne 0) {
+                          throw "VM creation command failed with exit code $LASTEXITCODE"
+                      }
+
+                      # Apply tags to VM
+                      try {
+                          $vmResourceId = "/subscriptions/$tgtSub/resourceGroups/${{ parameters.targetResourceGroupName }}/providers/Microsoft.Compute/virtualMachines/$($PSItem.NewVMName)"
+                          az resource tag --ids $vmResourceId --tags $tags | Tee-Object -FilePath $LogFile -Append
+                      } catch {
+                          Log-Error "Failed to apply tags to VM $($PSItem.NewVMName): $_"
+                      }
+
+                      # Attach data disks (if any)
+                      if ($newDataDisksFinal.Count -gt 0) {
+                          "Attaching $($newDataDisksFinal.Count) data disk(s) to VM..." | Tee-Object -FilePath $LogFile -Append
+                          
+                          # Deallocate VM before attaching disks
+                          az vm deallocate -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --no-wait
+                          az vm wait -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName) --custom "instanceView.statuses[?code=='PowerState/deallocated']"
+                          
+                          foreach ($disk in $newDataDisksFinal) {
+                              try {
+                                  az vm disk attach -g '${{ parameters.targetResourceGroupName }}' --vm-name $($PSItem.NewVMName) --name $($disk.Id) --lun $($disk.Lun)
+                                  "Attached data disk at LUN $($disk.Lun)" | Tee-Object -FilePath $LogFile -Append
+                              } catch {
+                                  Log-Error "Failed to attach disk $($disk.Id) at LUN $($disk.Lun): $_"
+                              }
+                          }
+                          
+                          # Start VM after attaching disks
+                          az vm start -g '${{ parameters.targetResourceGroupName }}' -n $($PSItem.NewVMName)
+                          "VM started after data disk attachment" | Tee-Object -FilePath $LogFile -Append
+                      }
+
+                      "✅ VM $($PSItem.NewVMName) created successfully with NIC: $nicName" | Tee-Object -FilePath $LogFile -Append
+                  }
               } catch {
                   $errorMsg = $_.Exception.Message
                   Log-Error "VM creation error for $($PSItem.NewVMName): $errorMsg"
                   
                   # Cleanup NIC if VM creation failed
-                  if ($nicId) {
-                      "VM creation failed. Deleting NIC '$nicName'..." | Tee-Object -FilePath $LogFile -Append
+                  if ($nicId -and -not $existingNic) {
+                      "VM creation failed. Deleting newly created NIC '$nicName'..." | Tee-Object -FilePath $LogFile -Append
                       az network nic delete -g '${{ parameters.targetResourceGroupName }}' -n $nicName --no-wait 2>$null
                   }
                   continue
-              }
-
-              # ------------------- Cleanup: Snapshots only -------------------
-              try {
-                  # Delete OS snapshot
-                  if ($osSnapId) {
-                      "Deleting OS snapshot: $osSnap" | Tee-Object -FilePath $LogFile -Append
-                      az snapshot delete --ids $osSnapId --yes --no-wait 2>$null
-                  }
-
-                  # Delete data disk snapshots
-                  if ($dataDiskIds -and $dataDiskIds[0] -ne "") {
-                      $dataSnaps = az snapshot list -g '${{ parameters.targetResourceGroupName }}' --query "[?contains(name, '$($PSItem.NewVMName)-data')].id" -o tsv
-                      if ($dataSnaps) {
-                          $dataSnapArray = $dataSnaps -split "`r?`n"
-                          foreach ($snapId in $dataSnapArray) {
-                              if ($snapId -and $snapId.Trim() -ne "") {
-                                  "Deleting data snapshot: $snapId" | Tee-Object -FilePath $LogFile -Append
-                                  az snapshot delete --ids $snapId --yes --no-wait 2>$null
-                              }
-                          }
-                      }
-                  }
-              } catch {
-                  Log-Error "Snapshot cleanup error for $($PSItem.NewVMName): $_"
               }
 
               "[$(Get-Date -Format o)] ✅ Clone completed successfully: $($PSItem.SourceVMName) -> $($PSItem.NewVMName) | IP: $privateIp | Subnet: $subnetName" | Tee-Object -FilePath $LogFile -Append
               $global:SuccessCount++
           } catch {
               $errorMsg = $_.Exception.Message
-              # Final cleanup attempt for NIC if overall process failed
-              if ($nicName) {
+              # Final cleanup attempt for NIC if overall process failed (only if newly created)
+              if ($nicName -and -not $existingNic) {
                   "Overall process failed. Attempting final NIC cleanup..." | Tee-Object -FilePath $LogFile -Append
                   az network nic delete -g '${{ parameters.targetResourceGroupName }}' -n $nicName --no-wait 2>$null
               }
