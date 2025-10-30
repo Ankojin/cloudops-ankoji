@@ -25,12 +25,12 @@ parameters:
   - name: resource_group_name
     displayName: '[SINGLE MODE] Resource Group Name'
     type: string
-    default: ''
+    default: ''        # <-- This makes it optional
 
   - name: db_vm_names
     displayName: '[SINGLE MODE] DB VM Names (comma-separated)'
     type: string
-    default: ''
+    default: ''        # <-- This makes it optional
 
   - name: db_shutdown_time
     displayName: '[SINGLE MODE] DB Shutdown Time (HHmm)'
@@ -40,10 +40,10 @@ parameters:
   - name: app_vm_names
     displayName: '[SINGLE MODE] App VM Names (comma-separated)'
     type: string
-    default: ''
+    default: ''        # <-- This makes it optional
 
   - name: app_shutdown_time
-    displayName: '[SINGLE MODE] App Shutdown Time (HHmm)'
+    displayName: '[SINGLE MODE] App VM Names (comma-separated)'
     type: string
     default: '2000'
 
