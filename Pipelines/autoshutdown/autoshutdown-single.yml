@@ -18,7 +18,7 @@ parameters:
     type: string
 
   - name: db_vm_names
-    displayName: 'DB VM Names (comma-separated, leave empty if none)'
+    displayName: 'DB VM Names (comma-separated, or "none" if no DB VMs)'
     type: string
     default: ''
 
@@ -28,7 +28,7 @@ parameters:
     default: '2200'
 
   - name: app_vm_names
-    displayName: 'App VM Names (comma-separated, leave empty if none)'
+    displayName: 'App VM Names (comma-separated, or "none" if no App VMs)'
     type: string
     default: ''
 

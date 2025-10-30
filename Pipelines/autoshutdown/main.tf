@@ -6,8 +6,9 @@ terraform {
     }
   }
   
-  # Note: Backend configuration is set dynamically in the pipeline using -backend-config
-  # This allows unique state files per subscription and resource group
+  # Explicit local backend configuration
+  # Path is configured dynamically via -backend-config in the pipeline
+  backend "local" {}
 }
 
 provider "azurerm" {
@@ -47,7 +48,7 @@ variable "resource_group_name" {
 }
 
 variable "db_vm_names" {
-  description = "Comma-separated list of DB VM names (leave empty if no DB VMs)"
+  description = "Comma-separated list of DB VM names (leave empty or enter 'none' if no DB VMs)"
   type        = string
   default     = ""
 }
@@ -59,7 +60,7 @@ variable "db_shutdown_time" {
 }
 
 variable "app_vm_names" {
-  description = "Comma-separated list of App VM names (leave empty if no App VMs)"
+  description = "Comma-separated list of App VM names (leave empty or enter 'none' if no App VMs)"
   type        = string
   default     = ""
 }
@@ -76,20 +77,48 @@ variable "time_zone" {
   default     = "Arab Standard Time"
 }
 
-# ===== Locals: Parse VM names =====
+# ===== Locals: Parse VM names with null handling =====
 locals {
-  # Parse DB VM names from comma-separated string
-  db_vm_list = var.db_vm_names != "" ? [
+  # Normalize input: treat "none", "null", "n/a", "-" as empty
+  normalized_db_vms = lower(trimspace(var.db_vm_names))
+  normalized_app_vms = lower(trimspace(var.app_vm_names))
+  
+  # Check if value should be treated as null/empty
+  is_db_vms_empty = (
+    local.normalized_db_vms == "" || 
+    local.normalized_db_vms == "none" || 
+    local.normalized_db_vms == "null" || 
+    local.normalized_db_vms == "n/a" || 
+    local.normalized_db_vms == "-"
+  )
+  
+  is_app_vms_empty = (
+    local.normalized_app_vms == "" || 
+    local.normalized_app_vms == "none" || 
+    local.normalized_app_vms == "null" || 
+    local.normalized_app_vms == "n/a" || 
+    local.normalized_app_vms == "-"
+  )
+  
+  # Parse DB VM names from comma-separated string (only if not empty)
+  db_vm_list = !local.is_db_vms_empty ? [
     for name in split(",", var.db_vm_names) : trimspace(name)
+    if trimspace(name) != "" && lower(trimspace(name)) != "none"
   ] : []
   
-  # Parse App VM names from comma-separated string
-  app_vm_list = var.app_vm_names != "" ? [
+  # Parse App VM names from comma-separated string (only if not empty)
+  app_vm_list = !local.is_app_vms_empty ? [
     for name in split(",", var.app_vm_names) : trimspace(name)
+    if trimspace(name) != "" && lower(trimspace(name)) != "none"
   ] : []
   
   # Combine all VMs that need configuration
   all_vm_names = concat(local.db_vm_list, local.app_vm_list)
+  
+  # Validation flags
+  has_db_vms = length(local.db_vm_list) > 0
+  has_app_vms = length(local.app_vm_list) > 0
+  has_any_vms = length(local.all_vm_names) > 0
 }
 
 # ===== Data: Fetch only specified VMs =====
@@ -133,24 +162,42 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
   }
 }
 
+# ===== Validation: Ensure at least one VM type is specified =====
+resource "null_resource" "validate_vms" {
+  lifecycle {
+    precondition {
+      condition     = local.has_any_vms
+      error_message = "At least one VM type (DB or App) must be specified. Both cannot be empty, 'none', or null."
+    }
+  }
+}
+
 # --------------------------
 # Outputs
 # --------------------------
 output "db_vms_configured" {
   description = "DB VMs configured for auto-shutdown"
-  value = {
+  value = local.has_db_vms ? {
     vms           = [for vm in data.azurerm_virtual_machine.db_vms : vm.name]
     shutdown_time = var.db_shutdown_time
     count         = length(data.azurerm_virtual_machine.db_vms)
+  } : {
+    vms           = []
+    shutdown_time = "N/A"
+    count         = 0
   }
 }
 
 output "app_vms_configured" {
   description = "App VMs configured for auto-shutdown"
-  value = {
+  value = local.has_app_vms ? {
     vms           = [for vm in data.azurerm_virtual_machine.app_vms : vm.name]
     shutdown_time = var.app_shutdown_time
     count         = length(data.azurerm_virtual_machine.app_vms)
+  } : {
+    vms           = []
+    shutdown_time = "N/A"
+    count         = 0
   }
 }
 
@@ -162,4 +209,16 @@ output "total_vms_configured" {
 output "state_file_location" {
   description = "Terraform state file location"
   value       = "Configured dynamically per resource group"
+}
+
+output "configuration_summary" {
+  description = "Summary of configuration"
+  value = {
+    resource_group = var.resource_group_name
+    has_db_vms     = local.has_db_vms
+    has_app_vms    = local.has_app_vms
+    total_vms      = length(local.all_vm_names)
+    db_vms_list    = local.has_db_vms ? local.db_vm_list : ["None"]
+    app_vms_list   = local.has_app_vms ? local.app_vm_list : ["None"]
+  }
 }
