@@ -1,0 +1,294 @@
+trigger: none
+
+pool:
+  name: cloudops-agent
+
+parameters:
+  - name: subscriptionName
+    displayName: 'Subscription'
+    type: string
+    default: 'BAB_DEV'
+    values:
+      - BAB_DEV
+      - BAB_SIT
+      - BAB_CORE
+
+  - name: resource_group_name
+    displayName: 'Resource Group Name'
+    type: string
+
+  - name: db_vm_names
+    displayName: 'DB VM Names (comma-separated, leave empty if none)'
+    type: string
+    default: ''
+
+  - name: db_shutdown_time
+    displayName: 'DB Shutdown Time (HHmm format, e.g., 2200)'
+    type: string
+    default: '2200'
+
+  - name: app_vm_names
+    displayName: 'App VM Names (comma-separated, leave empty if none)'
+    type: string
+    default: ''
+
+  - name: app_shutdown_time
+    displayName: 'App Shutdown Time (HHmm format, e.g., 2000)'
+    type: string
+    default: '2000'
+
+  - name: time_zone
+    displayName: 'Time Zone'
+    type: string
+    default: 'Arab Standard Time'
+
+variables:
+- group: TerraformVariables
+- group: cloud-subs
+
+jobs:
+- job: ConfigureSingleResourceGroup
+  displayName: "Configure Auto-Shutdown for Single Resource Group"
+  pool:
+    name: cloudops-agent
+
+  steps:
+  # =============================
+  # 🔹 Select Subscription
+  # =============================
+  - ${{ if eq(parameters.subscriptionName, 'BAB_DEV') }}:
+    - script: |
+        set "tmp=%BAB_DEV_SUBSCRIPTION_ID%"
+        set tmp=%tmp:"=%
+        echo ##vso[task.setvariable variable=subscription_id]%tmp%
+        echo Selected Subscription: BAB_DEV
+      displayName: 'Set Subscription ID for BAB_DEV'
+      env:
+        BAB_DEV_SUBSCRIPTION_ID: $(BAB_DEV_SUBSCRIPTION_ID)
+
+  - ${{ if eq(parameters.subscriptionName, 'BAB_SIT') }}:
+    - script: |
+        set "tmp=%BAB_SIT_SUBSCRIPTION_ID%"
+        set tmp=%tmp:"=%
+        echo ##vso[task.setvariable variable=subscription_id]%tmp%
+        echo Selected Subscription: BAB_SIT
+      displayName: 'Set Subscription ID for BAB_SIT'
+      env:
+        BAB_SIT_SUBSCRIPTION_ID: $(BAB_SIT_SUBSCRIPTION_ID)
+
+  - ${{ if eq(parameters.subscriptionName, 'BAB_CORE') }}:
+    - script: |
+        set "tmp=%BAB_CORE_SUBSCRIPTION_ID%"
+        set tmp=%tmp:"=%
+        echo ##vso[task.setvariable variable=subscription_id]%tmp%
+        echo Selected Subscription: BAB_CORE
+      displayName: 'Set Subscription ID for BAB_CORE'
+      env:
+        BAB_CORE_SUBSCRIPTION_ID: $(BAB_CORE_SUBSCRIPTION_ID)
+
+  # =============================
+  # 🔹 Validate Input
+  # =============================
+  - powershell: |
+      Write-Host "========================================="
+      Write-Host "Azure VM Auto-Shutdown Configuration"
+      Write-Host "Single Resource Group Mode"
+      Write-Host "=========================================`n"
+      
+      Write-Host "Validating inputs...`n"
+      
+      if ([string]::IsNullOrWhiteSpace("${{ parameters.resource_group_name }}")) {
+        Write-Error "❌ Resource group name is required!"
+        exit 1
+      }
+      
+      $hasDbVms = -not [string]::IsNullOrWhiteSpace("${{ parameters.db_vm_names }}")
+      $hasAppVms = -not [string]::IsNullOrWhiteSpace("${{ parameters.app_vm_names }}")
+      
+      if (-not $hasDbVms -and -not $hasAppVms) {
+        Write-Error "❌ At least one VM type (DB or App) must be specified!"
+        exit 1
+      }
+      
+      Write-Host "✅ Validation passed"
+      Write-Host "Subscription: ${{ parameters.subscriptionName }}"
+      Write-Host "Resource Group: ${{ parameters.resource_group_name }}"
+      if ($hasDbVms) {
+        Write-Host "DB VMs: ${{ parameters.db_vm_names }} (Shutdown: ${{ parameters.db_shutdown_time }})"
+      }
+      if ($hasAppVms) {
+        Write-Host "App VMs: ${{ parameters.app_vm_names }} (Shutdown: ${{ parameters.app_shutdown_time }})"
+      }
+      Write-Host ""
+    displayName: 'Validate Configuration'
+
+  # =============================
+  # 🔹 Setup Terraform State Directory
+  # =============================
+  - powershell: |
+      $stateBaseDir = "C:\TerraformState\autoshutdown"
+      
+      Write-Host "Setting up Terraform state directory..."
+      Write-Host "Base Directory: $stateBaseDir`n"
+      
+      # Create base directory if it doesn't exist
+      if (-not (Test-Path $stateBaseDir)) {
+        Write-Host "Creating state directory: $stateBaseDir"
+        New-Item -ItemType Directory -Path $stateBaseDir -Force | Out-Null
+        Write-Host "✅ Directory created successfully"
+      } else {
+        Write-Host "✅ State directory already exists"
+      }
+      
+      # Define state file path
+      $subscription = "${{ parameters.subscriptionName }}"
+      $resourceGroup = "${{ parameters.resource_group_name }}"
+      $stateFile = "$stateBaseDir\$subscription-$resourceGroup.tfstate"
+      
+      Write-Host "`nState File Configuration:"
+      Write-Host "  Subscription: $subscription"
+      Write-Host "  Resource Group: $resourceGroup"
+      Write-Host "  State File Path: $stateFile"
+      
+      # Set variable for use in subsequent steps
+      echo "##vso[task.setvariable variable=state_file_path]$stateFile"
+      
+      # Check if state file exists
+      if (Test-Path $stateFile) {
+        $fileInfo = Get-Item $stateFile
+        Write-Host "`n⚠️ Existing state file found"
+        Write-Host "  Last Modified: $($fileInfo.LastWriteTime)"
+        Write-Host "  Size: $([math]::Round($fileInfo.Length / 1KB, 2)) KB"
+        Write-Host "  This configuration will update the existing state"
+      } else {
+        Write-Host "`n✅ New state file will be created"
+      }
+      
+      Write-Host "`n========================================="
+    displayName: 'Setup Terraform State Directory'
+
+  # =============================
+  # 🔹 Terraform Install
+  # =============================
+  - task: TerraformInstaller@1
+    inputs:
+      terraformVersion: 'latest'
+    displayName: 'Install Terraform'
+
+  # =============================
+  # 🔹 Terraform Init with State Config
+  # =============================
+  - powershell: |
+      Write-Host "Initializing Terraform with state configuration..."
+      Write-Host "State File: $(state_file_path)`n"
+      
+      # Convert Windows path to Unix-style for Terraform
+      $stateFilePath = "$(state_file_path)" -replace '\\', '/'
+      
+      # Initialize with backend configuration
+      terraform init -reconfigure -backend-config="path=$stateFilePath"
+      
+      if ($LASTEXITCODE -ne 0) {
+        Write-Error "❌ Terraform initialization failed"
+        exit 1
+      }
+      
+      Write-Host "`n✅ Terraform initialized successfully with state file: $stateFilePath"
+    displayName: 'Terraform Init with State Configuration'
+    workingDirectory: $(System.DefaultWorkingDirectory)/Pipelines/autoshutdown
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      ARM_SUBSCRIPTION_ID: $(subscription_id)
+
+  # =============================
+  # 🔹 Terraform Validate
+  # =============================
+  - script: |
+      terraform validate
+    displayName: 'Terraform Validate'
+    workingDirectory: $(System.DefaultWorkingDirectory)/Pipelines/autoshutdown
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      ARM_SUBSCRIPTION_ID: $(subscription_id)
+
+  # =============================
+  # 🔹 Terraform Plan
+  # =============================
+  - script: |
+      terraform plan -out=tfplan.tfplan ^
+        -var="subscription_id=$(subscription_id)" ^
+        -var="tenant_id=$(ARM_TENANT_ID)" ^
+        -var="client_id=$(ARM_CLIENT_ID)" ^
+        -var="client_secret=$(ARM_CLIENT_SECRET)" ^
+        -var="resource_group_name=${{ parameters.resource_group_name }}" ^
+        -var="db_vm_names=${{ parameters.db_vm_names }}" ^
+        -var="db_shutdown_time=${{ parameters.db_shutdown_time }}" ^
+        -var="app_vm_names=${{ parameters.app_vm_names }}" ^
+        -var="app_shutdown_time=${{ parameters.app_shutdown_time }}" ^
+        -var="time_zone=${{ parameters.time_zone }}"
+    displayName: 'Terraform Plan'
+    workingDirectory: $(System.DefaultWorkingDirectory)/Pipelines/autoshutdown
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      ARM_SUBSCRIPTION_ID: $(subscription_id)
+
+  # =============================
+  # 🔹 Terraform Apply
+  # =============================
+  - script: |
+      terraform apply -auto-approve tfplan.tfplan
+    displayName: 'Terraform Apply'
+    workingDirectory: $(System.DefaultWorkingDirectory)/Pipelines/autoshutdown
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      ARM_SUBSCRIPTION_ID: $(subscription_id)
+
+  # =============================
+  # 🔹 Display Results
+  # =============================
+  - powershell: |
+      Write-Host "`n========================================="
+      Write-Host "📊 Configuration Results"
+      Write-Host "=========================================`n"
+      
+      Set-Location "$(System.DefaultWorkingDirectory)/Pipelines/autoshutdown"
+      
+      $output = terraform output -json | ConvertFrom-Json
+      
+      Write-Host "Resource Group: ${{ parameters.resource_group_name }}"
+      Write-Host "Subscription: ${{ parameters.subscriptionName }}"
+      Write-Host ""
+      
+      if ($output.db_vms_configured.value.count -gt 0) {
+        Write-Host "✅ DB VMs Configured: $($output.db_vms_configured.value.count)"
+        Write-Host "   VMs: $($output.db_vms_configured.value.vms -join ', ')"
+        Write-Host "   Shutdown Time: ${{ parameters.db_shutdown_time }}"
+      }
+      
+      if ($output.app_vms_configured.value.count -gt 0) {
+        Write-Host "✅ App VMs Configured: $($output.app_vms_configured.value.count)"
+        Write-Host "   VMs: $($output.app_vms_configured.value.vms -join ', ')"
+        Write-Host "   Shutdown Time: ${{ parameters.app_shutdown_time }}"
+      }
+      
+      Write-Host ""
+      Write-Host "Total VMs Configured: $($output.total_vms_configured.value)"
+      Write-Host ""
+      Write-Host "State File: $(state_file_path)"
+      Write-Host ""
+      Write-Host "✅ Configuration completed successfully!"
+      Write-Host "=========================================`n"
+    displayName: 'Show Configuration Results'
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      ARM_SUBSCRIPTION_ID: $(subscription_id)

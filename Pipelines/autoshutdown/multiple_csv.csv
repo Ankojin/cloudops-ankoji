@@ -1,4 +1,5 @@
 Subscription,ResourceGroupName,DBVMs,DBShutdownTime,AppVMs,AppShutdownTime
 BAB_DEV,rg-dev-app,sql-dev-01,2200,web-dev-01,2000
 BAB_DEV,rg-dev-data,postgres-dev-01,2300,,2000
-BAB_DEV,rg-dev-test,,2200,test-vm-01,1900
+BAB_SIT,rg-sit-app,sql-sit-01,2200,web-sit-01,2000
+BAB_CORE,rg-prod-app,sql-prod-01,2300,web-prod-01,2200

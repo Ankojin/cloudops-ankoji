@@ -1,0 +1,361 @@
+trigger: none
+
+pool:
+  name: cloudops-agent
+
+parameters:
+  - name: time_zone
+    displayName: 'Time Zone (applies to all VMs)'
+    type: string
+    default: 'Arab Standard Time'
+
+variables:
+- group: TerraformVariables
+- group: cloud-subs
+
+jobs:
+- job: ConfigureMultipleResourceGroups
+  displayName: "Configure Auto-Shutdown for Multiple Resource Groups (CSV)"
+  pool:
+    name: cloudops-agent
+
+  steps:
+  # =============================
+  # 🔹 Terraform Install
+  # =============================
+  - task: TerraformInstaller@1
+    inputs:
+      terraformVersion: 'latest'
+    displayName: 'Install Terraform'
+
+  # =============================
+  # 🔹 Setup Terraform State Directory
+  # =============================
+  - powershell: |
+      $stateBaseDir = "C:\TerraformState\autoshutdown"
+      
+      Write-Host "Setting up Terraform state directory..."
+      Write-Host "Base Directory: $stateBaseDir`n"
+      
+      # Create base directory if it doesn't exist
+      if (-not (Test-Path $stateBaseDir)) {
+        Write-Host "Creating state directory: $stateBaseDir"
+        New-Item -ItemType Directory -Path $stateBaseDir -Force | Out-Null
+        Write-Host "✅ Directory created successfully"
+      } else {
+        Write-Host "✅ State directory already exists"
+      }
+      
+      Write-Host "`nState files will be stored at: $stateBaseDir"
+      Write-Host "Naming format: <Subscription>-<ResourceGroup>.tfstate"
+      Write-Host "Each resource group will have its own isolated state file.`n"
+      Write-Host "========================================="
+    displayName: 'Setup Terraform State Directory'
+
+  # =============================
+  # 🔹 Process CSV Configuration
+  # =============================
+  - powershell: |
+      Write-Host "========================================="
+      Write-Host "Azure VM Auto-Shutdown Configuration"
+      Write-Host "Multiple Resource Groups (CSV) Mode"
+      Write-Host "=========================================`n"
+
+      function Get-SubscriptionId {
+        param([string]$SubscriptionName)
+        $subId = ""
+        switch ($SubscriptionName) {
+          "BAB_DEV" {
+            $subId = $env:BAB_DEV_SUBSCRIPTION_ID -replace '"', ''
+            Write-Host "✅ Resolved BAB_DEV subscription"
+          }
+          "BAB_SIT" {
+            $subId = $env:BAB_SIT_SUBSCRIPTION_ID -replace '"', ''
+            Write-Host "✅ Resolved BAB_SIT subscription"
+          }
+          "BAB_CORE" {
+            $subId = $env:BAB_CORE_SUBSCRIPTION_ID -replace '"', ''
+            Write-Host "✅ Resolved BAB_CORE subscription"
+          }
+          default {
+            Write-Error "Unknown subscription: $SubscriptionName"
+            return $null
+          }
+        }
+        
+        if ([string]::IsNullOrWhiteSpace($subId)) {
+          Write-Error "Subscription ID for $SubscriptionName is empty!"
+          return $null
+        }
+        
+        return $subId
+      }
+
+      # Read CSV file
+      $csvPath = "$(System.DefaultWorkingDirectory)/Pipelines/autoshutdown/multiple_csv.csv"
+      
+      Write-Host "📂 Reading CSV file from: $csvPath`n"
+      
+      if (-not (Test-Path $csvPath)) {
+        Write-Error "❌ CSV file not found at $csvPath"
+        Write-Host "`nPlease ensure the file exists with the following format:"
+        Write-Host "Subscription,ResourceGroupName,DBVMs,DBShutdownTime,AppVMs,AppShutdownTime"
+        Write-Host "BAB_DEV,rg-dev-app,sql-dev-01,2200,web-dev-01,2000"
+        exit 1
+      }
+
+      try {
+        $rows = Get-Content $csvPath | ConvertFrom-Csv
+        
+        if ($rows.Count -eq 0) {
+          Write-Error "❌ CSV file is empty!"
+          exit 1
+        }
+        
+        Write-Host "Found $($rows.Count) resource group(s) in CSV`n"
+        
+        # Validate and build configuration
+        $config = @()
+        
+        foreach ($row in $rows) {
+          # Validate required fields
+          if ([string]::IsNullOrWhiteSpace($row.Subscription)) {
+            Write-Warning "⚠️ Skipping row - Subscription is empty"
+            continue
+          }
+          
+          if ([string]::IsNullOrWhiteSpace($row.ResourceGroupName)) {
+            Write-Warning "⚠️ Skipping row - ResourceGroupName is empty"
+            continue
+          }
+          
+          # Get subscription ID
+          $subscriptionId = Get-SubscriptionId -SubscriptionName $row.Subscription
+          if ($null -eq $subscriptionId) {
+            Write-Warning "⚠️ Skipping $($row.ResourceGroupName) - Invalid subscription"
+            continue
+          }
+          
+          # Validate at least one VM type is specified
+          $hasDbVms = -not [string]::IsNullOrWhiteSpace($row.DBVMs)
+          $hasAppVms = -not [string]::IsNullOrWhiteSpace($row.AppVMs)
+          
+          if (-not $hasDbVms -and -not $hasAppVms) {
+            Write-Warning "⚠️ Skipping $($row.ResourceGroupName) - No VMs specified"
+            continue
+          }
+          
+          $config += @{
+            subscription = $row.Subscription
+            subscription_id = $subscriptionId
+            name = $row.ResourceGroupName
+            db_vms = if ($hasDbVms) { $row.DBVMs } else { "" }
+            db_shutdown = if ($hasDbVms) { $row.DBShutdownTime } else { "2200" }
+            app_vms = if ($hasAppVms) { $row.AppVMs } else { "" }
+            app_shutdown = if ($hasAppVms) { $row.AppShutdownTime } else { "2000" }
+          }
+        }
+        
+        if ($config.Count -eq 0) {
+          Write-Error "❌ No valid resource groups found in CSV!"
+          exit 1
+        }
+        
+        Write-Host "✅ Validated $($config.Count) resource group(s)`n"
+        
+        # Group by subscription for summary
+        $groupedBySubscription = $config | Group-Object -Property subscription
+        foreach ($group in $groupedBySubscription) {
+          Write-Host "  📦 $($group.Name): $($group.Count) resource group(s)"
+        }
+        Write-Host ""
+        
+      }
+      catch {
+        Write-Error "❌ Failed to parse CSV file: $_"
+        Write-Host "`nExpected CSV format:"
+        Write-Host "Subscription,ResourceGroupName,DBVMs,DBShutdownTime,AppVMs,AppShutdownTime"
+        exit 1
+      }
+
+      # Process each resource group
+      $successCount = 0
+      $failedRGs = @()
+      $processedRGs = @()
+      $stateBaseDir = "C:\TerraformState\autoshutdown"
+
+      foreach ($rg in $config) {
+        Write-Host "`n========================================="
+        Write-Host "Processing: $($rg.name)"
+        Write-Host "Subscription: $($rg.subscription)"
+        Write-Host "=========================================`n"
+        
+        # Define state file path for this resource group
+        $stateFile = "$stateBaseDir\$($rg.subscription)-$($rg.name).tfstate"
+        $stateFilePath = $stateFile -replace '\\', '/'
+        
+        Write-Host "State File: $stateFile"
+        
+        # Check if state file exists
+        if (Test-Path $stateFile) {
+          $fileInfo = Get-Item $stateFile
+          Write-Host "⚠️ Existing state file found (Last Modified: $($fileInfo.LastWriteTime))"
+        } else {
+          Write-Host "✅ New state file will be created"
+        }
+        Write-Host ""
+        
+        $hasDbVms = -not [string]::IsNullOrWhiteSpace($rg.db_vms)
+        $hasAppVms = -not [string]::IsNullOrWhiteSpace($rg.app_vms)
+        
+        Write-Host "Configuration:"
+        if ($hasDbVms) {
+          Write-Host "  📊 DB VMs: $($rg.db_vms)"
+          Write-Host "  🕐 DB Shutdown Time: $($rg.db_shutdown)"
+        }
+        if ($hasAppVms) {
+          Write-Host "  📱 App VMs: $($rg.app_vms)"
+          Write-Host "  🕐 App Shutdown Time: $($rg.app_shutdown)"
+        }
+        Write-Host ""
+        
+        # Change to Terraform directory
+        Set-Location "$(System.DefaultWorkingDirectory)/Pipelines/autoshutdown"
+        
+        # Initialize Terraform with unique state file
+        Write-Host "🔧 Running terraform init with state file: $stateFilePath"
+        $env:ARM_SUBSCRIPTION_ID = $rg.subscription_id
+        
+        terraform init -reconfigure -backend-config="path=$stateFilePath"
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "❌ Terraform init failed for $($rg.name)"
+          $failedRGs += "$($rg.subscription)/$($rg.name)"
+          continue
+        }
+        Write-Host "✅ Terraform initialized`n"
+        
+        # Validate
+        Write-Host "🔍 Running terraform validate..."
+        terraform validate
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "❌ Terraform validation failed for $($rg.name)"
+          $failedRGs += "$($rg.subscription)/$($rg.name)"
+          continue
+        }
+        Write-Host "✅ Validation passed`n"
+        
+        # Plan
+        Write-Host "📋 Running terraform plan..."
+        $planFile = "tfplan-$($rg.subscription)-$($rg.name -replace '[^a-zA-Z0-9-]', '_').tfplan"
+        
+        terraform plan -out=$planFile `
+          -var="subscription_id=$($rg.subscription_id)" `
+          -var="tenant_id=$env:ARM_TENANT_ID" `
+          -var="client_id=$env:ARM_CLIENT_ID" `
+          -var="client_secret=$env:ARM_CLIENT_SECRET" `
+          -var="resource_group_name=$($rg.name)" `
+          -var="db_vm_names=$($rg.db_vms)" `
+          -var="db_shutdown_time=$($rg.db_shutdown)" `
+          -var="app_vm_names=$($rg.app_vms)" `
+          -var="app_shutdown_time=$($rg.app_shutdown)" `
+          -var="time_zone=${{ parameters.time_zone }}"
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "❌ Terraform plan failed for $($rg.name)"
+          $failedRGs += "$($rg.subscription)/$($rg.name)"
+          continue
+        }
+        Write-Host "✅ Plan created successfully`n"
+        
+        # Apply
+        Write-Host "🚀 Running terraform apply..."
+        terraform apply -auto-approve $planFile
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "❌ Terraform apply failed for $($rg.name)"
+          $failedRGs += "$($rg.subscription)/$($rg.name)"
+          Remove-Item $planFile -ErrorAction SilentlyContinue
+          continue
+        }
+        
+        # Show outputs
+        Write-Host "`n📊 Configuration Results:"
+        $terraformOutput = terraform output -json | ConvertFrom-Json
+        Write-Host "  DB VMs: $($terraformOutput.db_vms_configured.value.count)"
+        Write-Host "  App VMs: $($terraformOutput.app_vms_configured.value.count)"
+        Write-Host "  Total VMs: $($terraformOutput.total_vms_configured.value)"
+        
+        # Verify state file was created/updated
+        if (Test-Path $stateFile) {
+          $fileInfo = Get-Item $stateFile
+          Write-Host "`n✅ State file updated: $stateFile"
+          Write-Host "   Size: $([math]::Round($fileInfo.Length / 1KB, 2)) KB"
+          Write-Host "   Modified: $($fileInfo.LastWriteTime)"
+        }
+        
+        $successCount++
+        $processedRGs += @{
+          subscription = $rg.subscription
+          name = $rg.name
+          status = "Success"
+          db_vms = if ($hasDbVms) { $rg.db_vms } else { "None" }
+          app_vms = if ($hasAppVms) { $rg.app_vms } else { "None" }
+          state_file = $stateFile
+        }
+        
+        Write-Host "`n✅ Successfully configured $($rg.name) in $($rg.subscription)"
+        
+        # Clean up plan file
+        Remove-Item $planFile -ErrorAction SilentlyContinue
+      }
+
+      # Display Summary
+      Write-Host "`n========================================="
+      Write-Host "📊 EXECUTION SUMMARY"
+      Write-Host "=========================================`n"
+      Write-Host "Total Resource Groups: $($config.Count)"
+      Write-Host "✅ Successfully Configured: $successCount"
+      Write-Host "❌ Failed: $($failedRGs.Count)"
+      Write-Host ""
+      
+      if ($processedRGs.Count -gt 0) {
+        Write-Host "Successfully Configured Resource Groups:"
+        $groupedSuccess = $processedRGs | Group-Object -Property subscription
+        foreach ($group in $groupedSuccess) {
+          Write-Host "`n  📦 $($group.Name):"
+          foreach ($rg in $group.Group) {
+            Write-Host "    ✅ $($rg.name)"
+            Write-Host "       - DB VMs: $($rg.db_vms)"
+            Write-Host "       - App VMs: $($rg.app_vms)"
+            Write-Host "       - State: $($rg.state_file)"
+          }
+        }
+        Write-Host ""
+      }
+      
+      if ($failedRGs.Count -gt 0) {
+        Write-Host "Failed Resource Groups:"
+        foreach ($rgName in $failedRGs) {
+          Write-Host "  ❌ $rgName"
+        }
+        Write-Host ""
+        Write-Warning "⚠️ Some resource groups failed to configure. Please review the logs above."
+        exit 1
+      }
+      
+      Write-Host "`n📁 State Files Location: $stateBaseDir"
+      Write-Host "   Total State Files: $successCount"
+      Write-Host ""
+      Write-Host "✅ All resource groups configured successfully!`n"
+      Write-Host "=========================================`n"
+    
+    displayName: 'Configure Auto-Shutdown from CSV'
+    workingDirectory: $(System.DefaultWorkingDirectory)
+    env:
+      ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+      ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+      ARM_TENANT_ID: $(ARM_TENANT_ID)
+      BAB_DEV_SUBSCRIPTION_ID: $(BAB_DEV_SUBSCRIPTION_ID)
+      BAB_SIT_SUBSCRIPTION_ID: $(BAB_SIT_SUBSCRIPTION_ID)
+      BAB_CORE_SUBSCRIPTION_ID: $(BAB_CORE_SUBSCRIPTION_ID)

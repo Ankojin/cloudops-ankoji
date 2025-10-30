@@ -5,6 +5,9 @@ terraform {
       version = ">=3.0"
     }
   }
+  
+  # Note: Backend configuration is set dynamically in the pipeline using -backend-config
+  # This allows unique state files per subscription and resource group
 }
 
 provider "azurerm" {
@@ -154,4 +157,9 @@ output "app_vms_configured" {
 output "total_vms_configured" {
   description = "Total number of VMs configured"
   value       = length(data.azurerm_virtual_machine.db_vms) + length(data.azurerm_virtual_machine.app_vms)
+}
+
+output "state_file_location" {
+  description = "Terraform state file location"
+  value       = "Configured dynamically per resource group"
 }
