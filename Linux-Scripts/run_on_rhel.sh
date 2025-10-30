@@ -3,11 +3,11 @@
 read -s -p "Enter SSH password: " PASSWORD
 echo
 
-USERNAME="Azureadmin"
+USERNAME="azureadmin"
 
-for HOST in $(cat servers.txt); do
+for HOST in $(cat server.txt); do
     echo "====== $HOST ======"
-    sshpass -p "$PASSWORD" scp -o StrictHostKeyChecking=no createuser.sh "$USERNAME@$HOST:/tmp/"
-    sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no "$USERNAME@$HOST" "sudo bash /tmp/createuser.sh && rm -f /tmp/createuser.sh"
+    sshpass -p "$PASSWORD" scp -o StrictHostKeyChecking=no createusers-remotely.sh "$USERNAME@$HOST:/tmp/"
+    sshpass -p "$PASSWORD" ssh -o StrictHostKeyChecking=no "$USERNAME@$HOST" "sudo bash /tmp/createusers-remotely.sh && rm -f /tmp/createusers-remotely.sh"
 done
 

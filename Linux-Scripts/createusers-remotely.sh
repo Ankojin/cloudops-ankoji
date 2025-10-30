@@ -1,7 +1,7 @@
 #!/bin/bash
 
-USERS=("rhadmin")
-DEFAULT_PASS="r1wutLdv$9v0375"
+USERS=("mohnaz-b" "mahsha-b" "abdanw-b")
+DEFAULT_PASS="ChangeMe123!"
 
 for USER in "${USERS[@]}"; do
     if id "$USER" &>/dev/null; then
