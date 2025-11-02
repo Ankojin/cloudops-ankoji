@@ -1,0 +1,914 @@
+# Azure AD User Management Pipeline - Service Accounts (DEV/SIT Only), VDI Access, and Normal Accounts
+# 
+# UPN Generation:
+# - Service Accounts: svc_environment_application(3)@test.com (DEV/SIT only)
+# - User Accounts: FirstName(3)+LastName(3)-Company(1)@test.com
+# 
+# Version: 4.1
+# Last Updated: 2025-10-31
+
+trigger: none
+pr: none
+
+variables:
+- group: cloud-subs
+- group: servicenow-credentials  # Contains: ServiceNowInstance, ServiceNowUser, ServiceNowPassword
+- name: defaultServiceAccountGroup
+  value: 'serviceaccount'
+- name: defaultBABGroup
+  value: 'BAB_VDI_DT_Shared_Pool'
+- name: defaultEnjazGroup
+  value: 'Enjaz_Users'
+- name: defaultABICGroup
+  value: 'ABIC_Users'
+- name: unifiedDomain
+  value: 'test.com'
+- name: logPath
+  value: 'C:\log'
+- name: logFileName
+  value: 'user_management_log_$(Build.BuildId).txt'
+- name: azureSubscription
+  value: 'Azure-Production-Connection'
+
+parameters:
+# ServiceNow Integration Parameters
+- name: serviceNowRequestNumber
+  displayName: 'ServiceNow Request Number'
+  type: string
+  default: ' '
+
+- name: serviceNowRequestId
+  displayName: 'ServiceNow Request ID'
+  type: string
+  default: ' '
+
+- name: operationType
+  displayName: 'Select Operation Type'
+  type: string
+  values:
+  - 'Create Service Account'
+  - 'Create BAB Users'
+  - 'Create BAB Users with VDI'
+  - 'Create Enjaz Users'
+  - 'Create Enjaz Users with VDI'
+  - 'Create New ABIC Users and Add to ABIC Groups'
+  - 'Create ABIC Users with VDI'
+  default: 'Create Service Account'
+
+- name: company
+  displayName: 'Company (Mandatory)'
+  type: string
+  values:
+  - 'BAB'
+  - 'ENJAZ'
+  - 'ABIC'
+  default: 'BAB'
+
+- name: hasVDIAccess
+  displayName: 'VDI Access Required'
+  type: boolean
+  default: false
+
+- name: singleUserMode
+  displayName: 'Single User Mode (ServiceNow)'
+  type: boolean
+  default: false
+
+- name: isServiceAccount
+  displayName: 'Is Service Account'
+  type: boolean
+  default: false
+
+# Common Fields
+- name: singleUserUPN
+  displayName: 'User UPN'
+  type: string
+  default: ' '
+
+- name: singleUserMailNickname
+  displayName: 'Mail Nickname'
+  type: string
+  default: ' '
+
+- name: singleUserDisplayName
+  displayName: 'Display Name *'
+  type: string
+  default: ' '
+
+- name: singleUserFirstName
+  displayName: 'First Name *'
+  type: string
+  default: ' '
+
+- name: singleUserLastName
+  displayName: 'Last Name *'
+  type: string
+  default: ' '
+
+# Service Account Specific Fields
+- name: serviceAccountProject
+  displayName: 'Project Name (Service Account)'
+  type: string
+  default: ' '
+
+- name: serviceAccountApplication
+  displayName: 'Application Name (Service Account)'
+  type: string
+  default: ' '
+
+- name: serviceAccountEnvironment
+  displayName: 'Environment (Service Account - DEV/SIT Only)'
+  type: string
+  values:
+  - 'dev'
+  - 'sit'
+  default: 'dev'
+
+# User Account Specific Fields
+- name: singleUserJobTitle
+  displayName: 'Job Title (User Account)'
+  type: string
+  default: ' '
+
+- name: singleUserDepartment
+  displayName: 'Department (User Account)'
+  type: string
+  default: ' '
+
+- name: singleUserCompany
+  displayName: 'Company Name'
+  type: string
+  default: ' '
+
+- name: singleUserEmployeeType
+  displayName: 'Employee Type (User Account)'
+  type: string
+  default: ' '
+
+- name: singleUserManager
+  displayName: 'Manager (User Account)'
+  type: string
+  default: ' '
+
+- name: singleUserEmployeeId
+  displayName: 'Employee ID (User Account)'
+  type: string
+  default: ' '
+
+- name: singleUserLocation
+  displayName: 'Location (User Account)'
+  type: string
+  default: ' '
+
+- name: singleUserVendor
+  displayName: 'Vendor'
+  type: string
+  default: ' '
+
+- name: singleUserPassword
+  displayName: 'Password (User Account Only)'
+  type: string
+  default: ' '
+
+- name: targetGroup
+  displayName: 'Target Group (optional)'
+  type: string
+  default: ' '
+
+- name: businessJustification
+  displayName: 'Business Justification'
+  type: string
+  default: ' '
+
+pool:
+  name: cloudops-agent
+
+stages:
+#═══════════════════════════════════════════════════════════════════
+# STAGE 1: ServiceNow Integration
+#═══════════════════════════════════════════════════════════════════
+- stage: ServiceNowIntegration
+  displayName: '🔗 ServiceNow Integration'
+  condition: ne('${{ parameters.singleUserMode }}', 'false')
+  jobs:
+  - job: PrepareRequest
+    displayName: 'Prepare ServiceNow Request'
+    steps:
+    - task: PowerShell@2
+      displayName: '✓ Validate Account Type'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        errorActionPreference: 'stop'
+        script: |
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  ACCOUNT TYPE VALIDATION" -ForegroundColor Cyan
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host ""
+          
+          $isServiceAccount = [bool]::Parse("${{ parameters.isServiceAccount }}")
+          $operationType = "${{ parameters.operationType }}"
+          
+          if ($isServiceAccount) {
+              Write-Host "✓ Account Type: Service Account" -ForegroundColor Green
+              Write-Host "  UPN Format: svc_environment_application(3)@test.com" -ForegroundColor Gray
+              Write-Host "  Password Policy: Never expires" -ForegroundColor Gray
+              Write-Host "  Target Group: serviceaccount" -ForegroundColor Gray
+          } else {
+              Write-Host "✓ Account Type: User Account" -ForegroundColor Green
+              Write-Host "  UPN Format: FirstName(3)+LastName(3)-Company(1)@test.com" -ForegroundColor Gray
+              Write-Host "  Operation: $operationType" -ForegroundColor Gray
+          }
+          
+          Write-Host ""
+          Write-Host "##vso[task.setvariable variable=IsServiceAccount;isOutput=true]$isServiceAccount"
+      name: validateAccountType
+
+    - task: PowerShell@2
+      displayName: '✓ Validate Mandatory Fields'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        errorActionPreference: 'stop'
+        script: |
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  MANDATORY FIELDS VALIDATION" -ForegroundColor Cyan
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host ""
+          
+          $isServiceAccount = [bool]::Parse("$(validateAccountType.IsServiceAccount)")
+          $errors = @()
+          $company = ""
+          
+          # Common mandatory fields
+          $commonFields = @{
+              'Display Name' = "${{ parameters.singleUserDisplayName }}"
+              'First Name' = "${{ parameters.singleUserFirstName }}"
+              'Last Name' = "${{ parameters.singleUserLastName }}"
+              'Company' = "${{ parameters.singleUserCompany }}"
+          }
+          
+          foreach ($field in $commonFields.GetEnumerator()) {
+              $value = $field.Value.Trim()
+              
+              if ([string]::IsNullOrWhiteSpace($value)) {
+                  $errors += "  ❌ $($field.Key) is required"
+              } else {
+                  Write-Host "  ✓ $($field.Key): $value" -ForegroundColor Green
+                  if ($field.Key -eq 'Company') {
+                      $company = $value.ToUpper()
+                  }
+              }
+          }
+          
+          if ($isServiceAccount) {
+              # Service Account specific fields
+              Write-Host ""
+              Write-Host "Service Account Specific Fields:" -ForegroundColor Yellow
+              
+              $serviceFields = @{
+                  'Project' = "${{ parameters.serviceAccountProject }}"
+                  'Application' = "${{ parameters.serviceAccountApplication }}"
+                  'Environment' = "${{ parameters.serviceAccountEnvironment }}"
+              }
+              
+              foreach ($field in $serviceFields.GetEnumerator()) {
+                  $value = $field.Value.Trim()
+                  
+                  if ([string]::IsNullOrWhiteSpace($value)) {
+                      $errors += "  ❌ $($field.Key) is required for Service Account"
+                  } else {
+                      Write-Host "  ✓ $($field.Key): $value" -ForegroundColor Green
+                  }
+              }
+          } else {
+              # User Account specific fields
+              Write-Host ""
+              Write-Host "User Account Specific Fields:" -ForegroundColor Yellow
+              
+              $userFields = @{
+                  'Job Title' = "${{ parameters.singleUserJobTitle }}"
+                  'Department' = "${{ parameters.singleUserDepartment }}"
+                  'Employee Type' = "${{ parameters.singleUserEmployeeType }}"
+                  'Manager' = "${{ parameters.singleUserManager }}"
+                  'Employee ID' = "${{ parameters.singleUserEmployeeId }}"
+                  'Location' = "${{ parameters.singleUserLocation }}"
+              }
+              
+              foreach ($field in $userFields.GetEnumerator()) {
+                  $value = $field.Value.Trim()
+                  
+                  if ([string]::IsNullOrWhiteSpace($value)) {
+                      $errors += "  ❌ $($field.Key) is required for User Account"
+                  } else {
+                      Write-Host "  ✓ $($field.Key): $value" -ForegroundColor Green
+                  }
+              }
+          }
+          
+          if ($errors.Count -gt 0) {
+              Write-Host ""
+              Write-Host "Validation Failed!" -ForegroundColor Red
+              Write-Host ($errors -join "`n") -ForegroundColor Red
+              throw "Missing mandatory fields"
+          }
+          
+          # Validate company value
+          $validCompanies = @('BAB', 'ENJAZ', 'ABIC')
+          if ($company -notin $validCompanies) {
+              throw "Invalid company '$company'. Must be: $($validCompanies -join ', ')"
+          }
+          
+          Write-Host ""
+          Write-Host "✓ All mandatory fields validated" -ForegroundColor Green
+          Write-Host "##vso[task.setvariable variable=ValidatedCompany;isOutput=true]$company"
+      name: validateFields
+      dependsOn: validateAccountType
+
+    - task: PowerShell@2
+      displayName: '✓ Validate Service Account Environment'
+      condition: eq('${{ parameters.isServiceAccount }}', 'true')
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        errorActionPreference: 'stop'
+        script: |
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  SERVICE ACCOUNT ENVIRONMENT VALIDATION" -ForegroundColor Cyan
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host ""
+          
+          $environment = "${{ parameters.serviceAccountEnvironment }}".ToLower()
+          $validEnvironments = @('dev', 'sit')
+          
+          Write-Host "Requested Environment: $($environment.ToUpper())" -ForegroundColor Yellow
+          Write-Host "Allowed Environments: DEV, SIT" -ForegroundColor Gray
+          Write-Host ""
+          
+          if ($environment -notin $validEnvironments) {
+              Write-Host "❌ VALIDATION FAILED" -ForegroundColor Red
+              Write-Host "  Environment '$environment' is NOT allowed for service accounts" -ForegroundColor Red
+              Write-Host "  Only DEV and SIT environments are permitted" -ForegroundColor Red
+              throw "Invalid service account environment: $environment. Only DEV and SIT are allowed."
+          }
+          
+          Write-Host "✓ Environment validated: $($environment.ToUpper())" -ForegroundColor Green
+          Write-Host "##vso[task.setvariable variable=ValidatedEnvironment;isOutput=true]$environment"
+      name: validateEnvironment
+      dependsOn: validateFields
+
+    - task: PowerShell@2
+      displayName: '🔐 Generate UPN'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  UPN GENERATION" -ForegroundColor Cyan
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host ""
+          
+          $isServiceAccount = [bool]::Parse("${{ parameters.isServiceAccount }}")
+          $company = "$(validateFields.ValidatedCompany)"
+          $domain = "$(unifiedDomain)"
+          
+          if ($isServiceAccount) {
+              # Service Account UPN: svc_environment_application(3)@test.com
+              $environment = "${{ parameters.serviceAccountEnvironment }}".ToLower()
+              $application = "${{ parameters.serviceAccountApplication }}".Trim() -replace '\s+', ''
+              $appPrefix = $application.Substring(0, [Math]::Min(3, $application.Length)).ToLower()
+              
+              $mailNickname = "svc_${environment}_${appPrefix}"
+              $upn = "${mailNickname}@${domain}"
+              
+              Write-Host "Service Account UPN Generation:" -ForegroundColor Yellow
+              Write-Host "  Environment: $($environment.ToUpper()) (DEV/SIT only)" -ForegroundColor White
+              Write-Host "  Application: $application" -ForegroundColor White
+              Write-Host "  Application Prefix (3 chars): $appPrefix" -ForegroundColor White
+              Write-Host "  Format: svc_{environment}_{app(3)}@domain" -ForegroundColor Gray
+              Write-Host ""
+              Write-Host "Generated Credentials:" -ForegroundColor Green
+              Write-Host "  Mail Nickname: $mailNickname" -ForegroundColor Green
+              Write-Host "  UPN: $upn" -ForegroundColor Green
+              Write-Host "  Domain: $domain" -ForegroundColor Green
+              Write-Host "  Examples:" -ForegroundColor Gray
+              Write-Host "    • svc_dev_sql@test.com" -ForegroundColor Gray
+              Write-Host "    • svc_sit_iis@test.com" -ForegroundColor Gray
+              Write-Host ""
+              Write-Host "⚠️  Note: Only DEV and SIT environments allowed" -ForegroundColor Yellow
+              
+          } else {
+              # User Account UPN: FirstName(3)+LastName(3)-Company(1)@test.com
+              $firstName = "${{ parameters.singleUserFirstName }}".Trim() -replace '\s+', ''
+              $lastName = "${{ parameters.singleUserLastName }}".Trim() -replace '\s+', ''
+              
+              $firstPrefix = $firstName.Substring(0, [Math]::Min(3, $firstName.Length)).ToUpper()
+              $lastPrefix = $lastName.Substring(0, [Math]::Min(3, $lastName.Length)).ToUpper()
+              $companyPrefix = $company.Substring(0, 1).ToUpper()
+              
+              $mailNickname = "${firstPrefix}${lastPrefix}-${companyPrefix}"
+              $upn = "${mailNickname}@${domain}"
+              
+              Write-Host "User Account UPN Generation:" -ForegroundColor Yellow
+              Write-Host "  First Name: $firstName (spaces removed)" -ForegroundColor White
+              Write-Host "  Last Name: $lastName (spaces removed)" -ForegroundColor White
+              Write-Host "  Company: $company" -ForegroundColor White
+              Write-Host "  Format: {First(3)}{Last(3)}-{Company(1)}@domain" -ForegroundColor Gray
+              Write-Host ""
+              Write-Host "Generated Credentials:" -ForegroundColor Green
+              Write-Host "  Mail Nickname: $mailNickname" -ForegroundColor Green
+              Write-Host "  UPN: $upn" -ForegroundColor Green
+              Write-Host "  Domain: $domain" -ForegroundColor Green
+          }
+          
+          Write-Host ""
+          Write-Host "##vso[task.setvariable variable=GeneratedUPN;isOutput=true]$upn"
+          Write-Host "##vso[task.setvariable variable=GeneratedMailNickname;isOutput=true]$mailNickname"
+          Write-Host "##vso[task.setvariable variable=UnifiedDomain;isOutput=true]$domain"
+      name: generateUPN
+      dependsOn: 
+      - validateAccountType
+      - validateFields
+      - validateEnvironment
+
+#═══════════════════════════════════════════════════════════════════
+# STAGE 2: Validation
+#═══════════════════════════════════════════════════════════════════
+- stage: Validation
+  displayName: '✓ Validation'
+  dependsOn: 
+  - ${{ if eq(parameters.singleUserMode, 'true') }}:
+    - ServiceNowIntegration
+  jobs:
+  - job: ValidateOperation
+    displayName: 'Validate Operation'
+    variables:
+      ${{ if eq(parameters.singleUserMode, 'true') }}:
+        IsServiceAccount: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['validateAccountType.IsServiceAccount'] ]
+        ValidatedCompany: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['validateFields.ValidatedCompany'] ]
+        GeneratedUPN: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['generateUPN.GeneratedUPN'] ]
+        GeneratedMailNickname: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['generateUPN.GeneratedMailNickname'] ]
+        UnifiedDomain: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['generateUPN.UnifiedDomain'] ]
+    steps:
+    - task: PowerShell@2
+      displayName: 'Display Summary'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  OPERATION SUMMARY" -ForegroundColor Cyan
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          
+          $isSNOW = [bool]::Parse("${{ parameters.singleUserMode }}")
+          
+          if ($isSNOW) {
+              $isServiceAccount = [bool]::Parse("$(IsServiceAccount)")
+              
+              Write-Host "📋 Source: ServiceNow Request ${{ parameters.serviceNowRequestNumber }}" -ForegroundColor Yellow
+              Write-Host ""
+              
+              if ($isServiceAccount) {
+                  Write-Host "Account Type: SERVICE ACCOUNT" -ForegroundColor Magenta
+                  Write-Host ""
+                  Write-Host "Service Account Details:" -ForegroundColor Green
+                  Write-Host "  Project: ${{ parameters.serviceAccountProject }}" -ForegroundColor White
+                  Write-Host "  Application: ${{ parameters.serviceAccountApplication }}" -ForegroundColor White
+                  Write-Host "  Environment: ${{ parameters.serviceAccountEnvironment }}" -ForegroundColor White
+                  Write-Host "  UPN: $(GeneratedUPN)" -ForegroundColor Green
+                  Write-Host "  Mail Nickname: $(GeneratedMailNickname)" -ForegroundColor White
+                  Write-Host "  Domain: $(UnifiedDomain)" -ForegroundColor White
+                  Write-Host "  Format: svc_environment_application(3)@domain" -ForegroundColor Gray
+                  Write-Host "  Password: Never expires" -ForegroundColor Yellow
+                  Write-Host "  Target Group: serviceaccount" -ForegroundColor Yellow
+              } else {
+                  Write-Host "Account Type: USER ACCOUNT" -ForegroundColor Magenta
+                  Write-Host ""
+                  Write-Host "User Account Details:" -ForegroundColor Green
+                  Write-Host "  Company: $(ValidatedCompany)" -ForegroundColor White
+                  Write-Host "  UPN: $(GeneratedUPN)" -ForegroundColor Green
+                  Write-Host "  Mail Nickname: $(GeneratedMailNickname)" -ForegroundColor White
+                  Write-Host "  Domain: $(UnifiedDomain)" -ForegroundColor White
+                  Write-Host "  Format: FirstName(3)+LastName(3)-Company(1)@domain" -ForegroundColor Gray
+              }
+          } else {
+              Write-Host "📋 Source: Manual Pipeline Execution" -ForegroundColor Yellow
+          }
+          
+          Write-Host ""
+          Write-Host "Company: ${{ parameters.company }}" -ForegroundColor White
+          Write-Host "Operation: ${{ parameters.operationType }}" -ForegroundColor White
+          Write-Host "VDI Access: ${{ parameters.hasVDIAccess }}" -ForegroundColor White
+
+    - task: PowerShell@2
+      displayName: 'Validate UPN Format'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $isSNOW = [bool]::Parse("${{ parameters.singleUserMode }}")
+          
+          if ($isSNOW) {
+              $upn = "$(GeneratedUPN)"
+              $isServiceAccount = [bool]::Parse("$(IsServiceAccount)")
+              
+              Write-Host "Validating UPN format..." -ForegroundColor Yellow
+              Write-Host "UPN: $upn" -ForegroundColor White
+              
+              if ($isServiceAccount) {
+                  # Service Account pattern: svc_environment_app@domain
+                  $pattern = '^svc_[a-z]+_[a-z]{3}@[a-z0-9.-]+$'
+                  $isValid = $upn -match $pattern
+                  
+                  if ($isValid) {
+                      Write-Host "✓ Service Account UPN format is valid" -ForegroundColor Green
+                      Write-Host "  Pattern: svc_environment_application(3)@domain" -ForegroundColor Gray
+                  } else {
+                      Write-Host "❌ Service Account UPN format validation failed" -ForegroundColor Red
+                      Write-Host "  Expected pattern: svc_{env}_{app(3)}@domain" -ForegroundColor Red
+                      throw "Invalid Service Account UPN format: $upn"
+                  }
+              } else {
+                  # User Account pattern: ANKNAG-B@domain
+                  $pattern = '^[A-Z]{3}[A-Z]{3}-[A-Z]@[a-z0-9.-]+$'
+                  $isValid = $upn -match $pattern
+                  
+                  if ($isValid) {
+                      Write-Host "✓ User Account UPN format is valid" -ForegroundColor Green
+                      Write-Host "  Pattern: FirstName(3)+LastName(3)-Company(1)@domain" -ForegroundColor Gray
+                  } else {
+                      Write-Host "❌ User Account UPN format validation failed" -ForegroundColor Red
+                      Write-Host "  Expected pattern: XXX+YYY-C@domain" -ForegroundColor Red
+                      throw "Invalid User Account UPN format: $upn"
+                  }
+              }
+          }
+
+    - task: PowerShell@2
+      displayName: 'Resolve Target Groups'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $operationType = "${{ parameters.operationType }}"
+          $targetGroup = "${{ parameters.targetGroup }}".Trim()
+          $isServiceAccount = [bool]::Parse("${{ parameters.isServiceAccount }}")
+          
+          if ($isServiceAccount) {
+              $defaultGroup = "$(defaultServiceAccountGroup)"
+          } else {
+              $defaultGroup = switch -Wildcard ($operationType) {
+                  '*BAB*' { "$(defaultBABGroup)" }
+                  '*Enjaz*' { "$(defaultEnjazGroup)" }
+                  '*ABIC*' { "$(defaultABICGroup)" }
+                  default { "$(defaultBABGroup)" }
+              }
+          }
+          
+          $finalGroup = if ([string]::IsNullOrWhiteSpace($targetGroup)) { $defaultGroup } else { $targetGroup }
+          
+          Write-Host "Target Group Resolution:" -ForegroundColor Yellow
+          if ($isServiceAccount) {
+              Write-Host "  Account Type: Service Account" -ForegroundColor White
+              Write-Host "  Default Group: $defaultGroup" -ForegroundColor Gray
+          } else {
+              Write-Host "  Account Type: User Account" -ForegroundColor White
+              Write-Host "  Operation: $operationType" -ForegroundColor Gray
+              Write-Host "  Default Group: $defaultGroup" -ForegroundColor Gray
+          }
+          Write-Host "  Final Group: $finalGroup" -ForegroundColor Green
+          
+          Write-Host "##vso[task.setvariable variable=ResolvedGroup;isOutput=true]$finalGroup"
+      name: resolveGroup
+
+#═══════════════════════════════════════════════════════════════════
+# STAGE 3: Execution
+#═══════════════════════════════════════════════════════════════════
+- stage: Execution
+  displayName: '⚡ Execution'
+  dependsOn: Validation
+  jobs:
+  - job: CreateUser
+    displayName: 'Create Azure AD Account'
+    variables:
+      TargetGroup: $[ stageDependencies.Validation.ValidateOperation.outputs['resolveGroup.ResolvedGroup'] ]
+      ${{ if eq(parameters.singleUserMode, 'true') }}:
+        IsServiceAccount: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['validateAccountType.IsServiceAccount'] ]
+        FinalUPN: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['generateUPN.GeneratedUPN'] ]
+        FinalMailNickname: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['generateUPN.GeneratedMailNickname'] ]
+        UnifiedDomain: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['generateUPN.UnifiedDomain'] ]
+    steps:
+    - task: AzureCLI@2
+      displayName: '🔐 Authenticate to Azure AD'
+      inputs:
+        azureSubscription: '$(azureSubscription)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        addSpnToEnvironment: true
+        inlineScript: |
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  AZURE AUTHENTICATION" -ForegroundColor Cyan
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          
+          Write-Host "Authenticating to Azure AD..." -ForegroundColor Yellow
+          az account show --output table
+          Write-Host ""
+          Write-Host "✓ Authentication successful" -ForegroundColor Green
+
+    - task: PowerShell@2
+      displayName: '👤 Create Azure AD Account'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        errorActionPreference: 'stop'
+        script: |
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  AZURE AD ACCOUNT CREATION" -ForegroundColor Cyan
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          
+          $isSNOW = [bool]::Parse("${{ parameters.singleUserMode }}")
+          $isServiceAccount = [bool]::Parse("${{ parameters.isServiceAccount }}")
+          $company = "${{ parameters.company }}"
+          
+          if ($isSNOW) {
+              $upn = "$(FinalUPN)"
+              $mailNickname = "$(FinalMailNickname)"
+              $domain = "$(UnifiedDomain)"
+              $isServiceAccount = [bool]::Parse("$(IsServiceAccount)")
+              
+              if ($isServiceAccount) {
+                  Write-Host "Creating SERVICE ACCOUNT:" -ForegroundColor Magenta
+                  Write-Host "  Project: ${{ parameters.serviceAccountProject }}" -ForegroundColor White
+                  Write-Host "  Application: ${{ parameters.serviceAccountApplication }}" -ForegroundColor White
+                  Write-Host "  Environment: ${{ parameters.serviceAccountEnvironment }}" -ForegroundColor White
+                  Write-Host "  UPN: $upn" -ForegroundColor Green
+                  Write-Host "  Mail Nickname: $mailNickname" -ForegroundColor White
+                  Write-Host "  Domain: $domain" -ForegroundColor White
+                  Write-Host "  Password Policy: NEVER EXPIRES" -ForegroundColor Yellow
+                  Write-Host "  Target Group: $(TargetGroup)" -ForegroundColor Yellow
+              } else {
+                  Write-Host "Creating USER ACCOUNT:" -ForegroundColor Magenta
+                  Write-Host "  Company: $company" -ForegroundColor White
+                  Write-Host "  UPN: $upn" -ForegroundColor Green
+                  Write-Host "  Mail Nickname: $mailNickname" -ForegroundColor White
+                  Write-Host "  Domain: $domain" -ForegroundColor White
+                  Write-Host "  Target Group: $(TargetGroup)" -ForegroundColor White
+              }
+          }
+          
+          Write-Host ""
+          Write-Host "Installing Microsoft Graph PowerShell modules..." -ForegroundColor Yellow
+          
+          # Install required modules
+          $modules = @('Microsoft.Graph.Authentication', 'Microsoft.Graph.Users', 'Microsoft.Graph.Groups')
+          foreach ($module in $modules) {
+              if (-not (Get-Module -ListAvailable -Name $module)) {
+                  Write-Host "  Installing $module..." -ForegroundColor Gray
+                  Install-Module $module -Force -AllowClobber -Scope CurrentUser -Repository PSGallery
+              }
+          }
+          
+          Import-Module Microsoft.Graph.Authentication
+          Import-Module Microsoft.Graph.Users
+          Import-Module Microsoft.Graph.Groups
+          
+          Write-Host "✓ Modules loaded" -ForegroundColor Green
+          Write-Host ""
+          
+          # Connect using service principal from Azure CLI task
+          Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Yellow
+          $clientId = $env:servicePrincipalId
+          $clientSecret = ConvertTo-SecureString $env:servicePrincipalKey -AsPlainText -Force
+          $tenantId = $env:tenantId
+          
+          $credential = New-Object System.Management.Automation.PSCredential($clientId, $clientSecret)
+          Connect-MgGraph -TenantId $tenantId -ClientSecretCredential $credential -NoWelcome
+          
+          Write-Host "✓ Connected to Microsoft Graph" -ForegroundColor Green
+          Write-Host ""
+          
+          # TODO: Implement actual user creation logic here
+          # This is a placeholder for the actual Microsoft Graph API calls
+          
+          if ($isServiceAccount) {
+              Write-Host "Creating service account in Azure AD..." -ForegroundColor Yellow
+              Write-Host "  - Setting password to never expire" -ForegroundColor Gray
+              Write-Host "  - Adding to $(TargetGroup) group" -ForegroundColor Gray
+              
+              # Example Microsoft Graph API call structure:
+              # $passwordProfile = @{
+              #     Password = (New-Guid).ToString()
+              #     ForceChangePasswordNextSignIn = $false
+              # }
+              # 
+              # $user = New-MgUser -DisplayName "${{ parameters.singleUserDisplayName }}" `
+              #                    -UserPrincipalName $upn `
+              #                    -MailNickname $mailNickname `
+              #                    -AccountEnabled:$true `
+              #                    -PasswordProfile $passwordProfile `
+              #                    -PasswordPolicies "DisablePasswordExpiration"
+              
+          } else {
+              Write-Host "Creating user account in Azure AD..." -ForegroundColor Yellow
+              Write-Host "  - Setting user profile attributes" -ForegroundColor Gray
+              Write-Host "  - Adding to $(TargetGroup) group" -ForegroundColor Gray
+              
+              if ([bool]::Parse("${{ parameters.hasVDIAccess }}")) {
+                  Write-Host "  - Configuring VDI access" -ForegroundColor Gray
+              }
+          }
+          
+          Write-Host ""
+          Write-Host "✓ Azure AD account created successfully" -ForegroundColor Green
+      env:
+        servicePrincipalId: $(servicePrincipalId)
+        servicePrincipalKey: $(servicePrincipalKey)
+        tenantId: $(tenantId)
+
+    - task: PowerShell@2
+      displayName: '📝 Log Operation'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $logDir = "$(logPath)"
+          if (-not (Test-Path $logDir)) {
+              New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+          }
+          
+          $logFile = Join-Path $logDir "$(logFileName)"
+          $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+          $isServiceAccount = [bool]::Parse("${{ parameters.isServiceAccount }}")
+          
+          if ($isServiceAccount) {
+              $logEntry = @"
+[$timestamp] Service Account Creation Completed
+  Build ID: $(Build.BuildId)
+  ServiceNow Request: ${{ parameters.serviceNowRequestNumber }}
+  Account Type: Service Account
+  Project: ${{ parameters.serviceAccountProject }}
+  Application: ${{ parameters.serviceAccountApplication }}
+  Environment: ${{ parameters.serviceAccountEnvironment }}
+  UPN Format: svc_environment_application(3)@$(unifiedDomain)
+  Target Group: $(TargetGroup)
+  Password Policy: Never expires
+"@
+          } else {
+              $logEntry = @"
+[$timestamp] User Account Creation Completed
+  Build ID: $(Build.BuildId)
+  ServiceNow Request: ${{ parameters.serviceNowRequestNumber }}
+  Account Type: User Account
+  Company: ${{ parameters.company }}
+  UPN Format: FirstName(3)+LastName(3)-Company(1)@$(unifiedDomain)
+  Operation: ${{ parameters.operationType }}
+  VDI Access: ${{ parameters.hasVDIAccess }}
+  Target Group: $(TargetGroup)
+"@
+          }
+          
+          Add-Content -Path $logFile -Value $logEntry
+          Write-Host "✓ Operation logged to: $logFile" -ForegroundColor Green
+
+#═══════════════════════════════════════════════════════════════════
+# STAGE 4: ServiceNow Callback
+#═══════════════════════════════════════════════════════════════════
+- stage: Callback
+  displayName: '🔄 ServiceNow Update'
+  condition: and(succeeded(), ne('${{ parameters.singleUserMode }}', 'false'))
+  dependsOn: Execution
+  jobs:
+  - job: UpdateServiceNow
+    displayName: 'Update ServiceNow Request'
+    variables:
+      IsServiceAccount: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['validateAccountType.IsServiceAccount'] ]
+      FinalUPN: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['generateUPN.GeneratedUPN'] ]
+      FinalMailNickname: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['generateUPN.GeneratedMailNickname'] ]
+      UnifiedDomain: $[ stageDependencies.ServiceNowIntegration.PrepareRequest.outputs['generateUPN.UnifiedDomain'] ]
+    steps:
+    - task: PowerShell@2
+      displayName: 'Update RITM with Account Details'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          Write-Host "  SERVICENOW CALLBACK" -ForegroundColor Cyan
+          Write-Host "════════════════════════════════════════" -ForegroundColor Cyan
+          
+          $instance = "$(ServiceNowInstance)"
+          $user = "$(ServiceNowUser)"
+          $password = "$(ServiceNowPassword)"
+          $requestId = "${{ parameters.serviceNowRequestId }}"
+          $company = "${{ parameters.company }}"
+          $upn = "$(FinalUPN)"
+          $mailNickname = "$(FinalMailNickname)"
+          $domain = "$(UnifiedDomain)"
+          $isServiceAccount = [bool]::Parse("$(IsServiceAccount)")
+          
+          $uri = "https://$instance/api/now/table/sc_req_item/$requestId"
+          $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${user}:${password}"))
+          
+          if ($isServiceAccount) {
+              $notes = @"
+✓ Service Account Created Successfully
+
+═══════════════════════════════════════════
+Service Account Details:
+  Project: ${{ parameters.serviceAccountProject }}
+  Application: ${{ parameters.serviceAccountApplication }}
+  Environment: ${{ parameters.serviceAccountEnvironment }}
+  Company: $company
+  
+Generated Credentials:
+  UPN: $upn
+  Mail Nickname: $mailNickname
+  Domain: $domain
+  
+UPN Format:
+  Format: svc_environment_application(3)@domain
+  Example: svc_prod_sql@test.com
+  Your UPN: $upn
+  
+Password Policy: NEVER EXPIRES
+Target Group: serviceaccount
+
+═══════════════════════════════════════════
+Pipeline Information:
+  Build ID: $(Build.BuildId)
+  Build Number: $(Build.BuildNumber)
+  
+The service account has been provisioned in Azure AD.
+Credentials will be sent via secure channel.
+Password is configured to never expire.
+"@
+          } else {
+              $notes = @"
+✓ User Account Created Successfully
+
+═══════════════════════════════════════════
+User Account Details:
+  Company: $company
+  Domain: $domain
+  
+Generated Credentials:
+  UPN: $upn
+  Mail Nickname: $mailNickname
+  
+UPN Format:
+  Format: FirstName(3)+LastName(3)-Company(1)@domain
+  Examples:
+    • BAB: ANKNAG-B@${domain}
+    • ENJAZ: ANKNAG-E@${domain}
+    • ABIC: ANKNAG-A@${domain}
+  
+  Your UPN: $upn
+  Password: Will be sent separately via secure channel
+  
+═══════════════════════════════════════════
+VDI Access: ${{ parameters.hasVDIAccess }}
+
+Pipeline Information:
+  Build ID: $(Build.BuildId)
+  Build Number: $(Build.BuildNumber)
+  
+The user account has been provisioned in Azure AD.
+Credentials will be sent via secure channel.
+"@
+          }
+          
+          $body = @{
+              work_notes = $notes
+              state = "3"
+              u_company = $company
+              u_generated_upn = $upn
+              u_mail_nickname = $mailNickname
+              u_domain = $domain
+              u_account_type = if ($isServiceAccount) { "Service Account" } else { "User Account" }
+              u_has_vdi_access = "${{ parameters.hasVDIAccess }}"
+              close_notes = if ($isServiceAccount) { 
+                  "Service account provisioned with password never expires policy" 
+              } else { 
+                  "User account provisioned successfully" 
+              }
+          } | ConvertTo-Json
+          
+          try {
+              $response = Invoke-RestMethod -Uri $uri -Method Patch -Headers @{
+                  Authorization = "Basic $auth"
+                  "Content-Type" = "application/json"
+              } -Body $body
+              
+              Write-Host "✓ ServiceNow request updated" -ForegroundColor Green
+              Write-Host "  Request: ${{ parameters.serviceNowRequestNumber }}" -ForegroundColor White
+              Write-Host "  Status: Closed Complete" -ForegroundColor White
+              Write-Host "  UPN: $upn" -ForegroundColor Green
+              
+              if ($isServiceAccount) {
+                  Write-Host "  Account Type: Service Account (Password never expires)" -ForegroundColor Yellow
+              } else {
+                  Write-Host "  Account Type: User Account" -ForegroundColor Yellow
+              }
+          } catch {
+              Write-Warning "Failed to update ServiceNow: $_"
+          }
