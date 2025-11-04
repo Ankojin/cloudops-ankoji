@@ -1,195 +1,518 @@
+<#
+.SYNOPSIS
+    Clones an Azure VM across subscriptions and regions with VHD-based disk copy.
+
+.DESCRIPTION
+    This script clones a source VM from one subscription/region to another by:
+    - Exporting managed disks to VHDs using AzCopy
+    - Creating new managed disks in target region
+    - Creating new VM with cloned disks and network configuration
+    
+.PARAMETER ExistingVhdAction
+    Action to take when VHD already exists in storage container.
+    Valid values: 'Skip', 'Overwrite', 'Prompt' (default)
+
+.EXAMPLE
+    .\vm-clone-sub-crossregion.ps1
+    # Interactive mode - prompts for decisions
+
+.EXAMPLE
+    .\vm-clone-sub-crossregion.ps1 -ExistingVhdAction Skip
+    # Skips copying if VHD already exists
+
+.EXAMPLE
+    .\vm-clone-sub-crossregion.ps1 -ExistingVhdAction Overwrite
+    # Overwrites existing VHDs automatically
+
+.NOTES
+    Requires: Az PowerShell module, AzCopy utility
+    Author: Azure Cloud Operations
+    Version: 2.0
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('Skip', 'Overwrite', 'Prompt')]
+    [string]$ExistingVhdAction = 'Prompt'
+)
+
 # ---------------------------- CONFIGURATION ----------------------------
-$sourceSubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
-$targetSubscriptionId = "d88f0b5b-6660-4607-8c6a-395820400912"
-$sourceResourceGroup = "bab-dev-hid-swec-rg-01"
-$targetResourceGroup = "bab-core-hid-swec-rg-01"
-$sourceVMName = "DAMFAWBWBDWV1"
-$newVMName = "DAMFAWBWBDWV1"
-$location = "westeurope"  # Target region for new disks/VM
-$vnetrg  = "bab-core-nw-weeu-rg-01"
-$vnetName = "bab-core-nw-weeu-vnet-dmz-01"
-$subnetName = "snet-dmz-shared-web-01"
-$vmSize = "Standard_D2s_v5"
+$sourceSubscriptionId = "2a908090-d056-438c-bcf3-00ce359a72b5"
+$targetSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
+$sourceResourceGroup = "sit-ABIC-BAAS-RG-01"
+$targetResourceGroup = "bab-sit-sme-loan-RG-01"
+$sourceVMName = "DABASWBMSSLV1"
+$newVMName = "DASMEWBMSSLV1"
+$location = "swedencentral"  # Target region for new disks/VM
+$vnetrg  = "bab-sit-nw-swec-rg-01"
+$vnetName = "bab-sit-nw-swec-vnet-nonpci-01"
+$subnetName = "snet-sit-nonpci-web-01"
+$vmSize = "Standard_D4s_v5"
 
 # Storage account for VHD copy (must exist in target region and subscription)
-$storageAccountName = "babcorevmbootdiag01"
-$storageAccountRG = "bab-core-panfw-weeu-rg-01"
+$storageAccountName = "babsitvmbootdiag02"
+$storageAccountRG = "bab-sit-vm-boot-diag-swec-rg-01"
 $containerName = "vhds"
 
 # ---------------------------- SWITCH TO SOURCE SUBSCRIPTION ----------------------------
 Set-AzContext -SubscriptionId $sourceSubscriptionId
 
 # ---------------------------- Get SOURCE VM ----------------------------
+Write-Host "`n=== RETRIEVING SOURCE VM ===" -ForegroundColor Cyan
 $sourceVM = Get-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName
 if (-not $sourceVM) {
     throw "Source VM '$sourceVMName' not found in resource group '$sourceResourceGroup'."
 }
 
-# Verify the source VM's OS disk
-if (-not $sourceVM.StorageProfile -or -not $sourceVM.StorageProfile.OsDisk) {
-    throw "Source VM '$sourceVMName' does not have a valid OS disk."
+Write-Host "✅ Source VM found: $($sourceVM.Name)"
+Write-Host "   VM Size: $($sourceVM.HardwareProfile.VmSize)"
+Write-Host "   Location: $($sourceVM.Location)"
+
+# Get VM status
+$sourceVMStatus = Get-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName -Status
+$vmStatus = $sourceVMStatus.Statuses | Where-Object { $_.Code -like "PowerState/*" }
+
+if ($vmStatus.Code -ne "PowerState/deallocated") {
+    Write-Warning "Source VM is not deallocated. Current state: $($vmStatus.Code)"
+    Write-Warning "It's recommended to deallocate the VM before cloning to ensure data consistency."
+    $confirm = Read-Host "Do you want to stop and deallocate the VM? (Y/N)"
+    if ($confirm -eq "Y") {
+        Write-Host "Stopping and deallocating VM '$sourceVMName'..."
+        Stop-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName -Force
+        Write-Host "✅ VM deallocated successfully."
+    } else {
+        throw "VM must be deallocated before cloning to ensure disk consistency."
+    }
 }
 
-# Retrieve the OS disk
-$osDisk = Get-AzDisk -ResourceGroupName $sourceResourceGroup -DiskName $sourceVM.StorageProfile.OsDisk.Name
-if (-not $osDisk) {
-    throw "OS disk for VM '$sourceVMName' could not be retrieved."
+# Validate storage profile
+if (-not $sourceVM.StorageProfile -or -not $sourceVM.StorageProfile.OsDisk -or -not $sourceVM.StorageProfile.OsDisk.Name) {
+    throw "Source VM '$sourceVMName' has invalid storage configuration."
 }
 
-Write-Host "OS Disk Name: $($osDisk.Name)"
-Write-Host "OS Disk ID: $($osDisk.Id)"
-Write-Host "OS Disk Location: $($osDisk.Location)"
+Write-Host "✅ Storage Profile validated"
+Write-Host "   OS Disk: $($sourceVM.StorageProfile.OsDisk.Name)"
+Write-Host "   OS Type: $($sourceVM.StorageProfile.OsDisk.OsType)"
+Write-Host "   Caching: $($sourceVM.StorageProfile.OsDisk.Caching)"
 
-# ---------------------------- EXPORT OS AND DATA DISKS TO VHD (GENERATE SAS URLS & COPY WITH AZCOPY) ----------------------------
+# Retrieve OS disk
+try {
+    $osDisk = Get-AzDisk -ResourceGroupName $sourceResourceGroup -DiskName $sourceVM.StorageProfile.OsDisk.Name -ErrorAction Stop
+    if (-not $osDisk) {
+        throw "OS disk object is null."
+    }
+} catch {
+    throw "Failed to retrieve OS disk '$($sourceVM.StorageProfile.OsDisk.Name)': $_"
+}
 
-# OS Disk: Generate SAS URL and copy using AzCopy
-Set-AzContext -SubscriptionId $sourceSubscriptionId
-$osDiskAccess = Grant-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $osDisk.Name -Access Read -DurationInSecond 7200
-$osDiskSasUrl = $osDiskAccess.AccessSAS
+Write-Host "✅ OS Disk retrieved: $($osDisk.Name) ($($osDisk.DiskSizeGB) GB, $($osDisk.Sku.Name))"
 
+# Validate disk ownership
+if ($osDisk.ManagedBy -and $osDisk.ManagedBy -notlike "*$sourceVMName*") {
+    throw "OS disk is attached to another VM: $($osDisk.ManagedBy)"
+}
+
+# ---------------------------- EXPORT OS AND DATA DISKS TO VHD ----------------------------
+Write-Host "`n=== EXPORTING DISKS TO VHD ===" -ForegroundColor Cyan
+
+# Switch to target subscription first to check existing VHDs
 Set-AzContext -SubscriptionId $targetSubscriptionId
-$storageAccount = Get-AzStorageAccount -ResourceGroupName $storageAccountRG -Name $storageAccountName
-$containerName = "vhds"
-$azCopyExe = "azcopy"  # Ensure azcopy is in your PATH
+Write-Host "Validating target storage account..."
+
+try {
+    $storageAccount = Get-AzStorageAccount -ResourceGroupName $storageAccountRG -Name $storageAccountName -ErrorAction Stop
+    Write-Host "✅ Storage account: $storageAccountName ($($storageAccount.Location), $($storageAccount.Sku.Name))"
+} catch {
+    Write-Error "❌ Storage account '$storageAccountName' not found in '$storageAccountRG'"
+    throw
+}
+
+# Create storage context
+Write-Host "Creating storage context..."
+try {
+    $storageAccountKey = (Get-AzStorageAccountKey -ResourceGroupName $storageAccountRG -Name $storageAccountName -ErrorAction Stop)[0].Value
+    $storageContext = New-AzStorageContext -StorageAccountName $storageAccountName -StorageAccountKey $storageAccountKey -ErrorAction Stop
+    Write-Host "✅ Storage context created"
+} catch {
+    Write-Error "❌ Failed to create storage context. Ensure you have proper RBAC permissions."
+    throw
+}
+
+# Verify/create container
+$container = Get-AzStorageContainer -Name $containerName -Context $storageContext -ErrorAction SilentlyContinue
+if (-not $container) {
+    Write-Host "Creating container '$containerName'..."
+    $container = New-AzStorageContainer -Name $containerName -Context $storageContext -Permission Off
+    Write-Host "✅ Container created"
+} else {
+    Write-Host "✅ Container exists: $containerName"
+}
+
+# ---------------------------- CHECK EXISTING VHDS FIRST ----------------------------
 $targetVhdName = "$newVMName-osdisk-copy.vhd"
 
-# Generate a SAS token for the destination container with at least "Write", "Create", and "Add" permissions
-# You can generate this in the Azure Portal or with PowerShell
-$destinationSasToken = "sp=racwl&st=2025-08-05T15:07:16Z&se=2025-08-09T23:22:16Z&spr=https&sv=2024-11-04&sr=c&sig=%2BEMPVGeUbhIUfDa4%2BHf6iPUem1MtGtril4i%2BT5Yy2zw%3D"  # Example: sv=...&ss=b&srt=sco&sp=acwl&se=...&sig=...
-
-$targetVhdUri = "$($storageAccount.PrimaryEndpoints.Blob)$containerName/$targetVhdName`?$destinationSasToken"
-
-Write-Host "Copying OS disk with AzCopy..."
-$azCopyCmd = "$azCopyExe copy `"$osDiskSasUrl`" `"$targetVhdUri`" --blob-type PageBlob --overwrite=true"
-Write-Host $azCopyCmd
-Invoke-Expression $azCopyCmd
-
-Set-AzContext -SubscriptionId $sourceSubscriptionId
-Revoke-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $osDisk.Name
-
-# Data Disks: Generate SAS URLs and copy using AzCopy
-foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
-    Set-AzContext -SubscriptionId $sourceSubscriptionId
-    $dataDiskAccess = Grant-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $dataDisk.Name -Access Read -DurationInSecond 7200
-    $dataDiskSasUrl = $dataDiskAccess.AccessSAS
-
-    Set-AzContext -SubscriptionId $targetSubscriptionId
-    $dataVhdName = "$newVMName-datadisk-$($dataDisk.Lun)-copy.vhd"
-    $dataVhdUri = "$($storageAccount.PrimaryEndpoints.Blob)$containerName/$dataVhdName`?$destinationSasToken"
-
-    Write-Host "Copying data disk $($dataDisk.Name) with AzCopy..."
-    $azCopyCmd = "$azCopyExe copy `"$dataDiskSasUrl`" `"$dataVhdUri`" --blob-type PageBlob --overwrite=true"
-    Write-Host $azCopyCmd
-    Invoke-Expression $azCopyCmd
-
-    Set-AzContext -SubscriptionId $sourceSubscriptionId
-    Revoke-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $dataDisk.Name
+# Check if all VHDs already exist when ExistingVhdAction is Skip
+if ($ExistingVhdAction -eq 'Skip') {
+    Write-Host "`n=== CHECKING FOR EXISTING VHDS (Skip Mode) ===" -ForegroundColor Yellow
+    
+    # Check OS disk VHD
+    $existingOsVhd = Get-AzStorageBlob -Container $containerName -Context $storageContext -Blob $targetVhdName -ErrorAction SilentlyContinue
+    $allVhdsExist = $existingOsVhd -ne $null
+    
+    if ($existingOsVhd) {
+        Write-Host "✅ OS disk VHD exists: $targetVhdName ($([math]::Round($existingOsVhd.Length / 1GB, 2)) GB)" -ForegroundColor Green
+    } else {
+        Write-Host "❌ OS disk VHD missing: $targetVhdName" -ForegroundColor Red
+        $allVhdsExist = $false
+    }
+    
+    # Check data disk VHDs
+    $existingDataVhds = @()
+    if ($sourceVM.StorageProfile.DataDisks.Count -gt 0) {
+        foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
+            $dataVhdName = "$newVMName-datadisk-$($dataDisk.Lun)-copy.vhd"
+            $existingDataVhd = Get-AzStorageBlob -Container $containerName -Context $storageContext -Blob $dataVhdName -ErrorAction SilentlyContinue
+            
+            if ($existingDataVhd) {
+                Write-Host "✅ Data disk VHD exists: $dataVhdName (LUN $($dataDisk.Lun), $([math]::Round($existingDataVhd.Length / 1GB, 2)) GB)" -ForegroundColor Green
+                $existingDataVhds += $dataVhdName
+            } else {
+                Write-Host "❌ Data disk VHD missing: $dataVhdName (LUN $($dataDisk.Lun))" -ForegroundColor Red
+                $allVhdsExist = $false
+            }
+        }
+    }
+    
+    if ($allVhdsExist) {
+        Write-Host "`n✅ All VHDs exist - Skipping disk export entirely!" -ForegroundColor Green
+        Write-Host "   No SAS tokens will be generated" -ForegroundColor Green
+        
+        # Skip to disk creation section
+        $skipDiskExport = $true
+    } else {
+        Write-Host "`n⚠️  Some VHDs are missing - Proceeding with export for missing VHDs only" -ForegroundColor Yellow
+        $skipDiskExport = $false
+    }
+} else {
+    $skipDiskExport = $false
 }
 
-# ---------------------------- CREATE MANAGED OS DISK FROM COPIED VHD ----------------------------
+# Only proceed with export if not skipping
+if (-not $skipDiskExport) {
+    # Generate SAS token for destination
+    Write-Host "Generating SAS token for destination container..."
+    try {
+        $destinationSasToken = New-AzStorageContainerSASToken -Container $containerName -Context $storageContext -Permission racwl -ExpiryTime (Get-Date).AddHours(4) -ErrorAction Stop
+        Write-Host "✅ SAS token generated (expires in 4 hours)"
+    } catch {
+        Write-Error "❌ Failed to generate SAS token. Verify storage account permissions."
+        throw
+    }
+
+    # Verify AzCopy
+    $azCopyExe = "azcopy"
+    if (-not (Get-Command $azCopyExe -ErrorAction SilentlyContinue)) {
+        throw "AzCopy not found. Install from https://aka.ms/downloadazcopy"
+    }
+    $azCopyVersion = & $azCopyExe --version
+    Write-Host "✅ AzCopy: $azCopyVersion"
+
+    # ---------------------------- COPY OS DISK VHD ----------------------------
+    $targetVhdUri = "$($storageAccount.PrimaryEndpoints.Blob)$containerName/$targetVhdName`?$destinationSasToken"
+
+    # Check if VHD exists (re-check for non-Skip modes)
+    $existingOsVhd = Get-AzStorageBlob -Container $containerName -Context $storageContext -Blob $targetVhdName -ErrorAction SilentlyContinue
+
+    $shouldCopyOs = $true
+    if ($existingOsVhd) {
+        Write-Host "`n⚠️  OS disk VHD '$targetVhdName' already exists" -ForegroundColor Yellow
+        Write-Host "   Size: $([math]::Round($existingOsVhd.Length / 1GB, 2)) GB"
+        Write-Host "   Last Modified: $($existingOsVhd.LastModified)"
+        
+        $shouldCopyOs = switch ($ExistingVhdAction) {
+            'Skip' { 
+                Write-Host "✅ Skipping OS disk copy (mode: Skip)" -ForegroundColor Green
+                $false 
+            }
+            'Overwrite' { 
+                Write-Host "⚠️  Overwriting VHD (mode: Overwrite)" -ForegroundColor Yellow
+                $true 
+            }
+            'Prompt' { 
+                $response = Read-Host "Overwrite existing VHD? (Y/N)"
+                $response -eq 'Y'
+            }
+        }
+    }
+
+    # Only generate SAS token for OS disk if we need to copy it
+    $osDiskSasUrl = $null
+    if ($shouldCopyOs) {
+        Write-Host "Generating SAS token for source OS disk..."
+        Set-AzContext -SubscriptionId $sourceSubscriptionId
+        $osDiskAccess = Grant-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $osDisk.Name -Access Read -DurationInSecond 7200
+        $osDiskSasUrl = $osDiskAccess.AccessSAS
+        Set-AzContext -SubscriptionId $targetSubscriptionId
+
+        Write-Host "`nCopying OS disk with AzCopy..."
+        Write-Host "  Source: $($osDisk.Name) ($($osDisk.DiskSizeGB) GB)"
+        Write-Host "  Destination: $targetVhdName"
+        Write-Host "  This may take several minutes..."
+
+        $azCopyCmd = "$azCopyExe copy `"$osDiskSasUrl`" `"$targetVhdUri`" --blob-type PageBlob --overwrite=true --log-level=INFO"
+        Invoke-Expression $azCopyCmd
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ AzCopy failed (exit code: $LASTEXITCODE)"
+            Set-AzContext -SubscriptionId $sourceSubscriptionId
+            Revoke-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $osDisk.Name
+            throw "AzCopy operation failed"
+        }
+        Write-Host "✅ OS disk copied successfully" -ForegroundColor Green
+
+        # Revoke OS disk access
+        Set-AzContext -SubscriptionId $sourceSubscriptionId
+        Revoke-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $osDisk.Name
+        Write-Host "✅ OS disk access revoked"
+        Set-AzContext -SubscriptionId $targetSubscriptionId
+    } else {
+        Write-Host "✅ OS disk copy skipped - no SAS token generated" -ForegroundColor Green
+    }
+
+# ---------------------------- COPY DATA DISKS ----------------------------
+if ($sourceVM.StorageProfile.DataDisks.Count -gt 0) {
+    Write-Host "`n=== COPYING DATA DISKS ===" -ForegroundColor Cyan
+    Write-Host "Processing $($sourceVM.StorageProfile.DataDisks.Count) data disk(s)..."
+    
+    foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
+        Write-Host "`nData Disk: $($dataDisk.Name) (LUN: $($dataDisk.Lun))"
+        
+        $dataVhdName = "$newVMName-datadisk-$($dataDisk.Lun)-copy.vhd"
+        $existingDataVhd = Get-AzStorageBlob -Container $containerName -Context $storageContext -Blob $dataVhdName -ErrorAction SilentlyContinue
+        
+        $shouldCopyData = $true
+        if ($existingDataVhd) {
+            Write-Host "  ⚠️  VHD exists: $dataVhdName" -ForegroundColor Yellow
+            Write-Host "     Size: $([math]::Round($existingDataVhd.Length / 1GB, 2)) GB"
+            
+            $shouldCopyData = switch ($ExistingVhdAction) {
+                'Skip' { 
+                    Write-Host "  ✅ Skipping (mode: Skip)" -ForegroundColor Green
+                    $false 
+                }
+                'Overwrite' { 
+                    Write-Host "  ⚠️  Overwriting (mode: Overwrite)" -ForegroundColor Yellow
+                    $true 
+                }
+                'Prompt' { 
+                    $response = Read-Host "  Overwrite? (Y/N)"
+                    $response -eq 'Y'
+                }
+            }
+        }
+        
+        # Only generate SAS token and copy if needed
+        if ($shouldCopyData) {
+            Write-Host "  Generating SAS token for data disk..."
+            Set-AzContext -SubscriptionId $sourceSubscriptionId
+            $dataDiskAccess = Grant-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $dataDisk.Name -Access Read -DurationInSecond 7200
+            $dataDiskSasUrl = $dataDiskAccess.AccessSAS
+
+            Set-AzContext -SubscriptionId $targetSubscriptionId
+            $dataVhdUri = "$($storageAccount.PrimaryEndpoints.Blob)$containerName/$dataVhdName`?$destinationSasToken"
+
+            Write-Host "  Copying with AzCopy..."
+            $azCopyCmd = "$azCopyExe copy `"$dataDiskSasUrl`" `"$dataVhdUri`" --blob-type PageBlob --overwrite=true --log-level=INFO"
+            Invoke-Expression $azCopyCmd
+
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "  ❌ AzCopy failed (exit code: $LASTEXITCODE)"
+                Set-AzContext -SubscriptionId $sourceSubscriptionId
+                Revoke-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $dataDisk.Name
+                throw "AzCopy failed for data disk"
+            }
+            Write-Host "  ✅ Data disk copied" -ForegroundColor Green
+
+            # Revoke access after copying
+            Set-AzContext -SubscriptionId $sourceSubscriptionId
+            Revoke-AzDiskAccess -ResourceGroupName $sourceResourceGroup -DiskName $dataDisk.Name
+            Write-Host "  ✅ Access revoked"
+            Set-AzContext -SubscriptionId $targetSubscriptionId
+        } else {
+            Write-Host "  ✅ Data disk copy skipped - no SAS token generated" -ForegroundColor Green
+        }
+    }
+}
+
+# Close the export section condition
+} else {
+    Write-Host "`n✅ Skipping entire disk export process - all VHDs exist" -ForegroundColor Green
+}
+
+# ---------------------------- CREATE MANAGED DISKS ----------------------------
 Set-AzContext -SubscriptionId $targetSubscriptionId
+Write-Host "`n=== CREATING MANAGED DISKS ===" -ForegroundColor Cyan
 
-# Dynamically generate a SAS URL for the copied OS disk VHD (sr=b, sp=r)
-$osDiskBlob = Get-AzStorageBlob -Container $containerName -Context $storageAccount.Context -Blob $targetVhdName
-Write-Host "OS Disk Blob Type: $($osDiskBlob.BlobType)"
+# Get OS disk blob URI (without SAS)
+$osDiskBlob = Get-AzStorageBlob -Container $containerName -Context $storageContext -Blob $targetVhdName
+$osDiskBlobUri = $osDiskBlob.ICloudBlob.Uri.AbsoluteUri
+
 if ($osDiskBlob.BlobType -ne "PageBlob") {
-    throw "The OS disk VHD must be a PageBlob. Current type: $($osDiskBlob.BlobType)"
+    throw "OS disk VHD must be PageBlob, found: $($osDiskBlob.BlobType)"
 }
-$osDiskSasToken = New-AzStorageBlobSASToken -Container $containerName -Blob $targetVhdName -Permission r -Context $storageAccount.Context -FullUri -ExpiryTime (Get-Date).AddHours(2)
-$osDiskSasUrl = $osDiskSasToken
 
-$osDiskConfig = New-AzDiskConfig -AccountType StandardSSD_LRS `
+# Create OS disk
+$storageAccountId = $storageAccount.Id
+$osDiskConfig = New-AzDiskConfig `
+    -AccountType StandardSSD_LRS `
     -Location $location `
     -CreateOption Import `
-    -SourceUri $osDiskSasUrl `
+    -StorageAccountId $storageAccountId `
+    -SourceUri $osDiskBlobUri `
     -OsType $osDisk.OsType
 
 $newOSDiskName = "$newVMName-OSDisk"
-$newOSDisk = New-AzDisk -DiskName $newOSDiskName -Disk $osDiskConfig -ResourceGroupName $targetResourceGroup
-
-Write-Host "Managed OS disk '$newOSDiskName' created in $location from VHD."
-
-# ---------------------------- CREATE MANAGED DATA DISKS FROM COPIED VHDs ----------------------------
-$newDataDisks = @()
-foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
-    $dataVhdName = "$newVMName-datadisk-$($dataDisk.Lun)-copy.vhd"
-    $dataVhdUri = "$($storageAccount.PrimaryEndpoints.Blob)$containerName/$dataVhdName"
-
-    # Check blob type for data disk
-    $dataDiskBlob = Get-AzStorageBlob -Container $containerName -Context $storageAccount.Context -Blob $dataVhdName
-    Write-Host "Data Disk Blob Type (LUN $($dataDisk.Lun)): $($dataDiskBlob.BlobType)"
-    if ($dataDiskBlob.BlobType -ne "PageBlob") {
-        throw "The data disk VHD for LUN $($dataDisk.Lun) must be a PageBlob. Current type: $($dataDiskBlob.BlobType)"
-    }
-
-    # Dynamically generate a SAS URL for each copied data disk VHD (sr=b, sp=r)
-    $dataDiskSasToken = New-AzStorageBlobSASToken -Container $containerName -Blob $dataVhdName -Permission r -Context $storageAccount.Context -FullUri -ExpiryTime (Get-Date).AddHours(2)
-    $dataDiskSasUrl = $dataDiskSasToken
-
-    $dataDiskConfig = New-AzDiskConfig -AccountType StandardSSD_LRS `
-        -Location $location `
-        -CreateOption Import `
-        -SourceUri $dataDiskSasUrl `
-        -OsType $dataDisk.OsType
-
-    $clonedDiskName = "$newVMName-DataDisk-$($dataDisk.Lun)"
-    $clonedDisk = New-AzDisk -DiskName $clonedDiskName -Disk $dataDiskConfig -ResourceGroupName $targetResourceGroup
-
-    Write-Host "Managed data disk '$clonedDiskName' created in $location from VHD."
-
-    $newDataDisks += [PSCustomObject]@{Id=$clonedDisk.Id; Lun=$dataDisk.Lun}
+try {
+    $newOSDisk = New-AzDisk -DiskName $newOSDiskName -Disk $osDiskConfig -ResourceGroupName $targetResourceGroup -ErrorAction Stop
+    Write-Host "✅ OS disk created: $newOSDiskName" -ForegroundColor Green
+} catch {
+    Write-Error "❌ Failed to create OS disk: $_"
+    throw
 }
 
-# ---------------------------- CREATE NIC ---------------------------- 
+# Create data disks
+$newDataDisks = @()
+if ($sourceVM.StorageProfile.DataDisks.Count -gt 0) {
+    Write-Host "`nCreating data disks..."
+    foreach ($dataDisk in $sourceVM.StorageProfile.DataDisks) {
+        $dataVhdName = "$newVMName-datadisk-$($dataDisk.Lun)-copy.vhd"
+        $dataDiskBlob = Get-AzStorageBlob -Container $containerName -Context $storageContext -Blob $dataVhdName
+        $dataDiskBlobUri = $dataDiskBlob.ICloudBlob.Uri.AbsoluteUri
+        
+        if ($dataDiskBlob.BlobType -ne "PageBlob") {
+            throw "Data disk VHD LUN $($dataDisk.Lun) must be PageBlob"
+        }
+
+        Set-AzContext -SubscriptionId $sourceSubscriptionId
+        $sourceDiskObj = Get-AzDisk -ResourceGroupName $sourceResourceGroup -DiskName $dataDisk.Name
+        Set-AzContext -SubscriptionId $targetSubscriptionId
+        
+        $dataDiskConfig = New-AzDiskConfig `
+            -AccountType $sourceDiskObj.Sku.Name `
+            -Location $location `
+            -CreateOption Import `
+            -StorageAccountId $storageAccountId `
+            -SourceUri $dataDiskBlobUri
+
+        $clonedDiskName = "$newVMName-DataDisk-$($dataDisk.Lun)"
+        try {
+            $clonedDisk = New-AzDisk -DiskName $clonedDiskName -Disk $dataDiskConfig -ResourceGroupName $targetResourceGroup -ErrorAction Stop
+            Write-Host "  ✅ Data disk created: $clonedDiskName (LUN $($dataDisk.Lun))" -ForegroundColor Green
+            
+            $newDataDisks += [PSCustomObject]@{
+                Id = $clonedDisk.Id
+                Lun = $dataDisk.Lun
+                Caching = $dataDisk.Caching
+            }
+        } catch {
+            Write-Error "  ❌ Failed to create data disk LUN $($dataDisk.Lun): $_"
+            throw
+        }
+    }
+}
+
+# ---------------------------- CREATE NIC ----------------------------
+Write-Host "`n=== CREATING NETWORK INTERFACE ===" -ForegroundColor Cyan
+
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 
-$staticIpAddress = "10.189.60.71"  # Replace with your desired IP address
-$nic = New-AzNetworkInterface -Name "$newVMName-NIC" -ResourceGroupName $targetResourceGroup `
-    -Location $location `
-    -SubnetId $subnet.Id `
-    -PrivateIpAddress $staticIpAddress
+$staticIpAddress = "10.189.66.50"
+Write-Host "VNet: $vnetName, Subnet: $subnetName"
+Write-Host "Static IP: $staticIpAddress"
 
-# ---------------------------- CONFIGURE NEW VM ----------------------------
+try {
+    $nic = New-AzNetworkInterface `
+        -Name "$newVMName-NIC" `
+        -ResourceGroupName $targetResourceGroup `
+        -Location $location `
+        -SubnetId $subnet.Id `
+        -PrivateIpAddress $staticIpAddress `
+        -ErrorAction Stop
+    
+    Write-Host "✅ NIC created: $($nic.Name) ($($nic.IpConfigurations[0].PrivateIpAddress))" -ForegroundColor Green
+} catch {
+    Write-Error "❌ Failed to create NIC: $_"
+    throw
+}
+
+# ---------------------------- CREATE VM ----------------------------
+Write-Host "`n=== CREATING VIRTUAL MACHINE ===" -ForegroundColor Cyan
+
 $vmConfig = New-AzVMConfig -VMName $newVMName -VMSize $vmSize
 $osType = $sourceVM.StorageProfile.OsDisk.OsType
 
+if (-not $newOSDisk -or -not $newOSDisk.Id) {
+    throw "OS disk validation failed"
+}
+
+# Attach OS disk
 if ($osType -eq "Linux") {
-    $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $newOSDisk.Id -CreateOption Attach -Linux
+    $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $newOSDisk.Id -CreateOption Attach -Linux -Caching $sourceVM.StorageProfile.OsDisk.Caching
 } elseif ($osType -eq "Windows") {
-    $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $newOSDisk.Id -CreateOption Attach -Windows
+    $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $newOSDisk.Id -CreateOption Attach -Windows -Caching $sourceVM.StorageProfile.OsDisk.Caching
 } else {
     throw "Unknown OS type: $osType"
 }
 
+# Attach NIC
 $vmConfig = Add-AzVMNetworkInterface -VM $vmConfig -Id $nic.Id
 
-foreach ($disk in $newDataDisks) {
-    $vmConfig = Add-AzVMDataDisk -VM $vmConfig `
-        -ManagedDiskId $disk.Id -CreateOption Attach -Lun $disk.Lun
-}
-
-# ---------------------------- ENABLE BOOT DIAGNOSTICS ----------------------------
-$bootDiagStorageAccountName = "babcorevmbootdiag01"
-$bootdiagstracctrg = "bab-core-panfw-weeu-rg-01"
-$bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName $bootdiagstracctrg -Name $bootDiagStorageAccountName
-
-if (-not $bootDiagStorageAccount) {
-    throw "Boot diagnostics storage account '$bootDiagStorageAccountName' not found in resource group '$bootdiagstracctrg'."
-}
-
-$vmConfig.DiagnosticsProfile = @{
-    BootDiagnostics = @{
-        Enabled = $true
-        StorageUri = $bootDiagStorageAccount.PrimaryEndpoints.Blob
+# Attach data disks
+if ($newDataDisks.Count -gt 0) {
+    foreach ($disk in $newDataDisks) {
+        $vmConfig = Add-AzVMDataDisk -VM $vmConfig -ManagedDiskId $disk.Id -CreateOption Attach -Lun $disk.Lun -Caching $disk.Caching
     }
 }
 
-# ---------------------------- CREATE THE NEW VM ----------------------------
+# Boot diagnostics
 try {
-    New-AzVM -ResourceGroupName $targetResourceGroup -Location $location -VM $vmConfig
+    $bootDiagStorageAccount = Get-AzStorageAccount -ResourceGroupName "bab-sit-vm-boot-diag-swec-rg-01" -Name "babsitvmbootdiag02" -ErrorAction Stop
+    $vmConfig = Set-AzVMBootDiagnostic -VM $vmConfig -Enable -ResourceGroupName "bab-sit-vm-boot-diag-swec-rg-01" -StorageAccountName "babsitvmbootdiag02"
+    Write-Host "✅ Boot diagnostics enabled"
 } catch {
-    throw "Failed to create the new VM '$newVMName'. Error: $_"
+    Write-Warning "Boot diagnostics not enabled: $_"
 }
 
-Write-Host "`n✅ VM '$newVMName' cloned from '$sourceVMName'. OS/data disks and NIC attached."
+# Create VM
+Write-Host "`nCreating VM '$newVMName'..."
+try {
+    $vmResult = New-AzVM -ResourceGroupName $targetResourceGroup -Location $location -VM $vmConfig -ErrorAction Stop
+    
+    Write-Host "`n" + ("=" * 60) -ForegroundColor Green
+    Write-Host "✅ VM CREATED SUCCESSFULLY!" -ForegroundColor Green
+    Write-Host ("=" * 60) -ForegroundColor Green
+    Write-Host "`nVM: $newVMName"
+    Write-Host "Resource Group: $targetResourceGroup"
+    Write-Host "Location: $location"
+    Write-Host "Size: $vmSize"
+    Write-Host "OS: $osType"
+    Write-Host "IP: $staticIpAddress"
+    
+    Write-Host "`nTo start the VM:"
+    Write-Host "Start-AzVM -ResourceGroupName $targetResourceGroup -Name $newVMName" -ForegroundColor Cyan
+    
+} catch {
+    Write-Host "`n" + ("=" * 60) -ForegroundColor Red
+    Write-Error "❌ VM CREATION FAILED"
+    Write-Host ("=" * 60) -ForegroundColor Red
+    Write-Host "`nError: $_"
+    Write-Host "`nCleanup commands:"
+    Write-Host "Remove-AzDisk -ResourceGroupName $targetResourceGroup -DiskName $newOSDiskName -Force"
+    foreach ($disk in $newDataDisks) {
+        Write-Host "Remove-AzDisk -ResourceGroupName $targetResourceGroup -DiskName $(Split-Path $disk.Id -Leaf) -Force"
+    }
+    Write-Host "Remove-AzNetworkInterface -ResourceGroupName $targetResourceGroup -Name $($nic.Name) -Force"
+    throw
+}

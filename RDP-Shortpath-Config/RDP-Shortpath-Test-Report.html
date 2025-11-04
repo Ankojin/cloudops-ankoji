@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RDP Shortpath Configuration Test Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background-color: #f0f0f0; padding: 10px; border-radius: 5px; }
+        .section { margin: 20px 0; }
+        .success { color: green; }
+        .warning { color: orange; }
+        .error { color: red; }
+        .info { color: blue; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .status-ok { background-color: #d4edda; }
+        .status-warning { background-color: #fff3cd; }
+        .status-error { background-color: #f8d7da; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>RDP Shortpath Configuration Test Report</h1>
+        <p>Generated on: 2025-11-03 23:24:55</p>
+    </div>    <div class="section">
+        <h2>Session Host Configuration</h2>
+        <table>
+            <tr>
+                <th>Computer Name</th>
+                <th>UDP Transport</th>
+                <th>RDP Shortpath Listener</th>
+                <th>Listener Port</th>
+                <th>Firewall Rules</th>
+                <th>Status</th>
+            </tr></table></div>    <div class="section">
+        <h2>Client Configuration</h2>
+        <table>
+            <tr>
+                <th>Computer Name</th>
+                <th>UDP Enabled</th>
+                <th>Client Version</th>
+                <th>Status</th>
+            </tr>            <tr class="status-ok">
+                <td></td>
+                <td></td>
+                <td></td>
+                <td>OK</td>
+            </tr>            <tr class="status-ok">
+                <td></td>
+                <td></td>
+                <td></td>
+                <td>OK</td>
+            </tr>            <tr class="status-ok">
+                <td></td>
+                <td></td>
+                <td></td>
+                <td>OK</td>
+            </tr>            <tr class="status-ok">
+                <td>ANKOJI-DEVBOX</td>
+                <td>Default (Enabled)</td>
+                <td>Unknown</td>
+                <td>OK</td>
+            </tr></table></div>    <div class="section">
+        <h2>Network Connectivity Tests</h2>
+        <table>
+            <tr>
+                <th>Source</th>
+                <th>Target</th>
+                <th>Protocol</th>
+                <th>Port</th>
+                <th>Result</th>
+                <th>Details</th>
+            </tr>            <tr class="status-ok">
+                <td>localhost</td>
+                <td>10.189.50.135</td>
+                <td>UDP</td>
+                <td>3390</td>
+                <td>Success</td>
+                <td>UDP connection test (packet sent)</td>
+            </tr></table></div>    <div class="section">
+        <h2>Summary</h2>
+        <p>This report shows the current configuration status of RDP Shortpath for Azure Virtual Desktop.</p>
+        <p>Review any warnings or errors and follow the configuration guides to resolve issues.</p>
+    </div>
+</body>
+</html>

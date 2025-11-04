@@ -1,0 +1,11 @@
+steps:
+  - script: |
+      echo "Starting integration stage for ServiceNow to Azure AD provisioning..."
+  - script: |
+      npm install
+  - script: |
+      npm run create-aad-accounts
+  - script: |
+      npm run sync-validation
+  - script: |
+      echo "Integration stage completed successfully."

@@ -1,0 +1,59 @@
+parameters:
+  - name: environment
+    type: string
+    default: 'development'
+  
+stages:
+  - stage: Deploy
+    displayName: 'Deploy Integration Scripts'
+    jobs:
+      - job: DeployScripts
+        displayName: 'Deploy Scripts to Azure'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '14.x'
+            displayName: 'Install Node.js'
+
+          - script: |
+              npm install
+            displayName: 'Install Dependencies'
+
+          - script: |
+              npm run build
+            displayName: 'Build Project'
+
+          - script: |
+              npm run deploy -- --env $(environment)
+            displayName: 'Deploy Integration Scripts'
+
+// Hide/Show fields based on request_type
+function onChange(control, oldValue, newValue, isLoading) {
+    if (isLoading) return;
+    
+    var isServiceAccount = (newValue == 'Service Account');
+    var isUserAccount = (newValue == 'User Account');
+    
+    // Service Account fields
+    g_form.setDisplay('project', isServiceAccount);
+    g_form.setDisplay('application', isServiceAccount);
+    g_form.setDisplay('environment', isServiceAccount);
+    g_form.setMandatory('project', isServiceAccount);
+    g_form.setMandatory('application', isServiceAccount);
+    g_form.setMandatory('environment', isServiceAccount);
+    
+    // User Account fields
+    g_form.setDisplay('job_title', isUserAccount);
+    g_form.setDisplay('department', isUserAccount);
+    g_form.setDisplay('employee_type', isUserAccount);
+    g_form.setDisplay('manager', isUserAccount);
+    g_form.setDisplay('employee_id', isUserAccount);
+    g_form.setDisplay('location', isUserAccount);
+    g_form.setMandatory('job_title', isUserAccount);
+    g_form.setMandatory('department', isUserAccount);
+    g_form.setMandatory('employee_type', isUserAccount);
+    g_form.setMandatory('employee_id', isUserAccount);
+    g_form.setMandatory('location', isUserAccount);
+}
