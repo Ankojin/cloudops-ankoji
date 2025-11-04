@@ -401,6 +401,27 @@ jobs:
       
       Write-Host "📁 State files will be saved to: $stateBaseDir"
       Write-Host "📝 Naming format: <Subscription>-<ResourceGroup>.tfstate`n"
+      
+      # Setup Azure CLI authentication for import operations
+      Write-Host "🔐 Setting up Azure CLI authentication for imports..."
+      try {
+        # Login using service principal
+        az login --service-principal `
+          --username $env:ARM_CLIENT_ID `
+          --password $env:ARM_CLIENT_SECRET `
+          --tenant $env:ARM_TENANT_ID `
+          --output none
+        
+        if ($LASTEXITCODE -eq 0) {
+          Write-Host "✅ Azure CLI authentication successful"
+        } else {
+          Write-Warning "⚠️ Azure CLI authentication failed - imports may not work"
+        }
+      }
+      catch {
+        Write-Warning "⚠️ Azure CLI setup failed: $_ - imports may not work"
+      }
+      Write-Host ""
 
       foreach ($rg in $config) {
         Write-Host "`n========================================="
@@ -516,6 +537,143 @@ jobs:
           continue
         }
         Write-Host "✅ Plan created successfully`n"
+        
+        # Check for and import existing auto-shutdown schedules
+        Write-Host "🔍 Checking for existing auto-shutdown schedules..."
+        
+        # Set Azure CLI context to the correct subscription
+        Write-Host "  🔄 Setting Azure CLI subscription context..."
+        az account set --subscription $rg.subscription_id
+        if ($LASTEXITCODE -ne 0) {
+          Write-Warning "  ⚠️ Failed to set subscription context - proceeding without imports"
+        } else {
+          Write-Host "  ✅ Azure CLI context set to: $($rg.subscription)"
+        }
+        
+        # Get list of VMs that need auto-shutdown
+        $allVMs = @()
+        if ($rg.db_vms) {
+          $allVMs += ($rg.db_vms -split ',') | ForEach-Object { @{name = $_.Trim(); type = "db"} }
+        }
+        if ($rg.app_vms) {
+          $allVMs += ($rg.app_vms -split ',') | ForEach-Object { @{name = $_.Trim(); type = "app"} }
+        }
+        
+        # Track what we find
+        $importedSchedules = 0
+        $disabledSchedules = 0
+        $newSchedules = 0
+        
+        foreach ($vm in $allVMs) {
+          $vmName = $vm.name
+          $vmType = $vm.type
+          
+          # Build the expected Azure resource ID for the auto-shutdown schedule
+          $scheduleResourceId = "/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.DevTestLab/schedules/shutdown-computevm-$vmName"
+          
+          # Build the Terraform resource address
+          $terraformResource = if ($vmType -eq "db") { 
+            "azurerm_dev_test_global_vm_shutdown_schedule.db_shutdown[`"$vmName`"]" 
+          } else { 
+            "azurerm_dev_test_global_vm_shutdown_schedule.app_shutdown[`"$vmName`"]" 
+          }
+          
+          Write-Host "  🔍 Checking VM: $vmName ($vmType)"
+          
+          # Check if the schedule already exists in Azure
+          $existingSchedule = $null
+          try {
+            $existingSchedule = az resource show --ids $scheduleResourceId --output json 2>$null
+            $azExitCode = $LASTEXITCODE
+          }
+          catch {
+            $azExitCode = 1
+          }
+          
+          if ($azExitCode -eq 0 -and $existingSchedule) {
+            # Parse the existing schedule details
+            $scheduleDetails = $existingSchedule | ConvertFrom-Json
+            $isEnabled = $scheduleDetails.properties.status -eq "Enabled"
+            $currentTime = $scheduleDetails.properties.dailyRecurrence.time
+            
+            Write-Host "    ⚠️ Auto-shutdown schedule already exists in Azure"
+            Write-Host "    📊 Current Status: $(if ($isEnabled) { '✅ Enabled' } else { '❌ Disabled' })"
+            Write-Host "    🕐 Current Time: $currentTime"
+            
+            if (-not $isEnabled) {
+              Write-Host "    🔧 Existing schedule is DISABLED - will import and enable it"
+              Write-Host "    ℹ️ This will activate auto-shutdown for this VM"
+            } else {
+              Write-Host "    ℹ️ Existing schedule is already enabled - will import and update if needed"
+            }
+            
+            Write-Host "    📥 Importing existing schedule into Terraform state..."
+            
+            # Import the existing resource into Terraform state
+            try {
+              terraform import $terraformResource $scheduleResourceId 2>$null
+              $importExitCode = $LASTEXITCODE
+            }
+            catch {
+              $importExitCode = 1
+            }
+            
+            if ($importExitCode -eq 0) {
+              Write-Host "    ✅ Successfully imported existing schedule"
+              $importedSchedules++
+              if (-not $isEnabled) {
+                Write-Host "    🔄 Terraform will enable the auto-shutdown schedule on apply"
+                $disabledSchedules++
+              }
+            } else {
+              Write-Host "    ⚠️ Import failed (resource may already be in state)"
+              Write-Host "    ℹ️ This is normal if the resource was previously imported"
+            }
+          } else {
+            Write-Host "    ✅ No existing schedule found, will create new enabled schedule"
+            $newSchedules++
+          }
+        }
+        
+        Write-Host ""
+        
+        # Summary of import actions
+        if ($allVMs.Count -gt 0) {
+          Write-Host "📋 Auto-Shutdown Schedule Analysis:"
+          Write-Host "  🔍 Total VMs Checked: $($allVMs.Count)"
+          Write-Host "  📥 Existing Schedules Imported: $importedSchedules"
+          Write-Host "  🆕 New Schedules to Create: $newSchedules"
+          if ($disabledSchedules -gt 0) {
+            Write-Host "  🔧 Disabled Schedules to Enable: $disabledSchedules"
+            Write-Host "  ⚠️ IMPORTANT: $disabledSchedules VM(s) had DISABLED auto-shutdown that will be ENABLED"
+          }
+          Write-Host "  ✅ All schedules will be ENABLED with specified shutdown times"
+          Write-Host ""
+        }
+        
+        # Re-run plan after any imports to get accurate changes
+        if ($allVMs.Count -gt 0) {
+          Write-Host "🔄 Re-running plan after imports..."
+          
+          terraform plan -out="$planFile" `
+            -var="subscription_id=$($rg.subscription_id)" `
+            -var="tenant_id=$env:ARM_TENANT_ID" `
+            -var="client_id=$env:ARM_CLIENT_ID" `
+            -var="client_secret=$env:ARM_CLIENT_SECRET" `
+            -var="resource_group_name=$($rg.name)" `
+            -var="db_vm_names=$($rg.db_vms)" `
+            -var="db_shutdown_time=$($rg.db_shutdown)" `
+            -var="app_vm_names=$($rg.app_vms)" `
+            -var="app_shutdown_time=$($rg.app_shutdown)" `
+            -var="time_zone=${{ parameters.time_zone }}"
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ Terraform re-plan failed for $($rg.name)"
+            $failedRGs += "$($rg.subscription)/$($rg.name)"
+            continue
+          }
+          Write-Host "✅ Updated plan created after imports`n"
+        }
         
         # Verify plan file exists before applying
         if (-not (Test-Path $planFile)) {
