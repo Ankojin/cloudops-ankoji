@@ -370,6 +370,37 @@ jobs:
       $failedRGs = @()
       $processedRGs = @()
       $stateBaseDir = "C:\TerraformState\autoshutdown"
+      
+      # Ensure state directory exists and is accessible
+      Write-Host "`n🔧 Validating Terraform State Directory..."
+      if (-not (Test-Path $stateBaseDir)) {
+        Write-Host "Creating state directory: $stateBaseDir"
+        try {
+          New-Item -ItemType Directory -Path $stateBaseDir -Force | Out-Null
+          Write-Host "✅ State directory created successfully"
+        }
+        catch {
+          Write-Error "❌ Failed to create state directory: $_"
+          exit 1
+        }
+      } else {
+        Write-Host "✅ State directory exists: $stateBaseDir"
+      }
+      
+      # Test write permissions
+      $testFile = "$stateBaseDir\write-test-$(Get-Date -Format 'yyyyMMdd-HHmmss').tmp"
+      try {
+        "test" | Out-File -FilePath $testFile -Force
+        Remove-Item $testFile -Force
+        Write-Host "✅ Write permissions confirmed for state directory"
+      }
+      catch {
+        Write-Error "❌ No write permissions to state directory: $_"
+        exit 1
+      }
+      
+      Write-Host "📁 State files will be saved to: $stateBaseDir"
+      Write-Host "📝 Naming format: <Subscription>-<ResourceGroup>.tfstate`n"
 
       foreach ($rg in $config) {
         Write-Host "`n========================================="
@@ -378,15 +409,23 @@ jobs:
         Write-Host "=========================================`n"
         
         # Define state file path for this resource group
-        $stateFile = "$stateBaseDir\$($rg.subscription)-$($rg.name).tfstate"
+        $sanitizedRgName = $rg.name -replace '[^a-zA-Z0-9-_]', '_'
+        $stateFileName = "$($rg.subscription)-$sanitizedRgName.tfstate"
+        $stateFile = Join-Path $stateBaseDir $stateFileName
         $stateFilePath = $stateFile -replace '\\', '/'
         
-        Write-Host "State File: $stateFile"
+        Write-Host "💾 State Configuration:"
+        Write-Host "  Directory: $stateBaseDir"
+        Write-Host "  File Name: $stateFileName"
+        Write-Host "  Full Path: $stateFile"
+        Write-Host "  Terraform Path: $stateFilePath"
         
         # Check if state file exists
         if (Test-Path $stateFile) {
           $fileInfo = Get-Item $stateFile
-          Write-Host "⚠️ Existing state file found (Last Modified: $($fileInfo.LastWriteTime))"
+          Write-Host "⚠️ Existing state file found"
+          Write-Host "  Last Modified: $($fileInfo.LastWriteTime)"
+          Write-Host "  Size: $([math]::Round($fileInfo.Length / 1KB, 2)) KB"
         } else {
           Write-Host "✅ New state file will be created"
         }
@@ -410,17 +449,36 @@ jobs:
         Set-Location "$(System.DefaultWorkingDirectory)/Pipelines/autoshutdown"
         
         # Initialize Terraform with unique state file
-        Write-Host "🔧 Running terraform init with state file: $stateFilePath"
+        Write-Host "🔧 Initializing Terraform..."
+        Write-Host "  Backend: local"
+        Write-Host "  State Path: $stateFilePath"
         $env:ARM_SUBSCRIPTION_ID = $rg.subscription_id
+        
+        # Ensure the state file directory exists (in case of nested paths)
+        $stateFileDir = Split-Path $stateFile -Parent
+        if (-not (Test-Path $stateFileDir)) {
+          New-Item -ItemType Directory -Path $stateFileDir -Force | Out-Null
+          Write-Host "  ✅ Created state file directory: $stateFileDir"
+        }
         
         terraform init -reconfigure -backend-config="path=$stateFilePath"
         
         if ($LASTEXITCODE -ne 0) {
           Write-Error "❌ Terraform init failed for $($rg.name)"
+          Write-Host "  State file path: $stateFilePath"
+          Write-Host "  Working directory: $(Get-Location)"
           $failedRGs += "$($rg.subscription)/$($rg.name)"
           continue
         }
-        Write-Host "✅ Terraform initialized`n"
+        Write-Host "✅ Terraform initialized successfully"
+        
+        # Verify state file was created/updated
+        if (Test-Path $stateFile) {
+          Write-Host "✅ State file confirmed at: $stateFile"
+        } else {
+          Write-Warning "⚠️ State file not found after init - this may be expected for new configurations"
+        }
+        Write-Host ""
         
         # Validate
         Write-Host "🔍 Running terraform validate..."
@@ -486,12 +544,25 @@ jobs:
         Write-Host "  App VMs: $($terraformOutput.app_vms_configured.value.count)"
         Write-Host "  Total VMs: $($terraformOutput.total_vms_configured.value)"
         
-        # Verify state file was created/updated
+        # Verify state file was created/updated after apply
+        Write-Host "`n💾 State File Verification:"
         if (Test-Path $stateFile) {
           $fileInfo = Get-Item $stateFile
-          Write-Host "`n✅ State file updated: $stateFile"
-          Write-Host "   Size: $([math]::Round($fileInfo.Length / 1KB, 2)) KB"
-          Write-Host "   Modified: $($fileInfo.LastWriteTime)"
+          Write-Host "✅ State file successfully saved to agent server"
+          Write-Host "  📁 Location: $stateFile"
+          Write-Host "  📊 Size: $([math]::Round($fileInfo.Length / 1KB, 2)) KB"
+          Write-Host "  🕐 Last Modified: $($fileInfo.LastWriteTime)"
+          Write-Host "  🔒 Attributes: $($fileInfo.Attributes)"
+          
+          # Verify file is not empty and contains valid Terraform state
+          if ($fileInfo.Length -gt 100) {
+            Write-Host "  ✅ State file appears to contain valid data"
+          } else {
+            Write-Warning "  ⚠️ State file is very small - may be empty or incomplete"
+          }
+        } else {
+          Write-Error "  ❌ State file not found after apply: $stateFile"
+          Write-Host "  This indicates the state was not properly saved to the agent server"
         }
         
         $successCount++
@@ -528,7 +599,16 @@ jobs:
             Write-Host "    ✅ $($rg.name)"
             Write-Host "       - DB VMs: $($rg.db_vms)"
             Write-Host "       - App VMs: $($rg.app_vms)"
-            Write-Host "       - State: $($rg.state_file)"
+            Write-Host "       - State File: $($rg.state_file)"
+            
+            # Verify each state file still exists
+            if (Test-Path $rg.state_file) {
+              $stateFileInfo = Get-Item $rg.state_file
+              Write-Host "       - State Size: $([math]::Round($stateFileInfo.Length / 1KB, 2)) KB"
+              Write-Host "       - State Status: ✅ Saved to Agent Server"
+            } else {
+              Write-Host "       - State Status: ❌ File Missing"
+            }
           }
         }
         Write-Host ""
@@ -544,11 +624,26 @@ jobs:
         exit 1
       }
       
-      Write-Host "`n📁 State Files Location: $stateBaseDir"
-      Write-Host "   Total State Files: $successCount"
+      Write-Host "`n� Terraform State Files Management:"
+      Write-Host "📁 Agent Server Path: $stateBaseDir"
+      Write-Host "📊 Total State Files Created: $successCount"
+      Write-Host "📝 File Naming Pattern: <Subscription>-<ResourceGroup>.tfstate"
       Write-Host ""
-      Write-Host "✅ All resource groups configured successfully!`n"
-      Write-Host "=========================================`n"
+      
+      # List all state files in the directory
+      if (Test-Path $stateBaseDir) {
+        $stateFiles = Get-ChildItem -Path $stateBaseDir -Filter "*.tfstate" | Sort-Object Name
+        Write-Host "📋 State Files on Agent Server:"
+        foreach ($file in $stateFiles) {
+          $ageInHours = [math]::Round((((Get-Date) - $file.LastWriteTime).TotalHours), 1)
+          Write-Host "  📄 $($file.Name) ($([math]::Round($file.Length / 1KB, 1)) KB, $ageInHours hours old)"
+        }
+        Write-Host ""
+      }
+      
+      Write-Host "✅ All resource groups configured successfully!"
+      Write-Host "✅ All Terraform state files saved to agent server: $stateBaseDir"
+      Write-Host "`n=========================================`n"
     
     displayName: 'Configure Auto-Shutdown from CSV'
     workingDirectory: $(System.DefaultWorkingDirectory)

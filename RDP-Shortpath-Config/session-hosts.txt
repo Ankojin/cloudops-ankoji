@@ -1,0 +1,12 @@
+# Session Hosts List
+# One hostname or IP address per line
+# Lines starting with # are comments
+
+# Example session hosts:
+10.189.50.135
+# session-host-01.domain.com
+# session-host-02.domain.com
+# 10.189.50.136
+# 10.189.50.137
+
+# Add your session hosts below:
