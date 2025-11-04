@@ -61,24 +61,53 @@ jobs:
       Write-Host "Multiple Resource Groups (CSV) Mode"
       Write-Host "=========================================`n"
 
+      # Debug: Show available subscription environment variables
+      Write-Host "🔍 Available Subscription Environment Variables:"
+      Write-Host "  BAB_DEV_SUBSCRIPTION_ID: $(if ($env:BAB_DEV_SUBSCRIPTION_ID) { 'Set' } else { 'NOT SET' })"
+      Write-Host "  BAB_SIT_SUBSCRIPTION_ID: $(if ($env:BAB_SIT_SUBSCRIPTION_ID) { 'Set' } else { 'NOT SET' })"
+      Write-Host "  BAB_CORE_SUBSCRIPTION_ID: $(if ($env:BAB_CORE_SUBSCRIPTION_ID) { 'Set' } else { 'NOT SET' })"
+      Write-Host ""
+
+      function Format-VMNames {
+        param([string]$vmNamesString)
+        
+        if ([string]::IsNullOrWhiteSpace($vmNamesString)) {
+          return ""
+        }
+        
+        # Split by comma, trim whitespace, and remove empty entries
+        $vmNames = $vmNamesString -split ',' | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        
+        if ($vmNames.Count -eq 0) {
+          return ""
+        }
+        
+        # Join back with commas (no spaces for Terraform)
+        return ($vmNames -join ',')
+      }
+
       function Get-SubscriptionId {
         param([string]$SubscriptionName)
+        
+        Write-Host "    🔍 Resolving subscription: '$SubscriptionName'"
+        
         $subId = ""
-        switch ($SubscriptionName) {
+        switch ($SubscriptionName.Trim()) {
           "BAB_DEV" {
             $subId = $env:BAB_DEV_SUBSCRIPTION_ID -replace '"', ''
-            Write-Host "✅ Resolved BAB_DEV subscription"
+            Write-Host "    ✅ Resolved BAB_DEV subscription: $subId"
           }
           "BAB_SIT" {
             $subId = $env:BAB_SIT_SUBSCRIPTION_ID -replace '"', ''
-            Write-Host "✅ Resolved BAB_SIT subscription"
+            Write-Host "    ✅ Resolved BAB_SIT subscription: $subId"
           }
           "BAB_CORE" {
             $subId = $env:BAB_CORE_SUBSCRIPTION_ID -replace '"', ''
-            Write-Host "✅ Resolved BAB_CORE subscription"
+            Write-Host "    ✅ Resolved BAB_CORE subscription: $subId"
           }
           default {
-            Write-Error "Unknown subscription: $SubscriptionName"
+            Write-Error "    ❌ Unknown subscription: '$SubscriptionName'"
+            Write-Host "    Available subscriptions: BAB_DEV, BAB_SIT, BAB_CORE"
             return $null
           }
         }
@@ -101,67 +130,221 @@ jobs:
         Write-Host "`nPlease ensure the file exists with the following format:"
         Write-Host "Subscription,ResourceGroupName,DBVMs,DBShutdownTime,AppVMs,AppShutdownTime"
         Write-Host "BAB_DEV,rg-dev-app,sql-dev-01,2200,web-dev-01,2000"
+        Write-Host "BAB_SIT,rg-sit-app,db-vm-02,2200,,2000"
+        Write-Host ""
+        Write-Host "💡 Multiple rows with same Subscription+ResourceGroup will be grouped together"
+        Write-Host "💡 Each row can specify either DB VMs, App VMs, or both"
+        Write-Host "💡 VMs can be comma-separated: VM1,VM2,VM3"
         exit 1
       }
 
       try {
-        $rows = Get-Content $csvPath | ConvertFrom-Csv
-        
-        if ($rows.Count -eq 0) {
+        # Read CSV with better error handling
+        $csvContent = Get-Content $csvPath -ErrorAction Stop
+        if ($csvContent.Count -eq 0) {
           Write-Error "❌ CSV file is empty!"
           exit 1
         }
         
+        Write-Host "📄 CSV file contains $($csvContent.Count) lines (including header)"
+        
+        try {
+          $rows = $csvContent | ConvertFrom-Csv -ErrorAction Stop
+        }
+        catch {
+          Write-Error "❌ Failed to parse CSV content: $_"
+          Write-Host "Please check CSV format. Expected format:"
+          Write-Host "Subscription,ResourceGroupName,DBVMs,DBShutdownTime,AppVMs,AppShutdownTime"
+          exit 1
+        }
+        
+        if ($rows.Count -eq 0) {
+          Write-Error "❌ No data rows found in CSV (only header)!"
+          exit 1
+        }
+        
+        # Validate CSV columns
+        $requiredColumns = @('Subscription', 'ResourceGroupName', 'DBVMs', 'DBShutdownTime', 'AppVMs', 'AppShutdownTime')
+        $criticalColumns = @('Subscription', 'ResourceGroupName')
+        $firstRow = $rows[0]
+        $actualColumns = $firstRow.PSObject.Properties.Name
+        
+        Write-Host "📋 CSV Columns Found: $($actualColumns -join ', ')"
+        
+        # Check for critical columns
+        $missingCriticalColumns = $criticalColumns | Where-Object { $_ -notin $actualColumns }
+        if ($missingCriticalColumns.Count -gt 0) {
+          Write-Error "❌ Missing critical CSV columns: $($missingCriticalColumns -join ', ')"
+          Write-Host "Critical columns are required for processing."
+          exit 1
+        }
+        
+        # Check for optional columns
+        $missingOptionalColumns = $requiredColumns | Where-Object { $_ -notin $actualColumns -and $_ -notin $criticalColumns }
+        if ($missingOptionalColumns.Count -gt 0) {
+          Write-Host "ℹ️ Missing optional CSV columns: $($missingOptionalColumns -join ', ')"
+          Write-Host "ℹ️ Will use default values for missing columns"
+        } else {
+          Write-Host "✅ All expected columns are present"
+        }
+        
         Write-Host "Found $($rows.Count) resource group(s) in CSV`n"
         
-        # Validate and build configuration
-        $config = @()
+        # Show all CSV rows for debugging
+        Write-Host "📋 CSV Content Preview:"
+        for ($i = 0; $i -lt $rows.Count; $i++) {
+          $row = $rows[$i]
+          Write-Host "  Row $($i + 1): Subscription='$($row.Subscription)', RG='$($row.ResourceGroupName)', DBVMs='$($row.DBVMs)', AppVMs='$($row.AppVMs)'"
+        }
+        Write-Host ""
+        Write-Host "ℹ️ Processing: VMs will be grouped by Subscription + Resource Group"
+        Write-Host "ℹ️ Multiple rows with same RG will be combined into single Terraform run"
+        Write-Host ""
+
+        # Group and process VMs by subscription and resource group
+        $resourceGroups = @{}
+        $skippedRows = @()
         
         foreach ($row in $rows) {
-          # Validate required fields
+          Write-Host "Processing CSV row: Subscription='$($row.Subscription)', ResourceGroup='$($row.ResourceGroupName)'"
+          
+          # Validate critical required fields only
           if ([string]::IsNullOrWhiteSpace($row.Subscription)) {
-            Write-Warning "⚠️ Skipping row - Subscription is empty"
+            Write-Warning "⚠️ Skipping row - Subscription is empty (this is required)"
+            $skippedRows += "Row with empty Subscription"
             continue
           }
           
           if ([string]::IsNullOrWhiteSpace($row.ResourceGroupName)) {
-            Write-Warning "⚠️ Skipping row - ResourceGroupName is empty"
+            Write-Warning "⚠️ Skipping row - ResourceGroupName is empty (this is required)"
+            $skippedRows += "Row with empty ResourceGroupName"
             continue
           }
           
           # Get subscription ID
-          $subscriptionId = Get-SubscriptionId -SubscriptionName $row.Subscription
+          Write-Host "  🔍 Looking up subscription: '$($row.Subscription)'"
+          $subscriptionId = Get-SubscriptionId -SubscriptionName $row.Subscription.Trim()
           if ($null -eq $subscriptionId) {
-            Write-Warning "⚠️ Skipping $($row.ResourceGroupName) - Invalid subscription"
+            Write-Warning "⚠️ Skipping $($row.ResourceGroupName) - Invalid subscription: '$($row.Subscription)'"
+            $skippedRows += "$($row.Subscription)/$($row.ResourceGroupName) - Invalid subscription"
             continue
           }
+          Write-Host "  ✅ Subscription ID resolved: $subscriptionId"
           
-          # Validate at least one VM type is specified
-          $hasDbVms = -not [string]::IsNullOrWhiteSpace($row.DBVMs)
-          $hasAppVms = -not [string]::IsNullOrWhiteSpace($row.AppVMs)
+          # Create unique key for grouping
+          $rgKey = "$($row.Subscription.Trim())|$($row.ResourceGroupName.Trim())"
           
-          if (-not $hasDbVms -and -not $hasAppVms) {
-            Write-Warning "⚠️ Skipping $($row.ResourceGroupName) - No VMs specified"
-            continue
+          # Initialize resource group entry if not exists
+          if (-not $resourceGroups.ContainsKey($rgKey)) {
+            $resourceGroups[$rgKey] = @{
+              subscription = $row.Subscription.Trim()
+              subscription_id = $subscriptionId
+              name = $row.ResourceGroupName.Trim()
+              db_vms = @()
+              app_vms = @()
+              db_shutdown_times = @()
+              app_shutdown_times = @()
+            }
           }
+          
+          # Process DB VMs
+          $dbVMsRaw = if ($row.PSObject.Properties.Name -contains 'DBVMs') { 
+            if ($null -eq $row.DBVMs) { "" } else { $row.DBVMs.ToString().Trim() }
+          } else { "" }
+          
+          $appVMsRaw = if ($row.PSObject.Properties.Name -contains 'AppVMs') { 
+            if ($null -eq $row.AppVMs) { "" } else { $row.AppVMs.ToString().Trim() }
+          } else { "" }
+          
+          # Process shutdown times
+          $dbShutdownTime = if ($row.PSObject.Properties.Name -contains 'DBShutdownTime') { 
+            if ($null -eq $row.DBShutdownTime) { "" } else { $row.DBShutdownTime.ToString().Trim() }
+          } else { "" }
+          
+          $appShutdownTime = if ($row.PSObject.Properties.Name -contains 'AppShutdownTime') { 
+            if ($null -eq $row.AppShutdownTime) { "" } else { $row.AppShutdownTime.ToString().Trim() }
+          } else { "" }
+          
+          # Add VMs to the resource group
+          if (-not [string]::IsNullOrWhiteSpace($dbVMsRaw)) {
+            $dbVmList = Format-VMNames -vmNamesString $dbVMsRaw
+            if (-not [string]::IsNullOrWhiteSpace($dbVmList)) {
+              $resourceGroups[$rgKey].db_vms += $dbVmList -split ','
+              $resourceGroups[$rgKey].db_shutdown_times += if ([string]::IsNullOrWhiteSpace($dbShutdownTime)) { "2200" } else { $dbShutdownTime }
+            }
+          }
+          
+          if (-not [string]::IsNullOrWhiteSpace($appVMsRaw)) {
+            $appVmList = Format-VMNames -vmNamesString $appVMsRaw
+            if (-not [string]::IsNullOrWhiteSpace($appVmList)) {
+              $resourceGroups[$rgKey].app_vms += $appVmList -split ','
+              $resourceGroups[$rgKey].app_shutdown_times += if ([string]::IsNullOrWhiteSpace($appShutdownTime)) { "2000" } else { $appShutdownTime }
+            }
+          }
+          
+          Write-Host "  ✅ Added to resource group: $rgKey"
+        }
+        
+        # Convert to final configuration array
+        $config = @()
+        foreach ($rgKey in $resourceGroups.Keys) {
+          $rg = $resourceGroups[$rgKey]
+          
+          # Get most common shutdown times (or use defaults)
+          $dbShutdownTime = if ($rg.db_shutdown_times.Count -gt 0) { 
+            ($rg.db_shutdown_times | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name 
+          } else { "2200" }
+          
+          $appShutdownTime = if ($rg.app_shutdown_times.Count -gt 0) { 
+            ($rg.app_shutdown_times | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name 
+          } else { "2000" }
+          
+          # Remove duplicates and join VMs
+          $uniqueDbVms = ($rg.db_vms | Sort-Object | Get-Unique) -join ','
+          $uniqueAppVms = ($rg.app_vms | Sort-Object | Get-Unique) -join ','
           
           $config += @{
-            subscription = $row.Subscription
-            subscription_id = $subscriptionId
-            name = $row.ResourceGroupName
-            db_vms = if ($hasDbVms) { $row.DBVMs } else { "" }
-            db_shutdown = if ($hasDbVms) { $row.DBShutdownTime } else { "2200" }
-            app_vms = if ($hasAppVms) { $row.AppVMs } else { "" }
-            app_shutdown = if ($hasAppVms) { $row.AppShutdownTime } else { "2000" }
+            subscription = $rg.subscription
+            subscription_id = $rg.subscription_id
+            name = $rg.name
+            db_vms = $uniqueDbVms
+            db_shutdown = $dbShutdownTime
+            app_vms = $uniqueAppVms
+            app_shutdown = $appShutdownTime
+          }
+          
+          Write-Host "📦 Consolidated Resource Group: $($rg.subscription)/$($rg.name)"
+          if ($uniqueDbVms) {
+            Write-Host "  🗄️ DB VMs ($($rg.db_vms.Count)): $uniqueDbVms (Shutdown: $dbShutdownTime)"
+          }
+          if ($uniqueAppVms) {
+            Write-Host "  📱 App VMs ($($rg.app_vms.Count)): $uniqueAppVms (Shutdown: $appShutdownTime)"
+          }
+          if (-not $uniqueDbVms -and -not $uniqueAppVms) {
+            Write-Host "  ℹ️ No VMs specified, but resource group will be processed"
           }
         }
         
         if ($config.Count -eq 0) {
-          Write-Error "❌ No valid resource groups found in CSV!"
+          Write-Warning "⚠️ No resource groups were processed from CSV!"
+          Write-Host "This could be due to:"
+          Write-Host "  - All rows having invalid subscription names"
+          Write-Host "  - All rows missing required Subscription or ResourceGroupName values"
+          Write-Host "  - CSV file format issues"
+          if ($skippedRows.Count -gt 0) {
+            Write-Host "`nSkipped rows:"
+            foreach ($skipped in $skippedRows) {
+              Write-Host "  ❌ $skipped"
+            }
+          }
+          Write-Host "ℹ️ The pipeline will continue but no resources will be configured."
           exit 1
         }
         
-        Write-Host "✅ Validated $($config.Count) resource group(s)`n"
+        Write-Host "`n✅ Processed $($config.Count) unique resource group(s) from $($rows.Count) CSV rows"
+        if ($skippedRows.Count -gt 0) {
+          Write-Host "⚠️ Skipped $($skippedRows.Count) row(s) due to issues"
+        }
         
         # Group by subscription for summary
         $groupedBySubscription = $config | Group-Object -Property subscription
@@ -175,6 +358,10 @@ jobs:
         Write-Error "❌ Failed to parse CSV file: $_"
         Write-Host "`nExpected CSV format:"
         Write-Host "Subscription,ResourceGroupName,DBVMs,DBShutdownTime,AppVMs,AppShutdownTime"
+        Write-Host "BAB_DEV,rg-dev-app,sql-dev-01,2200,web-dev-01,2000"
+        Write-Host "BAB_SIT,rg-sit-app,db-vm-02,2200,,2000"
+        Write-Host ""
+        Write-Host "💡 Rows with same Subscription+ResourceGroup are grouped together"
         exit 1
       }
 
@@ -248,8 +435,12 @@ jobs:
         # Plan
         Write-Host "📋 Running terraform plan..."
         $planFile = "tfplan-$($rg.subscription)-$($rg.name -replace '[^a-zA-Z0-9-]', '_').tfplan"
+        $fullPlanPath = Join-Path (Get-Location) $planFile
         
-        terraform plan -out=$planFile `
+        Write-Host "Plan file: $planFile"
+        Write-Host "Full path: $fullPlanPath"
+        
+        terraform plan -out="$planFile" `
           -var="subscription_id=$($rg.subscription_id)" `
           -var="tenant_id=$env:ARM_TENANT_ID" `
           -var="client_id=$env:ARM_CLIENT_ID" `
@@ -268,14 +459,23 @@ jobs:
         }
         Write-Host "✅ Plan created successfully`n"
         
+        # Verify plan file exists before applying
+        if (-not (Test-Path $planFile)) {
+          Write-Error "❌ Plan file not found: $planFile"
+          $failedRGs += "$($rg.subscription)/$($rg.name)"
+          continue
+        }
+        
+        Write-Host "✅ Plan file verified: $planFile"
+        
         # Apply
         Write-Host "🚀 Running terraform apply..."
-        terraform apply -auto-approve $planFile
+        terraform apply -auto-approve "$planFile"
         
         if ($LASTEXITCODE -ne 0) {
           Write-Error "❌ Terraform apply failed for $($rg.name)"
           $failedRGs += "$($rg.subscription)/$($rg.name)"
-          Remove-Item $planFile -ErrorAction SilentlyContinue
+          Remove-Item "$planFile" -ErrorAction SilentlyContinue
           continue
         }
         
@@ -307,7 +507,7 @@ jobs:
         Write-Host "`n✅ Successfully configured $($rg.name) in $($rg.subscription)"
         
         # Clean up plan file
-        Remove-Item $planFile -ErrorAction SilentlyContinue
+        Remove-Item "$planFile" -ErrorAction SilentlyContinue
       }
 
       # Display Summary
