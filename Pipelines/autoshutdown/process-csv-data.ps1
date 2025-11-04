@@ -86,7 +86,7 @@ foreach ($row in $rows) {
         $dbVmList = Format-VMNames -vmNamesString $dbVMsRaw
         if (-not [string]::IsNullOrWhiteSpace($dbVmList)) {
             $resourceGroups[$rgKey].db_vms += $dbVmList -split ','
-            $resourceGroups[$rgKey].db_shutdown_times += if ([string]::IsNullOrWhiteSpace($dbShutdownTime)) { "2200" } else { $dbShutdownTime }
+            $resourceGroups[$rgKey].db_shutdown_times += if ([string]::IsNullOrWhiteSpace($dbShutdownTime)) { "2000" } else { $dbShutdownTime }
         }
     }
     
@@ -119,6 +119,13 @@ foreach ($rgKey in $resourceGroups.Keys) {
     $uniqueDbVms = ($rg.db_vms | Sort-Object | Get-Unique) -join ','
     $uniqueAppVms = ($rg.app_vms | Sort-Object | Get-Unique) -join ','
     
+    # Skip resource groups with no VMs at all
+    if (-not $uniqueDbVms -and -not $uniqueAppVms) {
+        Write-Warning "⚠️ Skipping resource group $($rg.subscription)/$($rg.name) - no VMs specified"
+        Write-Host "  ℹ️ Resource groups must have at least one DB VM or App VM to configure auto-shutdown"
+        continue
+    }
+    
     $config += @{
         subscription = $rg.subscription
         subscription_id = $rg.subscription_id
@@ -135,9 +142,6 @@ foreach ($rgKey in $resourceGroups.Keys) {
     }
     if ($uniqueAppVms) {
         Write-Host "  📱 App VMs ($($rg.app_vms.Count)): $uniqueAppVms (Shutdown: $appShutdownTime)"
-    }
-    if (-not $uniqueDbVms -and -not $uniqueAppVms) {
-        Write-Host "  ℹ️ No VMs specified, but resource group will be processed"
     }
 }
 
