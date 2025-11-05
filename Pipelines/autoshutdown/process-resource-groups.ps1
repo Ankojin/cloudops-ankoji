@@ -76,11 +76,24 @@ provider "azurerm" {
 
         # Add DB VMs auto-shutdown if specified
         if (-not [string]::IsNullOrWhiteSpace($rg.db_vms)) {
+            Write-Host "[DEBUG] Processing DB VMs: $($rg.db_vms)"
             $dbVmIds = $rg.db_vms -split ',' | ForEach-Object { 
                 $vmName = $_.Trim()
-                '"/subscriptions/' + $rg.subscription_id + '/resourceGroups/' + $rg.name + '/providers/Microsoft.Compute/virtualMachines/' + $vmName + '"'
+                if ([string]::IsNullOrWhiteSpace($vmName)) {
+                    Write-Warning "[WARNING] Empty VM name found in DB VMs list"
+                    return
+                }
+                $vmResourceId = '"/subscriptions/' + $rg.subscription_id + '/resourceGroups/' + $rg.name + '/providers/Microsoft.Compute/virtualMachines/' + $vmName + '"'
+                Write-Host "[DEBUG] Generated VM resource ID: $vmResourceId"
+                return $vmResourceId
+            } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            
+            if ($dbVmIds.Count -eq 0) {
+                Write-Warning "[WARNING] No valid DB VM IDs generated"
+            } else {
+                $dbVmIdsString = "    " + ($dbVmIds -join ",`n    ")
+                Write-Host "[DEBUG] DB VM IDs string: $dbVmIdsString"
             }
-            $dbVmIdsString = "    " + ($dbVmIds -join ",`n    ")
             
             $terraformConfig += @"
 
@@ -105,11 +118,24 @@ $dbVmIdsString
 
         # Add App VMs auto-shutdown if specified
         if (-not [string]::IsNullOrWhiteSpace($rg.app_vms)) {
+            Write-Host "[DEBUG] Processing App VMs: $($rg.app_vms)"
             $appVmIds = $rg.app_vms -split ',' | ForEach-Object { 
                 $vmName = $_.Trim()
-                '"/subscriptions/' + $rg.subscription_id + '/resourceGroups/' + $rg.name + '/providers/Microsoft.Compute/virtualMachines/' + $vmName + '"'
+                if ([string]::IsNullOrWhiteSpace($vmName)) {
+                    Write-Warning "[WARNING] Empty VM name found in App VMs list"
+                    return
+                }
+                $vmResourceId = '"/subscriptions/' + $rg.subscription_id + '/resourceGroups/' + $rg.name + '/providers/Microsoft.Compute/virtualMachines/' + $vmName + '"'
+                Write-Host "[DEBUG] Generated VM resource ID: $vmResourceId"
+                return $vmResourceId
+            } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            
+            if ($appVmIds.Count -eq 0) {
+                Write-Warning "[WARNING] No valid App VM IDs generated"
+            } else {
+                $appVmIdsString = "    " + ($appVmIds -join ",`n    ")
+                Write-Host "[DEBUG] App VM IDs string: $appVmIdsString"
             }
-            $appVmIdsString = "    " + ($appVmIds -join ",`n    ")
             
             $terraformConfig += @"
 
@@ -136,6 +162,12 @@ $appVmIdsString
         $terraformConfigPath = Join-Path $workingDir "main.tf"
         $terraformConfig | Out-File -FilePath $terraformConfigPath -Encoding UTF8
         Write-Host "[SUCCESS] Terraform config created: $terraformConfigPath"
+        
+        # Show generated Terraform config for debugging
+        Write-Host "[DEBUG] Generated Terraform configuration:"
+        Write-Host "=================================================="
+        Write-Host $terraformConfig
+        Write-Host "=================================================="
         
         # Change to working directory
         Push-Location $workingDir
@@ -211,28 +243,57 @@ $appVmIdsString
             
             # Plan Terraform changes
             Write-Host "[INFO] Planning Terraform changes..."
-            $planOutput = terraform plan -out="terraform.tfplan" -no-color 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Write-Error "[ERROR] Terraform plan failed:`n$planOutput"
+            try {
+                $planOutput = terraform plan -out="terraform.tfplan" -no-color 2>&1
+                Write-Host "[DEBUG] Terraform plan exit code: $LASTEXITCODE"
+                
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "[ERROR] Terraform plan failed with exit code: $LASTEXITCODE"
+                    Write-Host "[ERROR] Terraform plan output:"
+                    Write-Host $planOutput
+                    Write-Error "[ERROR] Terraform plan failed:`n$planOutput"
+                    $totalErrors++
+                    continue
+                }
+                
+                # Show plan output for debugging
+                Write-Host "[INFO] Terraform Plan Output:"
+                Write-Host $planOutput
+            }
+            catch {
+                Write-Host "[ERROR] Exception during Terraform plan: $($_.Exception.Message)"
+                Write-Host "[ERROR] Exception type: $($_.Exception.GetType().FullName)"
+                Write-Host "[ERROR] Stack trace: $($_.ScriptStackTrace)"
+                Write-Error "[ERROR] Terraform plan failed with exception: $_"
                 $totalErrors++
                 continue
             }
-            
-            # Show plan output
-            Write-Host "[INFO] Terraform Plan Output:"
-            Write-Host $planOutput
             
             # Apply Terraform changes
             Write-Host "[INFO] Applying Terraform changes..."
-            $applyOutput = terraform apply -auto-approve "terraform.tfplan" -no-color 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Write-Error "[ERROR] Terraform apply failed:`n$applyOutput"
+            try {
+                $applyOutput = terraform apply -auto-approve "terraform.tfplan" -no-color 2>&1
+                Write-Host "[DEBUG] Terraform apply exit code: $LASTEXITCODE"
+                
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "[ERROR] Terraform apply failed with exit code: $LASTEXITCODE"
+                    Write-Host "[ERROR] Terraform apply output:"
+                    Write-Host $applyOutput
+                    Write-Error "[ERROR] Terraform apply failed:`n$applyOutput"
+                    $totalErrors++
+                    continue
+                }
+                
+                Write-Host "[SUCCESS] Terraform apply completed successfully"
+                Write-Host $applyOutput
+            }
+            catch {
+                Write-Host "[ERROR] Exception during Terraform apply: $($_.Exception.Message)"
+                Write-Host "[ERROR] Exception type: $($_.Exception.GetType().FullName)"
+                Write-Error "[ERROR] Terraform apply failed with exception: $_"
                 $totalErrors++
                 continue
             }
-            
-            Write-Host "[SUCCESS] Terraform apply completed successfully"
-            Write-Host $applyOutput
             
             # Verify state file was created/updated
             if (Test-Path $stateFilePath) {
@@ -251,6 +312,18 @@ $appVmIdsString
         
     }
     catch {
+        Write-Host "[ERROR] Exception caught for resource group $($rg.subscription)/$($rg.name):"
+        Write-Host "[ERROR] Exception message: $($_.Exception.Message)"
+        Write-Host "[ERROR] Exception type: $($_.Exception.GetType().FullName)"
+        Write-Host "[ERROR] Category info: $($_.CategoryInfo)"
+        Write-Host "[ERROR] Full qualified error ID: $($_.FullyQualifiedErrorId)"
+        if ($_.ScriptStackTrace) {
+            Write-Host "[ERROR] Script stack trace: $($_.ScriptStackTrace)"
+        }
+        if ($_.InvocationInfo) {
+            Write-Host "[ERROR] Script line: $($_.InvocationInfo.ScriptLineNumber)"
+            Write-Host "[ERROR] Position: $($_.InvocationInfo.PositionMessage)"
+        }
         Write-Error "[ERROR] Failed to process resource group $($rg.subscription)/$($rg.name): $_"
         $totalErrors++
     }
