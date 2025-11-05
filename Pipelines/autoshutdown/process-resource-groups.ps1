@@ -77,29 +77,25 @@ provider "azurerm" {
         # Add DB VMs auto-shutdown if specified
         if (-not [string]::IsNullOrWhiteSpace($rg.db_vms)) {
             Write-Host "[DEBUG] Processing DB VMs: $($rg.db_vms)"
-            $dbVmIds = $rg.db_vms -split ',' | ForEach-Object { 
+            $dbVmNames = $rg.db_vms -split ',' | ForEach-Object { 
                 $vmName = $_.Trim()
                 if ([string]::IsNullOrWhiteSpace($vmName)) {
                     Write-Warning "[WARNING] Empty VM name found in DB VMs list"
-                    return
+                    return $null
                 }
-                $vmResourceId = '"/subscriptions/' + $rg.subscription_id + '/resourceGroups/' + $rg.name + '/providers/Microsoft.Compute/virtualMachines/' + $vmName + '"'
-                Write-Host "[DEBUG] Generated VM resource ID: $vmResourceId"
-                return $vmResourceId
+                Write-Host "[DEBUG] Found DB VM: $vmName"
+                return $vmName
             } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
             
-            if ($dbVmIds.Count -eq 0) {
-                Write-Warning "[WARNING] No valid DB VM IDs generated"
+            if ($dbVmNames.Count -eq 0) {
+                Write-Warning "[WARNING] No valid DB VM names found"
             } else {
-                $dbVmIdsString = "    " + ($dbVmIds -join ",`n    ")
-                Write-Host "[DEBUG] DB VM IDs string: $dbVmIdsString"
-            }
-            
-            $terraformConfig += @"
+                foreach ($vmName in $dbVmNames) {
+                    $terraformConfig += @"
 
-resource "azurerm_dev_test_global_vm_shutdown_schedule" "db_shutdown" {
-  virtual_machine_id    = "/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.Compute/virtualMachines/*"
-  location              = "centralus"  # This doesn't matter for global schedules
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "db_shutdown_$($vmName.Replace('-', '_'))" {
+  virtual_machine_id    = "/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.Compute/virtualMachines/$vmName"
+  location              = "centralus"
   enabled               = true
 
   daily_recurrence_time = "$($rg.db_shutdown)"
@@ -108,40 +104,34 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "db_shutdown" {
   notification_settings {
     enabled = false
   }
-
-  target_resource_ids = [
-$dbVmIdsString
-  ]
 }
 "@
+                }
+            }
         }
 
         # Add App VMs auto-shutdown if specified
         if (-not [string]::IsNullOrWhiteSpace($rg.app_vms)) {
             Write-Host "[DEBUG] Processing App VMs: $($rg.app_vms)"
-            $appVmIds = $rg.app_vms -split ',' | ForEach-Object { 
+            $appVmNames = $rg.app_vms -split ',' | ForEach-Object { 
                 $vmName = $_.Trim()
                 if ([string]::IsNullOrWhiteSpace($vmName)) {
                     Write-Warning "[WARNING] Empty VM name found in App VMs list"
-                    return
+                    return $null
                 }
-                $vmResourceId = '"/subscriptions/' + $rg.subscription_id + '/resourceGroups/' + $rg.name + '/providers/Microsoft.Compute/virtualMachines/' + $vmName + '"'
-                Write-Host "[DEBUG] Generated VM resource ID: $vmResourceId"
-                return $vmResourceId
+                Write-Host "[DEBUG] Found App VM: $vmName"
+                return $vmName
             } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
             
-            if ($appVmIds.Count -eq 0) {
-                Write-Warning "[WARNING] No valid App VM IDs generated"
+            if ($appVmNames.Count -eq 0) {
+                Write-Warning "[WARNING] No valid App VM names found"
             } else {
-                $appVmIdsString = "    " + ($appVmIds -join ",`n    ")
-                Write-Host "[DEBUG] App VM IDs string: $appVmIdsString"
-            }
-            
-            $terraformConfig += @"
+                foreach ($vmName in $appVmNames) {
+                    $terraformConfig += @"
 
-resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
-  virtual_machine_id    = "/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.Compute/virtualMachines/*"
-  location              = "centralus"  # This doesn't matter for global schedules
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown_$($vmName.Replace('-', '_'))" {
+  virtual_machine_id    = "/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.Compute/virtualMachines/$vmName"
+  location              = "centralus"
   enabled               = true
 
   daily_recurrence_time = "$($rg.app_shutdown)"
@@ -150,12 +140,10 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
   notification_settings {
     enabled = false
   }
-
-  target_resource_ids = [
-$appVmIdsString
-  ]
 }
 "@
+                }
+            }
         }
 
         # Write Terraform configuration
@@ -276,9 +264,9 @@ $appVmIdsString
                     # Determine which Terraform resource this VM belongs to
                     $resourceName = ""
                     if ($rg.db_vms -and $rg.db_vms.Split(',').Trim() -contains $vmName) {
-                        $resourceName = "db_shutdown"
+                        $resourceName = "db_shutdown_$($vmName.Replace('-', '_'))"
                     } elseif ($rg.app_vms -and $rg.app_vms.Split(',').Trim() -contains $vmName) {
-                        $resourceName = "app_shutdown"
+                        $resourceName = "app_shutdown_$($vmName.Replace('-', '_'))"
                     }
                     
                     if ($resourceName) {
