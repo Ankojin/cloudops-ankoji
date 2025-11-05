@@ -39,7 +39,7 @@ foreach ($rg in $config) {
         Write-Host "[FILE] State file: $stateFilePath"
         
         # Create working directory for this resource group
-        $workingDir = "$(Agent.TempDirectory)\terraform-$($rg.subscription)-$($rg.name)"
+        $workingDir = "$env:AGENT_TEMPDIRECTORY\terraform-$($rg.subscription)-$($rg.name)"
         if (Test-Path $workingDir) {
             Remove-Item $workingDir -Recurse -Force
         }
