@@ -175,13 +175,66 @@ $appVmIdsString
         try {
             # Initialize Terraform
             Write-Host "[INFO] Initializing Terraform..."
-            $initOutput = terraform init -no-color 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Write-Error "[ERROR] Terraform init failed:`n$initOutput"
+            try {
+                # Set output encoding to handle Unicode characters from Terraform
+                $originalOutputEncoding = [Console]::OutputEncoding
+                [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                
+                Write-Host "[DEBUG] Executing Terraform init command..."
+                
+                # Execute init with proper error handling
+                $initResult = Start-Process -FilePath "terraform" -ArgumentList @("init", "-no-color") -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\terraform_init_out.txt" -RedirectStandardError "$env:TEMP\terraform_init_err.txt"
+                
+                $initStdOut = ""
+                $initStdErr = ""
+                
+                if (Test-Path "$env:TEMP\terraform_init_out.txt") {
+                    $initStdOut = Get-Content "$env:TEMP\terraform_init_out.txt" -Raw -ErrorAction SilentlyContinue
+                    Remove-Item "$env:TEMP\terraform_init_out.txt" -Force -ErrorAction SilentlyContinue
+                }
+                
+                if (Test-Path "$env:TEMP\terraform_init_err.txt") {
+                    $initStdErr = Get-Content "$env:TEMP\terraform_init_err.txt" -Raw -ErrorAction SilentlyContinue
+                    Remove-Item "$env:TEMP\terraform_init_err.txt" -Force -ErrorAction SilentlyContinue
+                }
+                
+                Write-Host "[DEBUG] Terraform init exit code: $($initResult.ExitCode)"
+                
+                if ($initResult.ExitCode -ne 0) {
+                    Write-Host "[ERROR] Terraform init failed with exit code: $($initResult.ExitCode)"
+                    if (-not [string]::IsNullOrWhiteSpace($initStdOut)) {
+                        Write-Host "[ERROR] Terraform init stdout:"
+                        Write-Host $initStdOut
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace($initStdErr)) {
+                        Write-Host "[ERROR] Terraform init stderr:"
+                        Write-Host $initStdErr
+                    }
+                    Write-Error "[ERROR] Terraform init failed"
+                    $totalErrors++
+                    continue
+                }
+                
+                Write-Host "[SUCCESS] Terraform initialized successfully"
+                if (-not [string]::IsNullOrWhiteSpace($initStdOut)) {
+                    Write-Host "[DEBUG] Terraform init output:"
+                    Write-Host $initStdOut
+                }
+                
+                # Restore original output encoding
+                [Console]::OutputEncoding = $originalOutputEncoding
+            }
+            catch {
+                # Restore original output encoding in case of exception
+                if ($originalOutputEncoding) {
+                    [Console]::OutputEncoding = $originalOutputEncoding
+                }
+                Write-Host "[ERROR] Exception during Terraform init: $($_.Exception.Message)"
+                Write-Host "[ERROR] Exception type: $($_.Exception.GetType().FullName)"
+                Write-Error "[ERROR] Terraform init failed with exception: $_"
                 $totalErrors++
                 continue
             }
-            Write-Host "[SUCCESS] Terraform initialized successfully"
             
             # Import existing schedules if they exist
             Write-Host "[INFO] Checking for existing auto-shutdown schedules..."
@@ -231,11 +284,58 @@ $appVmIdsString
                     if ($resourceName) {
                         Write-Host "    [INFO] Importing existing schedule into Terraform as: azurerm_dev_test_global_vm_shutdown_schedule.$resourceName"
                         
-                        $importOutput = terraform import "azurerm_dev_test_global_vm_shutdown_schedule.$resourceName" $scheduleResourceId 2>&1
-                        if ($LASTEXITCODE -eq 0) {
-                            Write-Host "    [SUCCESS] Import successful"
-                        } else {
-                            Write-Warning "    [WARNING] Import failed (continuing anyway): $importOutput"
+                        try {
+                            # Set output encoding to handle Unicode characters from Terraform
+                            $originalOutputEncoding = [Console]::OutputEncoding
+                            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                            
+                            Write-Host "    [DEBUG] Executing Terraform import command..."
+                            Write-Host "    [DEBUG] Resource: azurerm_dev_test_global_vm_shutdown_schedule.$resourceName"
+                            Write-Host "    [DEBUG] Schedule Resource ID: $scheduleResourceId"
+                            
+                            # Execute import with proper error handling
+                            $importResult = Start-Process -FilePath "terraform" -ArgumentList @("import", "azurerm_dev_test_global_vm_shutdown_schedule.$resourceName", $scheduleResourceId) -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\terraform_import_out.txt" -RedirectStandardError "$env:TEMP\terraform_import_err.txt"
+                            
+                            $importStdOut = ""
+                            $importStdErr = ""
+                            
+                            if (Test-Path "$env:TEMP\terraform_import_out.txt") {
+                                $importStdOut = Get-Content "$env:TEMP\terraform_import_out.txt" -Raw -ErrorAction SilentlyContinue
+                                Remove-Item "$env:TEMP\terraform_import_out.txt" -Force -ErrorAction SilentlyContinue
+                            }
+                            
+                            if (Test-Path "$env:TEMP\terraform_import_err.txt") {
+                                $importStdErr = Get-Content "$env:TEMP\terraform_import_err.txt" -Raw -ErrorAction SilentlyContinue
+                                Remove-Item "$env:TEMP\terraform_import_err.txt" -Force -ErrorAction SilentlyContinue
+                            }
+                            
+                            Write-Host "    [DEBUG] Terraform import exit code: $($importResult.ExitCode)"
+                            
+                            if ($importResult.ExitCode -eq 0) {
+                                Write-Host "    [SUCCESS] Import successful"
+                                if (-not [string]::IsNullOrWhiteSpace($importStdOut)) {
+                                    Write-Host "    [OUTPUT] $importStdOut"
+                                }
+                            } else {
+                                Write-Warning "    [WARNING] Import failed (continuing anyway)"
+                                Write-Host "    [ERROR] Exit code: $($importResult.ExitCode)"
+                                if (-not [string]::IsNullOrWhiteSpace($importStdOut)) {
+                                    Write-Host "    [STDOUT] $importStdOut"
+                                }
+                                if (-not [string]::IsNullOrWhiteSpace($importStdErr)) {
+                                    Write-Host "    [STDERR] $importStdErr"
+                                }
+                            }
+                        }
+                        catch {
+                            Write-Warning "    [WARNING] Import failed with exception (continuing anyway): $($_.Exception.Message)"
+                            Write-Host "    [DEBUG] Exception type: $($_.Exception.GetType().FullName)"
+                        }
+                        finally {
+                            # Restore original output encoding
+                            if ($originalOutputEncoding) {
+                                [Console]::OutputEncoding = $originalOutputEncoding
+                            }
                         }
                     }
                 }
@@ -244,23 +344,59 @@ $appVmIdsString
             # Plan Terraform changes
             Write-Host "[INFO] Planning Terraform changes..."
             try {
-                $planOutput = terraform plan -out="terraform.tfplan" -no-color 2>&1
-                Write-Host "[DEBUG] Terraform plan exit code: $LASTEXITCODE"
+                # Set output encoding to handle Unicode characters from Terraform
+                $originalOutputEncoding = [Console]::OutputEncoding
+                [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                 
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Host "[ERROR] Terraform plan failed with exit code: $LASTEXITCODE"
-                    Write-Host "[ERROR] Terraform plan output:"
-                    Write-Host $planOutput
-                    Write-Error "[ERROR] Terraform plan failed:`n$planOutput"
+                Write-Host "[DEBUG] Executing Terraform plan command..."
+                
+                # Execute plan with proper error handling
+                $planResult = Start-Process -FilePath "terraform" -ArgumentList @("plan", "-out=terraform.tfplan", "-no-color") -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\terraform_plan_out.txt" -RedirectStandardError "$env:TEMP\terraform_plan_err.txt"
+                
+                $planStdOut = ""
+                $planStdErr = ""
+                
+                if (Test-Path "$env:TEMP\terraform_plan_out.txt") {
+                    $planStdOut = Get-Content "$env:TEMP\terraform_plan_out.txt" -Raw -ErrorAction SilentlyContinue
+                    Remove-Item "$env:TEMP\terraform_plan_out.txt" -Force -ErrorAction SilentlyContinue
+                }
+                
+                if (Test-Path "$env:TEMP\terraform_plan_err.txt") {
+                    $planStdErr = Get-Content "$env:TEMP\terraform_plan_err.txt" -Raw -ErrorAction SilentlyContinue
+                    Remove-Item "$env:TEMP\terraform_plan_err.txt" -Force -ErrorAction SilentlyContinue
+                }
+                
+                Write-Host "[DEBUG] Terraform plan exit code: $($planResult.ExitCode)"
+                
+                if ($planResult.ExitCode -ne 0) {
+                    Write-Host "[ERROR] Terraform plan failed with exit code: $($planResult.ExitCode)"
+                    if (-not [string]::IsNullOrWhiteSpace($planStdOut)) {
+                        Write-Host "[ERROR] Terraform plan stdout:"
+                        Write-Host $planStdOut
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace($planStdErr)) {
+                        Write-Host "[ERROR] Terraform plan stderr:"
+                        Write-Host $planStdErr
+                    }
+                    Write-Error "[ERROR] Terraform plan failed"
                     $totalErrors++
                     continue
                 }
                 
                 # Show plan output for debugging
                 Write-Host "[INFO] Terraform Plan Output:"
-                Write-Host $planOutput
+                if (-not [string]::IsNullOrWhiteSpace($planStdOut)) {
+                    Write-Host $planStdOut
+                }
+                
+                # Restore original output encoding
+                [Console]::OutputEncoding = $originalOutputEncoding
             }
             catch {
+                # Restore original output encoding in case of exception
+                if ($originalOutputEncoding) {
+                    [Console]::OutputEncoding = $originalOutputEncoding
+                }
                 Write-Host "[ERROR] Exception during Terraform plan: $($_.Exception.Message)"
                 Write-Host "[ERROR] Exception type: $($_.Exception.GetType().FullName)"
                 Write-Host "[ERROR] Stack trace: $($_.ScriptStackTrace)"
@@ -272,22 +408,58 @@ $appVmIdsString
             # Apply Terraform changes
             Write-Host "[INFO] Applying Terraform changes..."
             try {
-                $applyOutput = terraform apply -auto-approve "terraform.tfplan" -no-color 2>&1
-                Write-Host "[DEBUG] Terraform apply exit code: $LASTEXITCODE"
+                # Set output encoding to handle Unicode characters from Terraform
+                $originalOutputEncoding = [Console]::OutputEncoding
+                [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                 
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Host "[ERROR] Terraform apply failed with exit code: $LASTEXITCODE"
-                    Write-Host "[ERROR] Terraform apply output:"
-                    Write-Host $applyOutput
-                    Write-Error "[ERROR] Terraform apply failed:`n$applyOutput"
+                Write-Host "[DEBUG] Executing Terraform apply command..."
+                
+                # Execute apply with proper error handling
+                $applyResult = Start-Process -FilePath "terraform" -ArgumentList @("apply", "-auto-approve", "terraform.tfplan", "-no-color") -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\terraform_apply_out.txt" -RedirectStandardError "$env:TEMP\terraform_apply_err.txt"
+                
+                $applyStdOut = ""
+                $applyStdErr = ""
+                
+                if (Test-Path "$env:TEMP\terraform_apply_out.txt") {
+                    $applyStdOut = Get-Content "$env:TEMP\terraform_apply_out.txt" -Raw -ErrorAction SilentlyContinue
+                    Remove-Item "$env:TEMP\terraform_apply_out.txt" -Force -ErrorAction SilentlyContinue
+                }
+                
+                if (Test-Path "$env:TEMP\terraform_apply_err.txt") {
+                    $applyStdErr = Get-Content "$env:TEMP\terraform_apply_err.txt" -Raw -ErrorAction SilentlyContinue
+                    Remove-Item "$env:TEMP\terraform_apply_err.txt" -Force -ErrorAction SilentlyContinue
+                }
+                
+                Write-Host "[DEBUG] Terraform apply exit code: $($applyResult.ExitCode)"
+                
+                if ($applyResult.ExitCode -ne 0) {
+                    Write-Host "[ERROR] Terraform apply failed with exit code: $($applyResult.ExitCode)"
+                    if (-not [string]::IsNullOrWhiteSpace($applyStdOut)) {
+                        Write-Host "[ERROR] Terraform apply stdout:"
+                        Write-Host $applyStdOut
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace($applyStdErr)) {
+                        Write-Host "[ERROR] Terraform apply stderr:"
+                        Write-Host $applyStdErr
+                    }
+                    Write-Error "[ERROR] Terraform apply failed"
                     $totalErrors++
                     continue
                 }
                 
                 Write-Host "[SUCCESS] Terraform apply completed successfully"
-                Write-Host $applyOutput
+                if (-not [string]::IsNullOrWhiteSpace($applyStdOut)) {
+                    Write-Host $applyStdOut
+                }
+                
+                # Restore original output encoding
+                [Console]::OutputEncoding = $originalOutputEncoding
             }
             catch {
+                # Restore original output encoding in case of exception
+                if ($originalOutputEncoding) {
+                    [Console]::OutputEncoding = $originalOutputEncoding
+                }
                 Write-Host "[ERROR] Exception during Terraform apply: $($_.Exception.Message)"
                 Write-Host "[ERROR] Exception type: $($_.Exception.GetType().FullName)"
                 Write-Error "[ERROR] Terraform apply failed with exception: $_"
