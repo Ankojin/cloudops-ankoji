@@ -109,7 +109,7 @@ foreach ($rgKey in $resourceGroups.Keys) {
     # Get most common shutdown times (or use defaults)
     $dbShutdownTime = if ($rg.db_shutdown_times.Count -gt 0) { 
         ($rg.db_shutdown_times | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name 
-    } else { "2200" }
+    } else { "2000" }
     
     $appShutdownTime = if ($rg.app_shutdown_times.Count -gt 0) { 
         ($rg.app_shutdown_times | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name 
