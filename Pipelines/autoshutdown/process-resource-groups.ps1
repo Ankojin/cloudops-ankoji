@@ -28,7 +28,7 @@ $processedCount = 0
 foreach ($rg in $config) {
     $processedCount++
     Write-Host "[$processedCount/$($config.Count)] Processing: $($rg.subscription)/$($rg.name)"
-    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    Write-Host "=================================================="
     
     try {
         # Set up state file path
@@ -36,7 +36,7 @@ foreach ($rg in $config) {
         $stateFileName = "$($rg.subscription)-$($rg.name).tfstate"
         $stateFilePath = "$stateBaseDir\$stateFileName"
         
-        Write-Host "📁 State file: $stateFilePath"
+        Write-Host "[FILE] State file: $stateFilePath"
         
         # Create working directory for this resource group
         $workingDir = "$(Agent.TempDirectory)\terraform-$($rg.subscription)-$($rg.name)"
@@ -44,7 +44,7 @@ foreach ($rg in $config) {
             Remove-Item $workingDir -Recurse -Force
         }
         New-Item -ItemType Directory -Path $workingDir -Force | Out-Null
-        Write-Host "📂 Working directory: $workingDir"
+        Write-Host "[DIR] Working directory: $workingDir"
         
         # Set Azure subscription
         Write-Host "[INFO] Setting Azure subscription to: $($rg.subscription_id)"
@@ -76,6 +76,12 @@ provider "azurerm" {
 
         # Add DB VMs auto-shutdown if specified
         if (-not [string]::IsNullOrWhiteSpace($rg.db_vms)) {
+            $dbVmIds = $rg.db_vms -split ',' | ForEach-Object { 
+                $vmName = $_.Trim()
+                '"/subscriptions/' + $rg.subscription_id + '/resourceGroups/' + $rg.name + '/providers/Microsoft.Compute/virtualMachines/' + $vmName + '"'
+            }
+            $dbVmIdsString = "    " + ($dbVmIds -join ",`n    ")
+            
             $terraformConfig += @"
 
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "db_shutdown" {
@@ -91,16 +97,20 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "db_shutdown" {
   }
 
   target_resource_ids = [
+$dbVmIdsString
+  ]
+}
 "@
-            $dbVmIds = $rg.db_vms -split ',' | ForEach-Object { 
-                $vmName = $_.Trim()
-                "    `"/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.Compute/virtualMachines/$vmName`""
-            }
-            $terraformConfig += "`n" + ($dbVmIds -join ",`n") + "`n  ]`n}"
         }
 
         # Add App VMs auto-shutdown if specified
         if (-not [string]::IsNullOrWhiteSpace($rg.app_vms)) {
+            $appVmIds = $rg.app_vms -split ',' | ForEach-Object { 
+                $vmName = $_.Trim()
+                '"/subscriptions/' + $rg.subscription_id + '/resourceGroups/' + $rg.name + '/providers/Microsoft.Compute/virtualMachines/' + $vmName + '"'
+            }
+            $appVmIdsString = "    " + ($appVmIds -join ",`n    ")
+            
             $terraformConfig += @"
 
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
@@ -116,16 +126,14 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
   }
 
   target_resource_ids = [
+$appVmIdsString
+  ]
+}
 "@
-            $appVmIds = $rg.app_vms -split ',' | ForEach-Object { 
-                $vmName = $_.Trim()
-                "    `"/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.Compute/virtualMachines/$vmName`""
-            }
-            $terraformConfig += "`n" + ($appVmIds -join ",`n") + "`n  ]`n}"
         }
 
         # Write Terraform configuration
-        $terraformConfigPath = "$workingDir\main.tf"
+        $terraformConfigPath = Join-Path $workingDir "main.tf"
         $terraformConfig | Out-File -FilePath $terraformConfigPath -Encoding UTF8
         Write-Host "[SUCCESS] Terraform config created: $terraformConfigPath"
         
@@ -170,9 +178,9 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
                         $schedule = $scheduleInfo | ConvertFrom-Json
                         $scheduleExists = $true
                         Write-Host "    [SUCCESS] Found existing schedule for $vmName"
-                        Write-Host "    📋 Status: $($schedule.properties.status)"
-                        Write-Host "    ⏰ Time: $($schedule.properties.dailyRecurrence.time)"
-                        Write-Host "    🌍 Timezone: $($schedule.properties.timeZoneId)"
+                        Write-Host "    [INFO] Status: $($schedule.properties.status)"
+                        Write-Host "    [TIME] Time: $($schedule.properties.dailyRecurrence.time)"
+                        Write-Host "    [TIMEZONE] Timezone: $($schedule.properties.timeZoneId)"
                     }
                 }
                 catch {
@@ -202,7 +210,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
             }
             
             # Plan Terraform changes
-            Write-Host "📋 Planning Terraform changes..."
+            Write-Host "[INFO] Planning Terraform changes..."
             $planOutput = terraform plan -out="terraform.tfplan" -no-color 2>&1
             if ($LASTEXITCODE -ne 0) {
                 Write-Error "[ERROR] Terraform plan failed:`n$planOutput"
@@ -211,7 +219,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
             }
             
             # Show plan output
-            Write-Host "📋 Terraform Plan Output:"
+            Write-Host "[INFO] Terraform Plan Output:"
             Write-Host $planOutput
             
             # Apply Terraform changes
@@ -229,12 +237,12 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
             # Verify state file was created/updated
             if (Test-Path $stateFilePath) {
                 $stateFileSize = (Get-Item $stateFilePath).Length
-                Write-Host "[SUCCESS] State file saved: $stateFilePath ($stateFileSize bytes)"
+                Write-Host "[SUCCESS] State file saved: $stateFilePath ($($stateFileSize) bytes)"
             } else {
                 Write-Warning "[WARNING] State file not found at expected location: $stateFilePath"
             }
             
-            Write-Host "✅ Resource group $($rg.subscription)/$($rg.name) configured successfully`n"
+            Write-Host "[SUCCESS] Resource group $($rg.subscription)/$($rg.name) configured successfully`n"
             
         }
         finally {
@@ -243,24 +251,25 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
         
     }
     catch {
-        Write-Error "❌ Failed to process resource group $($rg.subscription)/$($rg.name): $_"
+        Write-Error "[ERROR] Failed to process resource group $($rg.subscription)/$($rg.name): $_"
         $totalErrors++
     }
 }
 
 Write-Host "========================================="
-Write-Host "📊 Processing Summary"
+Write-Host "[SUMMARY] Processing Summary"
 Write-Host "========================================="
-Write-Host "✅ Total Resource Groups: $($config.Count)"
-Write-Host "✅ Successfully Processed: $($config.Count - $totalErrors)"
+Write-Host "[SUCCESS] Total Resource Groups: $($config.Count)"
+Write-Host "[SUCCESS] Successfully Processed: $($config.Count - $totalErrors)"
 if ($totalErrors -gt 0) {
-    Write-Host "❌ Failed: $totalErrors"
+    Write-Host "[ERROR] Failed: $totalErrors"
     Write-Host ""
     Write-Warning "Some resource groups failed to process. Check the logs above for details."
     exit 1
 } else {
-    Write-Host "❌ Failed: 0"
+    Write-Host "[SUCCESS] Failed: 0"
     Write-Host ""
-    Write-Host "🎉 All resource groups processed successfully!"
+    Write-Host "[SUCCESS] All resource groups processed successfully!"
     Write-Host "State files are saved in: C:\TerraformState\autoshutdown\"
 }
+
