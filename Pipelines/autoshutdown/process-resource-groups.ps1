@@ -91,11 +91,22 @@ provider "azurerm" {
                 Write-Warning "[WARNING] No valid DB VM names found"
             } else {
                 foreach ($vmName in $dbVmNames) {
+                    # Get VM location for the shutdown schedule
+                    Write-Host "[DEBUG] Getting location for VM: $vmName"
+                    $vmInfo = az vm show --resource-group $rg.name --name $vmName --query "location" --output tsv 2>$null
+                    if ($LASTEXITCODE -eq 0 -and $vmInfo) {
+                        $vmLocation = $vmInfo.Trim()
+                        Write-Host "[DEBUG] VM $vmName is located in: $vmLocation"
+                    } else {
+                        Write-Warning "[WARNING] Could not determine location for VM $vmName, using swedencentral as default"
+                        $vmLocation = "swedencentral"
+                    }
+                    
                     $terraformConfig += @"
 
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "db_shutdown_$($vmName.Replace('-', '_'))" {
   virtual_machine_id    = "/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.Compute/virtualMachines/$vmName"
-  location              = "centralus"
+  location              = "$vmLocation"
   enabled               = true
 
   daily_recurrence_time = "$($rg.db_shutdown)"
@@ -127,11 +138,22 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "db_shutdown_$($vmName.R
                 Write-Warning "[WARNING] No valid App VM names found"
             } else {
                 foreach ($vmName in $appVmNames) {
+                    # Get VM location for the shutdown schedule
+                    Write-Host "[DEBUG] Getting location for VM: $vmName"
+                    $vmInfo = az vm show --resource-group $rg.name --name $vmName --query "location" --output tsv 2>$null
+                    if ($LASTEXITCODE -eq 0 -and $vmInfo) {
+                        $vmLocation = $vmInfo.Trim()
+                        Write-Host "[DEBUG] VM $vmName is located in: $vmLocation"
+                    } else {
+                        Write-Warning "[WARNING] Could not determine location for VM $vmName, using swedencentral as default"
+                        $vmLocation = "swedencentral"
+                    }
+                    
                     $terraformConfig += @"
 
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown_$($vmName.Replace('-', '_'))" {
   virtual_machine_id    = "/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.Compute/virtualMachines/$vmName"
-  location              = "centralus"
+  location              = "$vmLocation"
   enabled               = true
 
   daily_recurrence_time = "$($rg.app_shutdown)"
