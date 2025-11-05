@@ -3,7 +3,7 @@ param(
     [string]$OutputPath
 )
 
-Write-Host "🔧 Setting up helper functions..."
+Write-Host "[INFO] Setting up helper functions..."
 
 # Create helper functions content using proper here-string
 $functionsContent = @'
@@ -52,4 +52,4 @@ function Get-SubscriptionId {
 
 # Write functions to output file
 $functionsContent | Out-File -FilePath $OutputPath -Encoding UTF8
-Write-Host "✅ Helper functions created at $OutputPath"
+Write-Host "[SUCCESS] Helper functions created at $OutputPath"

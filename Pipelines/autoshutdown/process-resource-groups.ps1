@@ -18,7 +18,7 @@ Write-Host "Loading configuration from: $ConfigPath"
 $config = Get-Content $ConfigPath | ConvertFrom-Json
 
 Write-Host "========================================="
-Write-Host "🚀 Processing $($config.Count) Resource Group(s)"
+Write-Host "[INFO] Processing $($config.Count) Resource Group(s)"
 Write-Host "Time Zone: $TimeZone"
 Write-Host "=========================================`n"
 
@@ -47,10 +47,10 @@ foreach ($rg in $config) {
         Write-Host "📂 Working directory: $workingDir"
         
         # Set Azure subscription
-        Write-Host "🔧 Setting Azure subscription to: $($rg.subscription_id)"
+        Write-Host "[INFO] Setting Azure subscription to: $($rg.subscription_id)"
         az account set --subscription $rg.subscription_id
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ Failed to set Azure subscription"
+            Write-Error "[ERROR] Failed to set Azure subscription"
             $totalErrors++
             continue
         }
@@ -127,24 +127,24 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
         # Write Terraform configuration
         $terraformConfigPath = "$workingDir\main.tf"
         $terraformConfig | Out-File -FilePath $terraformConfigPath -Encoding UTF8
-        Write-Host "📝 Terraform config created: $terraformConfigPath"
+        Write-Host "[SUCCESS] Terraform config created: $terraformConfigPath"
         
         # Change to working directory
         Push-Location $workingDir
         
         try {
             # Initialize Terraform
-            Write-Host "🔧 Initializing Terraform..."
+            Write-Host "[INFO] Initializing Terraform..."
             $initOutput = terraform init -no-color 2>&1
             if ($LASTEXITCODE -ne 0) {
-                Write-Error "❌ Terraform init failed:`n$initOutput"
+                Write-Error "[ERROR] Terraform init failed:`n$initOutput"
                 $totalErrors++
                 continue
             }
-            Write-Host "✅ Terraform initialized successfully"
+            Write-Host "[SUCCESS] Terraform initialized successfully"
             
             # Import existing schedules if they exist
-            Write-Host "🔍 Checking for existing auto-shutdown schedules..."
+            Write-Host "[INFO] Checking for existing auto-shutdown schedules..."
             
             $allVMs = @()
             if (-not [string]::IsNullOrWhiteSpace($rg.db_vms)) {
@@ -158,7 +158,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
                 $vmName = $vmName.Trim()
                 if ([string]::IsNullOrWhiteSpace($vmName)) { continue }
                 
-                Write-Host "  🔍 Checking VM: $vmName"
+                Write-Host "  [INFO] Checking VM: $vmName"
                 
                 # Check if auto-shutdown schedule exists for this VM
                 $scheduleResourceId = "/subscriptions/$($rg.subscription_id)/resourceGroups/$($rg.name)/providers/Microsoft.DevTestLab/schedules/shutdown-computevm-$vmName"
@@ -169,7 +169,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
                     if ($LASTEXITCODE -eq 0 -and $scheduleInfo) {
                         $schedule = $scheduleInfo | ConvertFrom-Json
                         $scheduleExists = $true
-                        Write-Host "    ✅ Found existing schedule for $vmName"
+                        Write-Host "    [SUCCESS] Found existing schedule for $vmName"
                         Write-Host "    📋 Status: $($schedule.properties.status)"
                         Write-Host "    ⏰ Time: $($schedule.properties.dailyRecurrence.time)"
                         Write-Host "    🌍 Timezone: $($schedule.properties.timeZoneId)"
@@ -189,13 +189,13 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
                     }
                     
                     if ($resourceName) {
-                        Write-Host "    🔄 Importing existing schedule into Terraform as: azurerm_dev_test_global_vm_shutdown_schedule.$resourceName"
+                        Write-Host "    [INFO] Importing existing schedule into Terraform as: azurerm_dev_test_global_vm_shutdown_schedule.$resourceName"
                         
                         $importOutput = terraform import "azurerm_dev_test_global_vm_shutdown_schedule.$resourceName" $scheduleResourceId 2>&1
                         if ($LASTEXITCODE -eq 0) {
-                            Write-Host "    ✅ Import successful"
+                            Write-Host "    [SUCCESS] Import successful"
                         } else {
-                            Write-Warning "    ⚠️ Import failed (continuing anyway): $importOutput"
+                            Write-Warning "    [WARNING] Import failed (continuing anyway): $importOutput"
                         }
                     }
                 }
@@ -205,7 +205,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
             Write-Host "📋 Planning Terraform changes..."
             $planOutput = terraform plan -out="terraform.tfplan" -no-color 2>&1
             if ($LASTEXITCODE -ne 0) {
-                Write-Error "❌ Terraform plan failed:`n$planOutput"
+                Write-Error "[ERROR] Terraform plan failed:`n$planOutput"
                 $totalErrors++
                 continue
             }
@@ -215,23 +215,23 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "app_shutdown" {
             Write-Host $planOutput
             
             # Apply Terraform changes
-            Write-Host "🚀 Applying Terraform changes..."
+            Write-Host "[INFO] Applying Terraform changes..."
             $applyOutput = terraform apply -auto-approve "terraform.tfplan" -no-color 2>&1
             if ($LASTEXITCODE -ne 0) {
-                Write-Error "❌ Terraform apply failed:`n$applyOutput"
+                Write-Error "[ERROR] Terraform apply failed:`n$applyOutput"
                 $totalErrors++
                 continue
             }
             
-            Write-Host "✅ Terraform apply completed successfully"
+            Write-Host "[SUCCESS] Terraform apply completed successfully"
             Write-Host $applyOutput
             
             # Verify state file was created/updated
             if (Test-Path $stateFilePath) {
                 $stateFileSize = (Get-Item $stateFilePath).Length
-                Write-Host "✅ State file saved: $stateFilePath ($stateFileSize bytes)"
+                Write-Host "[SUCCESS] State file saved: $stateFilePath ($stateFileSize bytes)"
             } else {
-                Write-Warning "⚠️ State file not found at expected location: $stateFilePath"
+                Write-Warning "[WARNING] State file not found at expected location: $stateFilePath"
             }
             
             Write-Host "✅ Resource group $($rg.subscription)/$($rg.name) configured successfully`n"

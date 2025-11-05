@@ -15,7 +15,7 @@ param(
 # Load CSV data
 $rows = Get-Content $InputPath | ConvertFrom-Json
 
-Write-Host "🔄 Processing CSV data into resource group configurations..."
+Write-Host "[INFO] Processing CSV data into resource group configurations..."
 
 # Group and process VMs by subscription and resource group
 $resourceGroups = @{}
@@ -26,26 +26,26 @@ foreach ($row in $rows) {
     
     # Validate critical required fields only
     if ([string]::IsNullOrWhiteSpace($row.Subscription)) {
-        Write-Warning "⚠️ Skipping row - Subscription is empty (this is required)"
+        Write-Warning "[WARNING] Skipping row - Subscription is empty (this is required)"
         $skippedRows += "Row with empty Subscription"
         continue
     }
     
     if ([string]::IsNullOrWhiteSpace($row.ResourceGroupName)) {
-        Write-Warning "⚠️ Skipping row - ResourceGroupName is empty (this is required)"
+        Write-Warning "[WARNING] Skipping row - ResourceGroupName is empty (this is required)"
         $skippedRows += "Row with empty ResourceGroupName"
         continue
     }
     
     # Get subscription ID
-    Write-Host "  🔍 Looking up subscription: '$($row.Subscription)'"
+    Write-Host "  [LOOKUP] Looking up subscription: '$($row.Subscription)'"
     $subscriptionId = Get-SubscriptionId -SubscriptionName $row.Subscription.Trim()
     if ($null -eq $subscriptionId) {
-        Write-Warning "⚠️ Skipping $($row.ResourceGroupName) - Invalid subscription: '$($row.Subscription)'"
+        Write-Warning "[WARNING] Skipping $($row.ResourceGroupName) - Invalid subscription: '$($row.Subscription)'"
         $skippedRows += "$($row.Subscription)/$($row.ResourceGroupName) - Invalid subscription"
         continue
     }
-    Write-Host "  ✅ Subscription ID resolved: $subscriptionId"
+    Write-Host "  [SUCCESS] Subscription ID resolved: $subscriptionId"
     
     # Create unique key for grouping
     $rgKey = "$($row.Subscription.Trim())|$($row.ResourceGroupName.Trim())"
@@ -98,7 +98,7 @@ foreach ($row in $rows) {
         }
     }
     
-    Write-Host "  ✅ Added to resource group: $rgKey"
+    Write-Host "  [SUCCESS] Added to resource group: $rgKey"
 }
 
 # Convert to final configuration array
@@ -121,8 +121,8 @@ foreach ($rgKey in $resourceGroups.Keys) {
     
     # Skip resource groups with no VMs at all
     if (-not $uniqueDbVms -and -not $uniqueAppVms) {
-        Write-Warning "⚠️ Skipping resource group $($rg.subscription)/$($rg.name) - no VMs specified"
-        Write-Host "  ℹ️ Resource groups must have at least one DB VM or App VM to configure auto-shutdown"
+        Write-Warning "[WARNING] Skipping resource group $($rg.subscription)/$($rg.name) - no VMs specified"
+        Write-Host "  [INFO] Resource groups must have at least one DB VM or App VM to configure auto-shutdown"
         continue
     }
     
@@ -138,7 +138,7 @@ foreach ($rgKey in $resourceGroups.Keys) {
     
     Write-Host "📦 Consolidated Resource Group: $($rg.subscription)/$($rg.name)"
     if ($uniqueDbVms) {
-        Write-Host "  🗄️ DB VMs ($($rg.db_vms.Count)): $uniqueDbVms (Shutdown: $dbShutdownTime)"
+        Write-Host "  [DB] DB VMs ($($rg.db_vms.Count)): $uniqueDbVms (Shutdown: $dbShutdownTime)"
     }
     if ($uniqueAppVms) {
         Write-Host "  📱 App VMs ($($rg.app_vms.Count)): $uniqueAppVms (Shutdown: $appShutdownTime)"
@@ -146,7 +146,7 @@ foreach ($rgKey in $resourceGroups.Keys) {
 }
 
 if ($config.Count -eq 0) {
-    Write-Warning "⚠️ No resource groups were processed from CSV!"
+    Write-Warning "[WARNING] No resource groups were processed from CSV!"
     Write-Host "This could be due to:"
     Write-Host "  - All rows having invalid subscription names"
     Write-Host "  - All rows missing required Subscription or ResourceGroupName values"
@@ -154,16 +154,16 @@ if ($config.Count -eq 0) {
     if ($skippedRows.Count -gt 0) {
         Write-Host "`nSkipped rows:"
         foreach ($skipped in $skippedRows) {
-            Write-Host "  ❌ $skipped"
+            Write-Host "  [ERROR] $skipped"
         }
     }
-    Write-Host "ℹ️ The pipeline will continue but no resources will be configured."
+    Write-Host "[INFO] The pipeline will continue but no resources will be configured."
     exit 1
 }
 
-Write-Host "`n✅ Processed $($config.Count) unique resource group(s) from $($rows.Count) CSV rows"
+Write-Host "`n[SUCCESS] Processed $($config.Count) unique resource group(s) from $($rows.Count) CSV rows"
 if ($skippedRows.Count -gt 0) {
-    Write-Host "⚠️ Skipped $($skippedRows.Count) row(s) due to issues"
+    Write-Host "[WARNING] Skipped $($skippedRows.Count) row(s) due to issues"
 }
 
 # Group by subscription for summary

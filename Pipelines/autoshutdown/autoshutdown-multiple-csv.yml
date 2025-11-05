@@ -41,9 +41,9 @@ jobs:
       if (-not (Test-Path $stateBaseDir)) {
         Write-Host "Creating state directory: $stateBaseDir"
         New-Item -ItemType Directory -Path $stateBaseDir -Force | Out-Null
-        Write-Host "✅ Directory created successfully"
+        Write-Host "[SUCCESS] Directory created successfully"
       } else {
-        Write-Host "✅ State directory already exists"
+        Write-Host "[SUCCESS] State directory already exists"
       }
       
       Write-Host "`nState files will be stored at: $stateBaseDir"
@@ -79,7 +79,7 @@ jobs:
       Write-Host "=========================================`n"
 
       # Debug: Show available subscription environment variables
-      Write-Host "🔍 Available Subscription Environment Variables:"
+      Write-Host "[INFO] Available Subscription Environment Variables:"
       Write-Host "  BAB_DEV_SUBSCRIPTION_ID: $(if ($env:BAB_DEV_SUBSCRIPTION_ID) { 'Set' } else { 'NOT SET' })"
       Write-Host "  BAB_SIT_SUBSCRIPTION_ID: $(if ($env:BAB_SIT_SUBSCRIPTION_ID) { 'Set' } else { 'NOT SET' })"
       Write-Host "  BAB_CORE_SUBSCRIPTION_ID: $(if ($env:BAB_CORE_SUBSCRIPTION_ID) { 'Set' } else { 'NOT SET' })"
@@ -91,7 +91,7 @@ jobs:
       Write-Host "📂 Reading CSV file from: $csvPath`n"
       
       if (-not (Test-Path $csvPath)) {
-        Write-Error "❌ CSV file not found at $csvPath"
+        Write-Error "[ERROR] CSV file not found at $csvPath"
         Write-Host "`nPlease ensure the file exists with the following format:"
         Write-Host "Subscription,ResourceGroupName,DBVMs,DBShutdownTime,AppVMs,AppShutdownTime"
         Write-Host "BAB_DEV,rg-dev-app,sql-dev-01,2200,web-dev-01,2000"
@@ -107,7 +107,7 @@ jobs:
         # Read CSV with better error handling
         $csvContent = Get-Content $csvPath -ErrorAction Stop
         if ($csvContent.Count -eq 0) {
-          Write-Error "❌ CSV file is empty!"
+          Write-Error "[ERROR] CSV file is empty!"
           exit 1
         }
         
@@ -117,14 +117,14 @@ jobs:
           $rows = $csvContent | ConvertFrom-Csv -ErrorAction Stop
         }
         catch {
-          Write-Error "❌ Failed to parse CSV content: $_"
+          Write-Error "[ERROR] Failed to parse CSV content: $_"
           Write-Host "Please check CSV format. Expected format:"
           Write-Host "Subscription,ResourceGroupName,DBVMs,DBShutdownTime,AppVMs,AppShutdownTime"
           exit 1
         }
         
         if ($rows.Count -eq 0) {
-          Write-Error "❌ No data rows found in CSV (only header)!"
+          Write-Error "[ERROR] No data rows found in CSV (only header)!"
           exit 1
         }
         
@@ -139,7 +139,7 @@ jobs:
         # Check for critical columns
         $missingCriticalColumns = $criticalColumns | Where-Object { $_ -notin $actualColumns }
         if ($missingCriticalColumns.Count -gt 0) {
-          Write-Error "❌ Missing critical CSV columns: $($missingCriticalColumns -join ', ')"
+          Write-Error "[ERROR] Missing critical CSV columns: $($missingCriticalColumns -join ', ')"
           Write-Host "Critical columns are required for processing."
           exit 1
         }
@@ -147,10 +147,10 @@ jobs:
         # Check for optional columns
         $missingOptionalColumns = $requiredColumns | Where-Object { $_ -notin $actualColumns -and $_ -notin $criticalColumns }
         if ($missingOptionalColumns.Count -gt 0) {
-          Write-Host "ℹ️ Missing optional CSV columns: $($missingOptionalColumns -join ', ')"
-          Write-Host "ℹ️ Will use default values for missing columns"
+          Write-Host "[INFO] Missing optional CSV columns: $($missingOptionalColumns -join ', ')"
+          Write-Host "[INFO] Will use default values for missing columns"
         } else {
-          Write-Host "✅ All expected columns are present"
+          Write-Host "[SUCCESS] All expected columns are present"
         }
         
         Write-Host "Found $($rows.Count) resource group(s) in CSV`n"
@@ -162,17 +162,17 @@ jobs:
           Write-Host "  Row $($i + 1): Subscription='$($row.Subscription)', RG='$($row.ResourceGroupName)', DBVMs='$($row.DBVMs)', AppVMs='$($row.AppVMs)'"
         }
         Write-Host ""
-        Write-Host "ℹ️ Processing: VMs will be grouped by Subscription + Resource Group"
-        Write-Host "ℹ️ Multiple rows with same RG will be combined into single Terraform run"
+        Write-Host "[INFO] Processing: VMs will be grouped by Subscription + Resource Group"
+        Write-Host "[INFO] Multiple rows with same RG will be combined into single Terraform run"
         Write-Host ""
         
         # Save CSV data for next step
         $rows | ConvertTo-Json -Depth 10 | Out-File -FilePath "$(Agent.TempDirectory)/csv_data.json" -Encoding UTF8
-        Write-Host "✅ CSV data saved for processing"
+        Write-Host "[SUCCESS] CSV data saved for processing"
         
       }
       catch {
-        Write-Error "❌ Failed to parse CSV file: $_"
+        Write-Error "[ERROR] Failed to parse CSV file: $_"
         Write-Host "`nExpected CSV format:"
         Write-Host "Subscription,ResourceGroupName,DBVMs,DBShutdownTime,AppVMs,AppShutdownTime"
         Write-Host "BAB_DEV,rg-dev-app,sql-dev-01,2200,web-dev-01,2000"
@@ -196,7 +196,7 @@ jobs:
       . "$(Agent.TempDirectory)/functions.ps1"
       $rows = Get-Content "$(Agent.TempDirectory)/csv_data.json" | ConvertFrom-Json
       
-      Write-Host "🔄 Processing CSV data into resource group configurations..."
+      Write-Host "[INFO] Processing CSV data into resource group configurations..."
 
       # Group and process VMs by subscription and resource group
       $resourceGroups = @{}
@@ -207,26 +207,26 @@ jobs:
         
         # Validate critical required fields only
         if ([string]::IsNullOrWhiteSpace($row.Subscription)) {
-          Write-Warning "⚠️ Skipping row - Subscription is empty (this is required)"
+          Write-Warning "[WARNING] Skipping row - Subscription is empty (this is required)"
           $skippedRows += "Row with empty Subscription"
           continue
         }
         
         if ([string]::IsNullOrWhiteSpace($row.ResourceGroupName)) {
-          Write-Warning "⚠️ Skipping row - ResourceGroupName is empty (this is required)"
+          Write-Warning "[WARNING] Skipping row - ResourceGroupName is empty (this is required)"
           $skippedRows += "Row with empty ResourceGroupName"
           continue
         }
         
         # Get subscription ID
-        Write-Host "  🔍 Looking up subscription: '$($row.Subscription)'"
+        Write-Host "  [LOOKUP] Looking up subscription: '$($row.Subscription)'"
         $subscriptionId = Get-SubscriptionId -SubscriptionName $row.Subscription.Trim()
         if ($null -eq $subscriptionId) {
-          Write-Warning "⚠️ Skipping $($row.ResourceGroupName) - Invalid subscription: '$($row.Subscription)'"
+          Write-Warning "[WARNING] Skipping $($row.ResourceGroupName) - Invalid subscription: '$($row.Subscription)'"
           $skippedRows += "$($row.Subscription)/$($row.ResourceGroupName) - Invalid subscription"
           continue
         }
-        Write-Host "  ✅ Subscription ID resolved: $subscriptionId"
+        Write-Host "  [SUCCESS] Subscription ID resolved: $subscriptionId"
         
         # Create unique key for grouping
         $rgKey = "$($row.Subscription.Trim())|$($row.ResourceGroupName.Trim())"
@@ -279,7 +279,7 @@ jobs:
           }
         }
         
-        Write-Host "  ✅ Added to resource group: $rgKey"
+        Write-Host "  [SUCCESS] Added to resource group: $rgKey"
       }
       
       # Convert to final configuration array
@@ -312,18 +312,18 @@ jobs:
         
         Write-Host "📦 Consolidated Resource Group: $($rg.subscription)/$($rg.name)"
         if ($uniqueDbVms) {
-          Write-Host "  🗄️ DB VMs ($($rg.db_vms.Count)): $uniqueDbVms (Shutdown: $dbShutdownTime)"
+          Write-Host "  [DB] DB VMs ($($rg.db_vms.Count)): $uniqueDbVms (Shutdown: $dbShutdownTime)"
         }
         if ($uniqueAppVms) {
           Write-Host "  📱 App VMs ($($rg.app_vms.Count)): $uniqueAppVms (Shutdown: $appShutdownTime)"
         }
         if (-not $uniqueDbVms -and -not $uniqueAppVms) {
-          Write-Host "  ℹ️ No VMs specified, but resource group will be processed"
+          Write-Host "  [INFO] No VMs specified, but resource group will be processed"
         }
       }
       
       if ($config.Count -eq 0) {
-        Write-Warning "⚠️ No resource groups were processed from CSV!"
+        Write-Warning "[WARNING] No resource groups were processed from CSV!"
         Write-Host "This could be due to:"
         Write-Host "  - All rows having invalid subscription names"
         Write-Host "  - All rows missing required Subscription or ResourceGroupName values"
@@ -331,16 +331,16 @@ jobs:
         if ($skippedRows.Count -gt 0) {
           Write-Host "`nSkipped rows:"
           foreach ($skipped in $skippedRows) {
-            Write-Host "  ❌ $skipped"
+            Write-Host "  [ERROR] $skipped"
           }
         }
-        Write-Host "ℹ️ The pipeline will continue but no resources will be configured."
+        Write-Host "[INFO] The pipeline will continue but no resources will be configured."
         exit 1
       }
       
-      Write-Host "`n✅ Processed $($config.Count) unique resource group(s) from $($rows.Count) CSV rows"
+      Write-Host "`n[SUCCESS] Processed $($config.Count) unique resource group(s) from $($rows.Count) CSV rows"
       if ($skippedRows.Count -gt 0) {
-        Write-Host "⚠️ Skipped $($skippedRows.Count) row(s) due to issues"
+        Write-Host "[WARNING] Skipped $($skippedRows.Count) row(s) due to issues"
       }
       
       # Group by subscription for summary
@@ -352,7 +352,7 @@ jobs:
       
       # Save config for next step
       $config | ConvertTo-Json -Depth 10 | Out-File -FilePath "$(Agent.TempDirectory)/config.json" -Encoding UTF8
-      Write-Host "✅ Configuration saved for Terraform processing"
+      Write-Host "[SUCCESS] Configuration saved for Terraform processing"
     displayName: 'Process CSV Data'
     workingDirectory: $(System.DefaultWorkingDirectory)
     env:
@@ -364,25 +364,25 @@ jobs:
   # 🔹 Setup Azure CLI and State
   # =============================
   - powershell: |
-      Write-Host "🔧 Setting up environment for Terraform processing..."
+      Write-Host "[INFO] Setting up environment for Terraform processing..."
       
       # Setup state directory
       $stateBaseDir = "C:\TerraformState\autoshutdown"
       
       # Ensure state directory exists and is accessible
-      Write-Host "`n🔧 Validating Terraform State Directory..."
+      Write-Host "`n[INFO] Validating Terraform State Directory..."
       if (-not (Test-Path $stateBaseDir)) {
         Write-Host "Creating state directory: $stateBaseDir"
         try {
           New-Item -ItemType Directory -Path $stateBaseDir -Force | Out-Null
-          Write-Host "✅ State directory created successfully"
+          Write-Host "[SUCCESS] State directory created successfully"
         }
         catch {
-          Write-Error "❌ Failed to create state directory: $_"
+          Write-Error "[ERROR] Failed to create state directory: $_"
           exit 1
         }
       } else {
-        Write-Host "✅ State directory exists: $stateBaseDir"
+        Write-Host "[SUCCESS] State directory exists: $stateBaseDir"
       }
       
       # Test write permissions
@@ -390,15 +390,15 @@ jobs:
       try {
         "test" | Out-File -FilePath $testFile -Force
         Remove-Item $testFile -Force
-        Write-Host "✅ Write permissions confirmed for state directory"
+        Write-Host "[SUCCESS] Write permissions confirmed for state directory"
       }
       catch {
-        Write-Error "❌ No write permissions to state directory: $_"
+        Write-Error "[ERROR] No write permissions to state directory: $_"
         exit 1
       }
       
       Write-Host "📁 State files will be saved to: $stateBaseDir"
-      Write-Host "📝 Naming format: <Subscription>-<ResourceGroup>.tfstate`n"
+      Write-Host "[INFO] Naming format: <Subscription>-<ResourceGroup>.tfstate`n"
       
       # Setup Azure CLI authentication for import operations
       Write-Host "🔐 Setting up Azure CLI authentication for imports..."
@@ -411,13 +411,13 @@ jobs:
           --output none
         
         if ($LASTEXITCODE -eq 0) {
-          Write-Host "✅ Azure CLI authentication successful"
+          Write-Host "[SUCCESS] Azure CLI authentication successful"
         } else {
-          Write-Warning "⚠️ Azure CLI authentication failed - imports may not work"
+          Write-Warning "[WARNING] Azure CLI authentication failed - imports may not work"
         }
       }
       catch {
-        Write-Warning "⚠️ Azure CLI setup failed: $_ - imports may not work"
+        Write-Warning "[WARNING] Azure CLI setup failed: $_ - imports may not work"
       }
       Write-Host ""
     displayName: 'Setup Azure CLI and State Directory'
