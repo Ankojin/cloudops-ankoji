@@ -1,0 +1,264 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "User Account Creation Request",
+  "type": "object",
+  "properties": {
+    "requestType": {
+      "type": "string",
+      "enum": ["user_account"]
+    },
+    "requestId": {
+      "type": "string",
+      "description": "ServiceNow request/incident number"
+    },
+    "requester": {
+      "type": "string",
+      "format": "email",
+      "description": "Email of the person requesting the account"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["Low", "Medium", "High", "Critical"]
+    },
+    "accountType": {
+      "type": "string",
+      "enum": ["Normal Account", "Service Account", "AVD Account"],
+      "description": "Type of account: Normal Account, Service Account, or AVD Account"
+    },
+    "company": {
+      "type": "string",
+      "enum": ["BAB", "ENJAZ", "ABIC", "ODC"],
+      "description": "Company as per CSV properties for UPN generation"
+    },
+    "userDetails": {
+      "type": "object",
+      "properties": {
+        "userPrincipalName": {
+          "type": "string",
+          "format": "email",
+          "description": "Complete UPN for the user account"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name for the user"
+        },
+        "firstName": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "First name as per CSV (String 64)"
+        },
+        "lastName": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Last name as per CSV (String 64)"
+        },
+        "department": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Department as per CSV (String 64)"
+        },
+        "jobTitle": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Job title as per CSV (String 128)"
+        },
+        "employeeType": {
+          "type": "string",
+          "enum": ["Permanent", "Contract", "Temporary", "Vendor"],
+          "description": "Employee type as per CSV choices"
+        },
+        "manager": {
+          "type": "string",
+          "format": "email",
+          "description": "Manager reference (email) as per CSV sys_user reference"
+        },
+        "location": {
+          "type": "string"
+        },
+        "phoneNumber": {
+          "type": "string"
+        }
+      },
+      "required": ["userPrincipalName", "displayName", "firstName", "lastName", "jobTitle", "department", "employeeType", "manager"]
+    },
+    "serviceAccountDetails": {
+      "type": "object",
+      "description": "Additional details for service accounts",
+      "properties": {
+        "serviceName": {
+          "type": "string",
+          "description": "Name of the service this account will be used for"
+        },
+        "applicationOwner": {
+          "type": "string",
+          "format": "email",
+          "description": "Owner of the application/service"
+        },
+        "passwordExpiryDays": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 365,
+          "default": 90
+        },
+        "keyVaultName": {
+          "type": "string",
+          "description": "Key Vault to store service account credentials"
+        }
+      }
+    },
+    "groupMemberships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "groupName": {
+            "type": "string",
+            "description": "Azure AD group name"
+          },
+          "groupType": {
+            "type": "string",
+            "enum": ["Security", "Distribution", "Office365"]
+          },
+          "membershipType": {
+            "type": "string",
+            "enum": ["Member", "Owner"],
+            "default": "Member"
+          },
+          "justification": {
+            "type": "string",
+            "description": "Business justification for group membership"
+          }
+        },
+        "required": ["groupName", "justification"]
+      }
+    },
+    "avdConfiguration": {
+      "type": "object",
+      "description": "Azure Virtual Desktop specific configuration",
+      "properties": {
+        "hostPoolName": {
+          "type": "string",
+          "description": "AVD Host Pool assignment"
+        },
+        "applicationGroups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Application groups to assign"
+        },
+        "workspaceAccess": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "azureRoles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "roleName": {
+                "type": "string",
+                "enum": [
+                  "Reader", "Contributor", "Owner", "User Access Administrator",
+                  "Virtual Machine Contributor", "Storage Blob Data Reader",
+                  "Storage Blob Data Contributor", "Key Vault Secrets User"
+                ]
+              },
+              "scope": {
+                "type": "string",
+                "description": "Resource scope for the role assignment"
+              },
+              "justification": {
+                "type": "string",
+                "description": "Business justification for the role"
+              }
+            },
+            "required": ["roleName", "scope", "justification"]
+          }
+        },
+        "office365Licenses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Office 365 E3", "Office 365 E5", "Microsoft 365 E3", 
+              "Microsoft 365 E5", "Power BI Pro", "Project Plan 3"
+            ]
+          }
+        }
+      }
+    },
+    "accessRequirements": {
+      "type": "object",
+      "properties": {
+        "conditionalAccessPolicies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Conditional access policies to apply"
+        },
+        "mfaRequired": {
+          "type": "boolean",
+          "default": true
+        },
+        "allowedLocations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Named locations where access is allowed"
+        },
+        "deviceRequirements": {
+          "type": "object",
+          "properties": {
+            "requireCompliantDevice": {
+              "type": "boolean",
+              "default": true
+            },
+            "requireHybridAzureADJoinedDevice": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
+      }
+    },
+    "approvals": {
+      "type": "object",
+      "properties": {
+        "managerApproval": {
+          "type": "boolean",
+          "description": "Manager approval status"
+        },
+        "itSecurityApproval": {
+          "type": "boolean",
+          "description": "IT Security approval status"
+        },
+        "dataOwnerApproval": {
+          "type": "boolean",
+          "description": "Data owner approval (for privileged access)"
+        }
+      },
+      "required": ["managerApproval", "itSecurityApproval"]
+    },
+    "businessJustification": {
+      "type": "string",
+      "description": "Business justification for the account request"
+    },
+    "accountExpiry": {
+      "type": "string",
+      "format": "date",
+      "description": "Account expiry date (ISO format)"
+    }
+  },
+  "required": [
+    "requestType", "requestId", "requester", "priority", 
+    "accountType", "company", "userDetails", "approvals", "businessJustification"
+  ]
+}

@@ -1,0 +1,32 @@
+# Sensitive files - never commit these
+# *.csv
+# **/vm-migration-map.csv
+# **/vm-migration*.csv
+**/*secret*
+**/*password*
+**/*token*
+
+# Azure credentials
+**/.azure/
+**/azurecreds.json
+**/service-principal.json
+
+# Terraform sensitive files
+**/*.tfstate
+**/*.tfstate.backup
+**/*.tfvars
+**/.terraform/
+
+# Log files with potential sensitive data
+**/*.log
+**/logs/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Backup files
+*.bak
+*.backup
+*~

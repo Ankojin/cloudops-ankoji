@@ -1,0 +1,55 @@
+{
+  "requestType": "user_account",
+  "requestId": "REQ0001234",
+  "requester": "hr.admin@babgroup.com",
+  "priority": "Medium",
+  "accountType": "Normal Account",
+  "company": "BAB",
+  "businessJustification": "New employee onboarding - Ankoji Rao Nagisetty joining IT Department",
+  "userDetails": {
+    "firstName": "Ankoji Rao",
+    "lastName": "Nagisetty",
+    "department": "IT",
+    "jobTitle": "Software Developer",
+    "employeeType": "Permanent",
+    "manager": "jane.smith@babgroup.com",
+    "location": "Dubai",
+    "phoneNumber": "+971-50-123-4567"
+  },
+  "groupMemberships": [
+    {
+      "groupName": "IT-Developers",
+      "groupType": "Security",
+      "membershipType": "Member",
+      "justification": "Standard access for IT developers"
+    },
+    {
+      "groupName": "Office365-Users",
+      "groupType": "Distribution",
+      "membershipType": "Member", 
+      "justification": "Standard Office 365 access"
+    }
+  ],
+  "permissions": {
+    "azureRoles": [
+      {
+        "roleName": "Reader",
+        "scope": "/subscriptions/bab-dev-subscription/resourceGroups/rg-dev",
+        "justification": "Development environment read access"
+      }
+    ]
+  },
+  "accessRequirements": {
+    "mfaRequired": true,
+    "allowedLocations": ["Dubai", "Abu Dhabi"],
+    "deviceRequirements": {
+      "requireCompliantDevice": true,
+      "requireHybridAzureADJoinedDevice": false
+    }
+  },
+  "approvals": {
+    "managerApproval": true,
+    "itSecurityApproval": true,
+    "dataOwnerApproval": false
+  }
+}

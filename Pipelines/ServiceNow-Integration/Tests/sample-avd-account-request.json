@@ -1,0 +1,61 @@
+{
+  "requestType": "user_account",
+  "requestId": "REQ0001235",
+  "requester": "avd.admin@babgroup.com",
+  "priority": "High",
+  "accountType": "AVD Account",
+  "company": "ENJAZ",
+  "businessJustification": "AVD user account for remote worker - Ahmed Hassan Mohammed requiring virtual desktop access",
+  "userDetails": {
+    "firstName": "Ahmed Hassan",
+    "lastName": "Mohammed",
+    "department": "Finance",
+    "jobTitle": "Financial Analyst",
+    "employeeType": "Contract",
+    "manager": "finance.manager@babgroup.com",
+    "location": "Abu Dhabi",
+    "phoneNumber": "+971-50-987-6543"
+  },
+  "avdConfiguration": {
+    "hostPoolName": "hp-enjaz-finance",
+    "applicationGroups": ["Finance-Apps", "Office365-Apps"],
+    "workspaceAccess": true,
+    "sessionTimeout": 480
+  },
+  "groupMemberships": [
+    {
+      "groupName": "AVD-Users",
+      "groupType": "Security",
+      "membershipType": "Member",
+      "justification": "Standard group for AVD users"
+    },
+    {
+      "groupName": "Finance-Team",
+      "groupType": "Security",
+      "membershipType": "Member",
+      "justification": "Finance department access"
+    }
+  ],
+  "permissions": {
+    "azureRoles": [
+      {
+        "roleName": "Desktop Virtualization User",
+        "scope": "/subscriptions/enjaz-subscription/resourceGroups/rg-avd-finance",
+        "justification": "Required for AVD access"
+      }
+    ]
+  },
+  "accessRequirements": {
+    "mfaRequired": false,
+    "allowedLocations": ["Any"],
+    "deviceRequirements": {
+      "requireCompliantDevice": false,
+      "requireHybridAzureADJoinedDevice": false
+    }
+  },
+  "approvals": {
+    "managerApproval": true,
+    "itSecurityApproval": true,
+    "dataOwnerApproval": true
+  }
+}

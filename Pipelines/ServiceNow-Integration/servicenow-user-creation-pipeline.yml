@@ -1,0 +1,179 @@
+# ServiceNow-Azure DevOps Pipeline
+trigger: none
+
+# Allow manual trigger and webhooks
+resources:
+  webhooks:
+    - webhook: ServiceNowAutomation
+      connection: ServiceNowWebhook
+      filters:
+        - path: action
+          value: azure_automation
+
+variables:
+- group: cloud-subs
+- group: servicenow-integration
+- name: logPath
+  value: 'C:\ServiceNow\Logs'
+- name: tempPath
+  value: 'C:\ServiceNow\Temp'
+- name: scriptsPath
+  value: '$(Build.SourcesDirectory)/Azure-Scripts'
+
+parameters:
+- name: requestType
+  displayName: 'Request Type (for manual testing)'
+  type: string
+  values:
+  - 'user_account'
+  default: 'user_account'
+
+- name: manualPayload
+  displayName: 'Manual Test Payload (JSON)'
+  type: string
+  default: |
+    {
+      "requestType": "user_account",
+      "requestId": "REQ001234",
+      "requester": "test.user@company.com",
+      "priority": "Medium",
+      "accountType": "service_account",
+      "userDetails": {
+        "userPrincipalName": "svc-testapp@company.com",
+        "displayName": "Test Application Service Account",
+        "firstName": "TestApp",
+        "lastName": "Service"
+      },
+      "approvals": {
+        "managerApproval": true,
+        "itSecurityApproval": true
+      }
+    }
+
+jobs:
+- job: ProcessServiceNowRequest
+  displayName: 'Process ServiceNow Automation Request'
+  timeoutInMinutes: 120
+  
+  steps:
+  - checkout: self
+    displayName: 'Checkout Repository'
+
+  - task: PowerShell@2
+    displayName: 'Initialize ServiceNow Integration'
+    inputs:
+      targetType: 'inline'
+      script: |
+        # Create required directories
+        New-Item -Path "$(logPath)" -ItemType Directory -Force
+        New-Item -Path "$(tempPath)" -ItemType Directory -Force
+        
+        # Log initialization
+        $logFile = "$(logPath)\servicenow-integration-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+        "ServiceNow Integration Pipeline Started at $(Get-Date)" | Out-File -FilePath $logFile -Append
+        
+        # Set variable for subsequent tasks
+        Write-Host "##vso[task.setvariable variable=logFile]$logFile"
+        Write-Host "Log file created: $logFile"
+
+  - task: PowerShell@2
+    displayName: 'Parse ServiceNow Request'
+    inputs:
+      targetType: 'filePath'
+      filePath: '$(Build.SourcesDirectory)/Pipelines/ServiceNow-Integration/Scripts/Parse-ServiceNowRequest.ps1'
+      arguments: |
+        -WebhookPayload '$(Build.Reason)' 
+        -ManualPayload '${{ parameters.manualPayload }}' 
+        -RequestType '${{ parameters.requestType }}'
+        -LogFile '$(logFile)'
+      pwsh: true
+
+  - task: PowerShell@2
+    displayName: 'Validate Request and Security'
+    inputs:
+      targetType: 'filePath'
+      filePath: '$(Build.SourcesDirectory)/Pipelines/ServiceNow-Integration/Scripts/Validate-Request.ps1'
+      arguments: |
+        -LogFile '$(logFile)'
+      pwsh: true
+
+  - task: PowerShell@2
+    displayName: 'Generate UPN and Display Name'
+    inputs:
+      targetType: 'filePath'
+      filePath: '$(Build.SourcesDirectory)/Pipelines/ServiceNow-Integration/Scripts/Generate-UPN.ps1'
+      arguments: |
+        -FirstName '$(ParsedRequest_FirstName)'
+        -LastName '$(ParsedRequest_LastName)'
+        -Company '$(ParsedRequest_Company)'
+        -AccountType '$(ParsedRequest_AccountType)'
+        -Domain 'babgroup.com'
+        -LogPath '$(logFile)'
+      pwsh: true
+    env:
+      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+      AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+      AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+
+  - task: PowerShell@2
+    displayName: 'Create Azure AD User Account'
+    inputs:
+      targetType: 'inline'
+      script: |
+        $accountType = $env:ACCOUNT_TYPE
+        $generatedUPN = $env:GENERATED_UPN
+        $displayName = $env:DISPLAY_NAME
+        $firstName = $env:FIRSTNAME
+        $lastName = $env:LASTNAME
+        
+        $scriptPath = "$(Build.SourcesDirectory)/Pipelines/ServiceNow-Integration/Scripts/Create-User-AAD.ps1"
+        $logPath = "$(Agent.TempDirectory)"
+        $logFileName = "user-creation-$(Build.BuildId).log"
+        
+        if ($accountType -eq "Service") {
+            Write-Host "Creating service account: $generatedUPN"
+            & $scriptPath -OperationType "Create Service Account" -ServiceAccountUPN $generatedUPN -ServiceAccountDisplayName $displayName -LogPath $logPath -LogFileName $logFileName
+        } else {
+            # Create CSV file for normal/AVD users
+            $csvFile = Join-Path $env:TEMP "user-creation-$(Get-Date -Format 'yyyyMMdd-HHmmss').csv"
+            $csvContent = @"
+        UserPrincipalName,DisplayName,Password
+        $generatedUPN,$displayName,TempPassword123!
+        "@
+            $csvContent | Out-File -FilePath $csvFile -Encoding UTF8
+            
+            Write-Host "Creating normal/AVD user: $generatedUPN"
+            & $scriptPath -OperationType "Create Normal AVD Users" -UsersCsvFilePath $csvFile -LogPath $logPath -LogFileName $logFileName
+            
+            # Clean up
+            Remove-Item $csvFile -Force -ErrorAction SilentlyContinue
+        }
+      pwsh: true
+    env:
+      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+      AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+      AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+
+  - task: PowerShell@2
+    displayName: 'Update ServiceNow with Results'
+    inputs:
+      targetType: 'filePath'
+      filePath: '$(Build.SourcesDirectory)/Pipelines/ServiceNow-Integration/Scripts/Update-ServiceNow.ps1'
+      arguments: |
+        -LogFile '$(logFile)'
+      pwsh: true
+    condition: always()
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Logs'
+    inputs:
+      pathToPublish: '$(logPath)'
+      artifactName: 'ServiceNow-Integration-Logs'
+    condition: always()
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Results'
+    inputs:
+      pathToPublish: '$(tempPath)'
+      artifactName: 'ServiceNow-Integration-Results'
+    condition: always()

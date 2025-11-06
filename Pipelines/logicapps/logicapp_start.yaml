@@ -16,7 +16,7 @@ parameters:
       - BAB_SIT
 
   - name: logicAppNamePrefix
-    displayName: 'Logic App Name Prefix (e.g., bab_rg_env)'
+    displayName: 'Logic App Name Prefix (e.g., bab_appname_env)'
     type: string
     default: 'Logic APP Name'
 

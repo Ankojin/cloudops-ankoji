@@ -1,0 +1,6 @@
+LogicAppType,LogicAppName,ResourceGroup,VmNames,StartHour,StartMinute,WeekDays,DefinitionFile
+Database,bab_dev_hr_db_start,bab-dev-hr-rg,"hrdb01,hrdb02",6,30,"Sunday,Monday,Tuesday,Wednesday,Thursday",.\logicapp_start.json
+Application,bab_dev_hr_app_start,bab-dev-hr-rg,"hrapp01,hrapp02,hrapp03",7,0,"Sunday,Monday,Tuesday,Wednesday,Thursday",.\logicapp_start.json
+Web,bab_dev_hr_web_start,bab-dev-hr-web-rg,"hrweb01,hrweb02",7,15,"Sunday,Monday,Tuesday,Wednesday,Thursday",.\logicapp_start.json
+Database,bab_dev_fin_db_start,bab-dev-finance-rg,findb01,6,0,"Monday,Tuesday,Wednesday,Thursday,Friday",.\logicapp_start.json
+Application,bab_dev_fin_app_start,bab-dev-finance-rg,"finapp01,finapp02",6,30,"Monday,Tuesday,Wednesday,Thursday,Friday",.\logicapp_start.json

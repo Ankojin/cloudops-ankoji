@@ -1,0 +1,3 @@
+LogicAppType,LogicAppName,ResourceGroup,VmNames,StartHour,StartMinute,WeekDays,DefinitionFile
+Database,my_db_start,my-resource-group,vm1,vm2,7,0,"Monday,Tuesday,Wednesday,Thursday,Friday",Pipelines/logicapps/logicapp_start.json
+Application,my_app_start,my-resource-group,vm3,vm4,vm5,7,30,"Monday,Tuesday,Wednesday,Thursday,Friday",Pipelines/logicapps/logicapp_start.json
