@@ -28,7 +28,7 @@ The pipeline reads a CSV file from Agent server (10.189.61.20) (`C:\vm-to-clone\
 The CSV should have the following columns:
 
 ```
-SourceVMName,NewVMName,SubnetName,VMSize
+SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
 ```
 
 Example:
