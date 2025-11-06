@@ -1,0 +1,416 @@
+# ------------------- Cross-Region VM Cloning Pipeline -------------------
+#
+# Description: Clones Azure VMs across subscriptions and regions using VHD-based disk copy
+# 
+# This pipeline orchestrates the vm-clone-sub-crossregion.ps1 script to:
+# - Export managed disks to VHDs using AzCopy
+# - Create new managed disks in target region
+# - Create new VM with cloned disks and network configuration
+#
+# ------------------- Pipeline Configuration -------------------
+
+variables:
+- group: AZ-Resources
+- group: cloud-subs
+
+parameters:
+  - name: sourceSubscription
+    displayName: 'Source Subscription (BAB_DEV, BAB_SIT, BAB_CORE)'
+    type: string
+    default: 'BAB_SIT'
+    values:
+      - BAB_DEV
+      - BAB_SIT
+      - BAB_CORE
+  - name: targetSubscription
+    displayName: 'Target Subscription (BAB_DEV, BAB_SIT, BAB_CORE)'
+    type: string
+    default: 'BAB_SIT'
+    values:
+      - BAB_DEV
+      - BAB_SIT
+      - BAB_CORE
+  - name: sourceResourceGroup
+    displayName: 'Source Resource Group'
+    type: string
+    default: 'sit-ABIC-BAAS-RG-01'
+  - name: targetResourceGroup
+    displayName: 'Target Resource Group'
+    type: string
+    default: 'bab-sit-sme-loan-RG-01'
+  - name: sourceVMName
+    displayName: 'Source VM Name'
+    type: string
+    default: 'DABASWBMSSLV1'
+  - name: newVMName
+    displayName: 'New VM Name'
+    type: string
+    default: 'DASMEWBMSSLV1'
+  - name: targetLocation
+    displayName: 'Target Azure Region'
+    type: string
+    default: 'swedencentral'
+    values:
+      - swedencentral
+      - westeurope
+      - northeurope
+      - eastus
+      - westus2
+  - name: targetVnetRG
+    displayName: 'Target VNet Resource Group'
+    type: string
+    default: 'bab-sit-nw-swec-rg-01'
+  - name: targetVnetName
+    displayName: 'Target VNet Name'
+    type: string
+    default: 'bab-sit-nw-swec-vnet-nonpci-01'
+  - name: targetSubnetName
+    displayName: 'Target Subnet Name'
+    type: string
+    default: 'snet-sit-nonpci-web-01'
+  - name: targetVMSize
+    displayName: 'Target VM Size'
+    type: string
+    default: 'Standard_D4s_v5'
+    values:
+      - Standard_D2s_v5
+      - Standard_D4s_v5
+      - Standard_D8s_v5
+      - Standard_D16s_v5
+      - Standard_B2s
+      - Standard_B4ms
+  - name: staticIpAddress
+    displayName: 'Static IP Address (optional)'
+    type: string
+    default: '10.189.66.50'
+  - name: storageAccountName
+    displayName: 'Storage Account for VHD Copy'
+    type: string
+    default: 'babsitvmbootdiag02'
+  - name: storageAccountRG
+    displayName: 'Storage Account Resource Group'
+    type: string
+    default: 'bab-sit-vm-boot-diag-swec-rg-01'
+  - name: existingVhdAction
+    displayName: 'Action for Existing VHDs'
+    type: string
+    default: 'Prompt'
+    values:
+      - Skip
+      - Overwrite
+      - Prompt
+  - name: containerName
+    displayName: 'Storage Container Name for VHDs'
+    type: string
+    default: 'vhds'
+  - name: bootDiagStorageAccount
+    displayName: 'Boot Diagnostics Storage Account'
+    type: string
+    default: 'babsitvmbootdiag02'
+  - name: bootDiagStorageRG
+    displayName: 'Boot Diagnostics Storage RG'
+    type: string
+    default: 'bab-sit-vm-boot-diag-swec-rg-01'
+
+trigger: none
+
+pool:
+  name: cloudops-agent
+
+stages:
+- stage: ValidateAndPrepare
+  displayName: 'Validate Environment and Prepare'
+  jobs:
+  - job: ValidateEnvironment
+    displayName: 'Validate Azure Environment'
+    steps:
+    # ------------------- Azure CLI Login -------------------
+    - task: PowerShell@2
+      displayName: 'Azure CLI Login and Context Setup'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $ErrorActionPreference = "Stop"
+          $LogFile = "C:\log\vm_clone_crossregion_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
+          if (-not (Test-Path "C:\log")) { New-Item -Path "C:\log" -ItemType Directory -Force | Out-Null }
+          "" | Out-File -FilePath $LogFile -Encoding utf8
+
+          Write-Host "=== Starting Cross-Region VM Clone Pipeline ===" -ForegroundColor Cyan
+          "$(Get-Date -Format o) - Starting Cross-Region VM Clone Pipeline" | Tee-Object -FilePath $LogFile -Append
+
+          # Map subscription names to IDs
+          switch ('${{ parameters.sourceSubscription }}') {
+              'BAB_DEV' { $sourceSub = '$(BAB_DEV_SUBSCRIPTION_ID)' }
+              'BAB_SIT' { $sourceSub = '$(BAB_SIT_SUBSCRIPTION_ID)' }
+              'BAB_CORE' { $sourceSub = '$(BAB_CORE_SUBSCRIPTION_ID)' }
+              default { Write-Error "Invalid source subscription: ${{ parameters.sourceSubscription }}"; exit 1 }
+          }
+
+          switch ('${{ parameters.targetSubscription }}') {
+              'BAB_DEV' { $targetSub = '$(BAB_DEV_SUBSCRIPTION_ID)' }
+              'BAB_SIT' { $targetSub = '$(BAB_SIT_SUBSCRIPTION_ID)' }
+              'BAB_CORE' { $targetSub = '$(BAB_CORE_SUBSCRIPTION_ID)' }
+              default { Write-Error "Invalid target subscription: ${{ parameters.targetSubscription }}"; exit 1 }
+          }
+
+          # Azure CLI login
+          Write-Host "Logging in with Service Principal..." -ForegroundColor Yellow
+          az login --service-principal `
+              -u $env:AZURE_CLIENT_ID `
+              -p $env:AZURE_CLIENT_SECRET `
+              --tenant $env:AZURE_TENANT_ID | Tee-Object -FilePath $LogFile -Append
+
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Azure CLI login failed"
+              exit 1
+          }
+
+          # Validate source subscription access
+          Write-Host "Validating source subscription access..." -ForegroundColor Yellow
+          az account set --subscription $sourceSub | Tee-Object -FilePath $LogFile -Append
+          $sourceSubInfo = az account show --query "{name:name, id:id}" -o json | ConvertFrom-Json
+          Write-Host "✅ Source subscription: $($sourceSubInfo.name) ($($sourceSubInfo.id))" -ForegroundColor Green
+
+          # Validate target subscription access
+          Write-Host "Validating target subscription access..." -ForegroundColor Yellow
+          az account set --subscription $targetSub | Tee-Object -FilePath $LogFile -Append
+          $targetSubInfo = az account show --query "{name:name, id:id}" -o json | ConvertFrom-Json
+          Write-Host "✅ Target subscription: $($targetSubInfo.name) ($($targetSubInfo.id))" -ForegroundColor Green
+
+          # Store variables for subsequent stages
+          Write-Host "##vso[task.setvariable variable=SourceSubscriptionId;isOutput=true]$sourceSub"
+          Write-Host "##vso[task.setvariable variable=TargetSubscriptionId;isOutput=true]$targetSub"
+          Write-Host "##vso[task.setvariable variable=LogFile;isOutput=true]$LogFile"
+
+          "$(Get-Date -Format o) - Environment validation completed successfully" | Tee-Object -FilePath $LogFile -Append
+      env:
+        AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+        AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+        AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+      name: ValidateEnv
+
+    # ------------------- Validate Source VM -------------------
+    - task: PowerShell@2
+      displayName: 'Validate Source VM and Dependencies'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $ErrorActionPreference = "Stop"
+          $LogFile = "$(ValidateEnv.LogFile)"
+
+          # Switch to source subscription
+          az account set --subscription $(ValidateEnv.SourceSubscriptionId) | Tee-Object -FilePath $LogFile -Append
+          
+          Write-Host "=== Validating Source VM ===" -ForegroundColor Cyan
+          "$(Get-Date -Format o) - Validating source VM ${{ parameters.sourceVMName }}" | Tee-Object -FilePath $LogFile -Append
+
+          # Check if source VM exists
+          $sourceVMExists = az vm show --resource-group "${{ parameters.sourceResourceGroup }}" --name "${{ parameters.sourceVMName }}" --query "name" -o tsv 2>$null
+          if (-not $sourceVMExists) {
+              Write-Error "Source VM '${{ parameters.sourceVMName }}' not found in resource group '${{ parameters.sourceResourceGroup }}'"
+              exit 1
+          }
+          Write-Host "✅ Source VM found: ${{ parameters.sourceVMName }}" -ForegroundColor Green
+
+          # Get VM power state
+          $vmStatus = az vm show --resource-group "${{ parameters.sourceResourceGroup }}" --name "${{ parameters.sourceVMName }}" --show-details --query "powerState" -o tsv
+          Write-Host "VM Power State: $vmStatus" -ForegroundColor Yellow
+          
+          if ($vmStatus -ne "VM deallocated") {
+              Write-Host "⚠️  Source VM is running - will create crash-consistent copy" -ForegroundColor Yellow
+          } else {
+              Write-Host "✅ Source VM is deallocated - optimal for consistent copy" -ForegroundColor Green
+          }
+
+          # Validate storage account exists in target subscription
+          Write-Host "`n=== Validating Target Storage Account ===" -ForegroundColor Cyan
+          az account set --subscription $(ValidateEnv.TargetSubscriptionId) | Tee-Object -FilePath $LogFile -Append
+          
+          $storageExists = az storage account show --name "${{ parameters.storageAccountName }}" --resource-group "${{ parameters.storageAccountRG }}" --query "name" -o tsv 2>$null
+          if (-not $storageExists) {
+              Write-Error "Storage account '${{ parameters.storageAccountName }}' not found in resource group '${{ parameters.storageAccountRG }}'"
+              exit 1
+          }
+          Write-Host "✅ Storage account validated: ${{ parameters.storageAccountName }}" -ForegroundColor Green
+
+          # Validate target network resources
+          Write-Host "`n=== Validating Target Network Resources ===" -ForegroundColor Cyan
+          $vnetExists = az network vnet show --name "${{ parameters.targetVnetName }}" --resource-group "${{ parameters.targetVnetRG }}" --query "name" -o tsv 2>$null
+          if (-not $vnetExists) {
+              Write-Error "Target VNet '${{ parameters.targetVnetName }}' not found in resource group '${{ parameters.targetVnetRG }}'"
+              exit 1
+          }
+          Write-Host "✅ Target VNet validated: ${{ parameters.targetVnetName }}" -ForegroundColor Green
+
+          $subnetExists = az network vnet subnet show --vnet-name "${{ parameters.targetVnetName }}" --resource-group "${{ parameters.targetVnetRG }}" --name "${{ parameters.targetSubnetName }}" --query "name" -o tsv 2>$null
+          if (-not $subnetExists) {
+              Write-Error "Target subnet '${{ parameters.targetSubnetName }}' not found in VNet '${{ parameters.targetVnetName }}'"
+              exit 1
+          }
+          Write-Host "✅ Target subnet validated: ${{ parameters.targetSubnetName }}" -ForegroundColor Green
+
+          "$(Get-Date -Format o) - Source VM and dependencies validation completed" | Tee-Object -FilePath $LogFile -Append
+
+- stage: CloneVM
+  displayName: 'Clone VM Across Regions'
+  dependsOn: ValidateAndPrepare
+  variables:
+    SourceSubscriptionId: $[ stageDependencies.ValidateAndPrepare.ValidateEnvironment.outputs['ValidateEnv.SourceSubscriptionId'] ]
+    TargetSubscriptionId: $[ stageDependencies.ValidateAndPrepare.ValidateEnvironment.outputs['ValidateEnv.TargetSubscriptionId'] ]
+    LogFile: $[ stageDependencies.ValidateAndPrepare.ValidateEnvironment.outputs['ValidateEnv.LogFile'] ]
+  jobs:
+  - job: ExecuteVMClone
+    displayName: 'Execute Cross-Region VM Clone'
+    timeoutInMinutes: 240  # 4 hours for large VHD copies
+    steps:
+    # ------------------- Execute VM Clone Script -------------------
+    - task: PowerShell@2
+      displayName: 'Execute Cross-Region VM Clone'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $ErrorActionPreference = "Stop"
+          $LogFile = "$(LogFile)"
+          
+          Write-Host "=== Starting VM Clone Execution ===" -ForegroundColor Cyan
+          "$(Get-Date -Format o) - Starting VM clone execution" | Tee-Object -FilePath $LogFile -Append
+
+          # Set Azure PowerShell context
+          Write-Host "Connecting to Azure with PowerShell..." -ForegroundColor Yellow
+          Connect-AzAccount -ServicePrincipal -TenantId $env:AZURE_TENANT_ID -Credential (New-Object System.Management.Automation.PSCredential($env:AZURE_CLIENT_ID, (ConvertTo-SecureString $env:AZURE_CLIENT_SECRET -AsPlainText -Force)))
+          
+          Write-Host "Executing VM clone script with parameters:" -ForegroundColor Yellow
+          Write-Host "  Source VM: ${{ parameters.sourceVMName }}" -ForegroundColor Gray
+          Write-Host "  Target VM: ${{ parameters.newVMName }}" -ForegroundColor Gray
+          Write-Host "  Target Location: ${{ parameters.targetLocation }}" -ForegroundColor Gray
+          Write-Host "  Existing VHD Action: ${{ parameters.existingVhdAction }}" -ForegroundColor Gray
+          
+          # Execute the script with all parameters
+          $scriptPath = "$(Build.SourcesDirectory)\Pipelines\vm-clone\vm-clone-sub-crossregion.ps1"
+          
+          $scriptArgs = @{
+              SourceSubscriptionId = "$(SourceSubscriptionId)"
+              TargetSubscriptionId = "$(TargetSubscriptionId)"
+              SourceResourceGroup = "${{ parameters.sourceResourceGroup }}"
+              TargetResourceGroup = "${{ parameters.targetResourceGroup }}"
+              SourceVMName = "${{ parameters.sourceVMName }}"
+              NewVMName = "${{ parameters.newVMName }}"
+              Location = "${{ parameters.targetLocation }}"
+              VnetRG = "${{ parameters.targetVnetRG }}"
+              VnetName = "${{ parameters.targetVnetName }}"
+              SubnetName = "${{ parameters.targetSubnetName }}"
+              VMSize = "${{ parameters.targetVMSize }}"
+              StorageAccountName = "${{ parameters.storageAccountName }}"
+              StorageAccountRG = "${{ parameters.storageAccountRG }}"
+              ContainerName = "${{ parameters.containerName }}"
+              StaticIpAddress = "${{ parameters.staticIpAddress }}"
+              BootDiagStorageAccount = "${{ parameters.bootDiagStorageAccount }}"
+              BootDiagStorageRG = "${{ parameters.bootDiagStorageRG }}"
+              ExistingVhdAction = "${{ parameters.existingVhdAction }}"
+          }
+          
+          try {
+              & $scriptPath @scriptArgs | Tee-Object -FilePath $LogFile -Append
+              
+              if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq $null) {
+                  Write-Host "`n✅ VM Clone completed successfully!" -ForegroundColor Green
+                  "$(Get-Date -Format o) - VM clone completed successfully" | Tee-Object -FilePath $LogFile -Append
+              } else {
+                  Write-Error "VM clone script failed with exit code: $LASTEXITCODE"
+                  exit 1
+              }
+          } catch {
+              Write-Error "VM clone execution failed: $_"
+              "$(Get-Date -Format o) - VM clone failed: $_" | Tee-Object -FilePath $LogFile -Append
+              exit 1
+          }
+      env:
+        AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+        AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+        AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+
+    # ------------------- Post-Clone Validation -------------------
+    - task: PowerShell@2
+      displayName: 'Post-Clone Validation'
+      condition: succeeded()
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $ErrorActionPreference = "Stop"
+          $LogFile = "$(LogFile)"
+          
+          Write-Host "=== Post-Clone Validation ===" -ForegroundColor Cyan
+          "$(Get-Date -Format o) - Starting post-clone validation" | Tee-Object -FilePath $LogFile -Append
+
+          # Switch to target subscription
+          az account set --subscription $(TargetSubscriptionId) | Tee-Object -FilePath $LogFile -Append
+          
+          # Verify new VM exists
+          $newVMExists = az vm show --resource-group "${{ parameters.targetResourceGroup }}" --name "${{ parameters.newVMName }}" --query "name" -o tsv 2>$null
+          if (-not $newVMExists) {
+              Write-Error "New VM '${{ parameters.newVMName }}' was not created successfully"
+              exit 1
+          }
+          Write-Host "✅ New VM verified: ${{ parameters.newVMName }}" -ForegroundColor Green
+
+          # Get VM details
+          $vmDetails = az vm show --resource-group "${{ parameters.targetResourceGroup }}" --name "${{ parameters.newVMName }}" --show-details --query "{vmSize:hardwareProfile.vmSize, location:location, powerState:powerState, privateIp:privateIps[0]}" -o json | ConvertFrom-Json
+          
+          Write-Host "`n=== Clone Summary ===" -ForegroundColor Green
+          Write-Host "VM Name: ${{ parameters.newVMName }}" -ForegroundColor Gray
+          Write-Host "VM Size: $($vmDetails.vmSize)" -ForegroundColor Gray
+          Write-Host "Location: $($vmDetails.location)" -ForegroundColor Gray
+          Write-Host "Power State: $($vmDetails.powerState)" -ForegroundColor Gray
+          Write-Host "Private IP: $($vmDetails.privateIp)" -ForegroundColor Gray
+          Write-Host "Resource Group: ${{ parameters.targetResourceGroup }}" -ForegroundColor Gray
+          
+          "$(Get-Date -Format o) - Post-clone validation completed successfully" | Tee-Object -FilePath $LogFile -Append
+          
+          Write-Host "`n🎉 Cross-region VM clone pipeline completed successfully!" -ForegroundColor Green
+
+- stage: Cleanup
+  displayName: 'Cleanup and Logging'
+  dependsOn: 
+  - ValidateAndPrepare
+  - CloneVM
+  condition: always()
+  variables:
+    LogFile: $[ stageDependencies.ValidateAndPrepare.ValidateEnvironment.outputs['ValidateEnv.LogFile'] ]
+  jobs:
+  - job: PublishLogs
+    displayName: 'Publish Pipeline Logs'
+    steps:
+    - task: PowerShell@2
+      displayName: 'Finalize Logging'
+      inputs:
+        targetType: 'inline'
+        pwsh: true
+        script: |
+          $LogFile = "$(LogFile)"
+          
+          if (Test-Path $LogFile) {
+              Write-Host "=== Pipeline Execution Summary ===" -ForegroundColor Cyan
+              "$(Get-Date -Format o) - Pipeline execution completed" | Tee-Object -FilePath $LogFile -Append
+              
+              # Display final log summary
+              Write-Host "`nFinal log location: $LogFile" -ForegroundColor Yellow
+              
+              # Show last 20 lines of log
+              Write-Host "`n=== Last 20 log entries ===" -ForegroundColor Gray
+              Get-Content $LogFile -Tail 20 | ForEach-Object { Write-Host $_ -ForegroundColor Gray }
+          } else {
+              Write-Warning "Log file not found: $LogFile"
+          }
+
+    # ------------------- Publish Artifacts -------------------
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Pipeline Logs'
+      condition: always()
+      inputs:
+        pathToPublish: 'C:\log'
+        artifactName: 'VM-Clone-CrossRegion-Logs'
+        publishLocation: 'Container'
