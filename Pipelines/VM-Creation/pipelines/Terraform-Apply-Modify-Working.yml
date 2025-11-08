@@ -30,9 +30,9 @@ parameters:
   - name: location_override
     displayName: "Azure Region (leave empty to use variable group)"
     type: string
-    default: ""
+    default: "Use Variable Group"
     values:
-      - ""
+      - "Use Variable Group"
       - "Sweden Central"
       - "West Europe"
   - name: vnet_name_override
@@ -78,10 +78,10 @@ steps:
       Write-Host "Setting environment variables for ${{ parameters.environment }}..."
       
       # Use GUI overrides if provided, otherwise use variable group values
-      $subscriptionId = if ("${{ parameters.subscription_id_override }}" -ne "") { "${{ parameters.subscription_id_override }}" } else { "$(subscription_id)" }
-      $location = if ("${{ parameters.location_override }}" -ne "") { "${{ parameters.location_override }}" } else { "$(location)" }
-      $vnetName = if ("${{ parameters.vnet_name_override }}" -ne "") { "${{ parameters.vnet_name_override }}" } else { "$(vnet_name)" }
-      $vnetRg = if ("${{ parameters.vnet_rg_override }}" -ne "") { "${{ parameters.vnet_rg_override }}" } else { "$(vnet_rg)" }
+      $subscriptionId = if ("${{ parameters.subscription_id_override }}" -ne "" -and "${{ parameters.subscription_id_override }}" -ne "Use Variable Group") { "${{ parameters.subscription_id_override }}" } else { "$(subscription_id)" }
+      $location = if ("${{ parameters.location_override }}" -ne "" -and "${{ parameters.location_override }}" -ne "Use Variable Group") { "${{ parameters.location_override }}" } else { "$(location)" }
+      $vnetName = if ("${{ parameters.vnet_name_override }}" -ne "" -and "${{ parameters.vnet_name_override }}" -ne "Use Variable Group") { "${{ parameters.vnet_name_override }}" } else { "$(vnet_name)" }
+      $vnetRg = if ("${{ parameters.vnet_rg_override }}" -ne "" -and "${{ parameters.vnet_rg_override }}" -ne "Use Variable Group") { "${{ parameters.vnet_rg_override }}" } else { "$(vnet_rg)" }
       
       $env:PROJECT_NAME = "${{ parameters.project }}"
       $env:ENVIRONMENT = "${{ parameters.environment }}"
@@ -169,12 +169,14 @@ steps:
       $env:KEYVAULT_RG = "$(keyvault_rg)"
       
       # Handle mandatory tags from GUI JSON input
-      if ("${{ parameters.tags_json_override }}" -ne "") {
+      $tagsInput = "${{ parameters.tags_json_override }}"
+      if ($tagsInput -ne "" -and $tagsInput -ne "Use Variable Group") {
           Write-Host "🏷️ Using mandatory tags from GUI input"
-          $env:default_tags_json = "${{ parameters.tags_json_override }}"
+          $env:default_tags_json = $tagsInput
       } else {
           Write-Host "❌ ERROR: Mandatory tags are required!"
-          Write-Host "📋 Please provide all mandatory tags in JSON format"
+          Write-Host "📋 Please provide all mandatory tags in JSON format through the pipeline GUI"
+          Write-Host "💡 The tags field should contain all 14 mandatory tags"
           exit 1
       }
       

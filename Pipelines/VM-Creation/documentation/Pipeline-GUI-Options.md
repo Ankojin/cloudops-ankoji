@@ -26,7 +26,7 @@ When running the VM Creation pipeline through Azure DevOps, you'll see a GUI for
 - Enter specific subscription ID only if needed for this run
 
 ### **Azure Region**
-- Leave empty to use variable group value  
+- Default: `Use Variable Group` (uses variable group value)  
 - Available options: `Sweden Central`, `West Europe`
 - Choose based on your compliance and performance requirements
 
@@ -92,7 +92,7 @@ When running the VM Creation pipeline through Azure DevOps, you'll see a GUI for
 - Environment: `SIT`
 - Project: `BaaS-Platform`
 - Region Override: `Sweden Central`
-- Leave other overrides empty
+- Leave other overrides as `Use Variable Group`
 
 ### Special Testing with Custom Values
 - Action: `apply`
