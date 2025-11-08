@@ -421,6 +421,10 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
             script_blob_name
         ])
         
+        # TEMPORARILY DISABLE Custom Script Extension due to 409 Conflict errors
+        # TODO: Enable after resolving blob storage authentication
+        script_enabled = False
+        
         if script_enabled:
             # Generate SAS URL - TODO: Should be generated dynamically or from Key Vault
             # For now, using direct blob URL (assumes public read or managed identity access)
@@ -428,8 +432,9 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
             print(f"[INFO] Using {script_description}: {script_blob_name}")
             print(f"[WARNING] Using direct blob URL. Consider implementing dynamic SAS token generation.")
         else:
-            print(f"[WARNING] Script storage not fully configured - Custom Script Extension will be skipped")
-            print(f"[INFO] Missing: storage_account={bool(self.config['script_storage_account'])}, container={bool(self.config['script_storage_container'])}, blob={bool(script_blob_name)}")
+            print(f"[INFO] Custom Script Extension disabled - preventing 409 Conflict errors")
+            print(f"[INFO] Script storage config: storage_account={bool(self.config['script_storage_account'])}, container={bool(self.config['script_storage_container'])}, blob={bool(script_blob_name)}")
+            print(f"[TODO] Enable Custom Script Extension after resolving blob storage authentication")
             sas_url = None
         
         # Resource group reference
@@ -567,8 +572,10 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
 ''')
         else:
             tf_file.write(f'''
-# Custom Script Extension skipped - script storage not configured or accessible
-# To enable: Configure script_storage_account, script_storage_container, and script_blob_name_linux variables
+# Custom Script Extension disabled - preventing 409 Conflict errors  
+# ISSUE: Blob storage authentication causing deployment failures
+# TODO: Configure SAS token generation or managed identity access
+# To enable: Resolve blob storage access and set script_enabled = True
 ''')
         
         tf_file.write('''
@@ -657,8 +664,10 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
 ''')
         else:
             tf_file.write(f'''
-# Custom Script Extension skipped - script storage not configured or accessible
-# To enable: Configure script_storage_account, script_storage_container, and script_blob_name_windows variables
+# Custom Script Extension disabled - preventing 409 Conflict errors
+# ISSUE: Blob storage authentication causing deployment failures
+# TODO: Configure SAS token generation or managed identity access
+# To enable: Resolve blob storage access and set script_enabled = True
 ''')
         
         tf_file.write('''
