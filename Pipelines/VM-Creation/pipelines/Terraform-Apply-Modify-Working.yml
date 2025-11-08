@@ -156,12 +156,35 @@ steps:
       
       # Handle JSON configuration with proper escaping and validation
       $subnetsConfig = '$(subnets_config)'
+      Write-Host "🔍 DEBUG: Raw subnets_config value: '$subnetsConfig'"
+      
       if ([string]::IsNullOrWhiteSpace($subnetsConfig) -or $subnetsConfig -eq '$(subnets_config)') {
           Write-Error "❌ CRITICAL: subnets_config is not defined in variable groups"
-          throw "subnets_config variable is required but not found"
+          Write-Host "📋 REQUIRED FORMAT in Azure DevOps Variable Group 'VM-Creation-SIT':"
+          Write-Host 'Variable Name: subnets_config'
+          Write-Host 'Variable Value: {"app": ["snet-sit-nonpci-app-01", "snet-sit-nonpci-app-02", "snet-sit-nonpci-app-03"], "db": ["snet-sit-nonpci-db-01", "snet-sit-nonpci-db-02"], "web": ["snet-sit-nonpci-web-01", "snet-sit-nonpci-web-02"]}'
+          Write-Host ""
+          Write-Host "💡 STEPS TO FIX:"
+          Write-Host "1. Go to Azure DevOps → Pipelines → Library → Variable groups"
+          Write-Host "2. Find 'VM-Creation-SIT' variable group"
+          Write-Host "3. Add or update variable 'subnets_config' with the JSON value above"
+          Write-Host "4. Save the variable group"
+          Write-Host "5. Re-run this pipeline"
+          throw "subnets_config variable is required but not found in variable group"
       }
+      
+      # Validate JSON format
+      try {
+          $testJson = $subnetsConfig | ConvertFrom-Json
+          Write-Host "✅ SET: SUBNETS_CONFIG (JSON format validated)"
+      } catch {
+          Write-Error "❌ CRITICAL: subnets_config contains invalid JSON format"
+          Write-Host "📋 Current value: $subnetsConfig"
+          Write-Host "💡 Expected format: {`"app`": [`"subnet1`", `"subnet2`"], `"db`": [`"subnet3`"]}"
+          throw "subnets_config must be valid JSON format"
+      }
+      
       $env:SUBNETS_CONFIG = $subnetsConfig
-      Write-Host "✅ SET: SUBNETS_CONFIG (JSON validated)"
       
       # Required Key Vault configuration
       Set-ValidatedEnvVar "KEYVAULT_NAME" "$(keyvault_name)" $true
@@ -208,23 +231,39 @@ steps:
       Write-Host ""
       
       Write-Host "🐍 Executing Python script..."
-      python "$(tfWorkingDirectory)/core/generate-tf-v2-enhanced.py"
-      if ($LASTEXITCODE -ne 0) {
-          Write-Error "❌ ERROR: Python script failed to execute with exit code $LASTEXITCODE"
-          throw "Python script execution failed"
+      $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$(tfWorkingDirectory)/core/generate-tf-v2-enhanced.py" -Wait -PassThru -NoNewWindow
+      $pythonExitCode = $pythonProcess.ExitCode
+      
+      if ($pythonExitCode -ne 0) {
+          Write-Error "❌ CRITICAL ERROR: Python script failed to execute with exit code $pythonExitCode"
+          Write-Host "##vso[task.logissue type=error]Python script execution failed with exit code $pythonExitCode"
+          Write-Host "##vso[task.complete result=Failed;]Python script execution failed"
+          throw "Python script execution failed - STOPPING PIPELINE"
       }
       
       Write-Host ""
       Write-Host "✅ Python script completed successfully"
-      Write-Host "📁 Generated files:"
+      Write-Host "📁 Generated files verification:"
       $projectPath = "$(tfWorkingDirectory)/Project/$($env:PROJECT_NAME)/"
       if (Test-Path $projectPath) {
-          Get-ChildItem $projectPath -Force | ForEach-Object { Write-Host "  - $($_.Name)" }
+          $tfFile = "$projectPath/main-${{ parameters.environment }}.tf".ToLower()
+          if (Test-Path $tfFile) {
+              Write-Host "✅ Terraform configuration file generated successfully"
+              Get-ChildItem $projectPath -Force | ForEach-Object { Write-Host "  - $($_.Name)" }
+          } else {
+              Write-Error "❌ CRITICAL: Terraform configuration file not generated: main-${{ parameters.environment }}.tf"
+              Write-Host "##vso[task.logissue type=error]Required Terraform file was not generated"
+              Write-Host "##vso[task.complete result=Failed;]Terraform file generation failed"
+              throw "Required Terraform file was not generated - STOPPING PIPELINE"
+          }
       } else {
-          Write-Warning "⚠️  Project directory not found: $projectPath"
+          Write-Error "❌ CRITICAL: Project directory not created: $projectPath"
+          Write-Host "##vso[task.logissue type=error]Project directory was not created"
+          Write-Host "##vso[task.complete result=Failed;]Project directory creation failed"
+          throw "Project directory was not created - STOPPING PIPELINE"
       }
   displayName: "Run Python Script (Tags from GUI, Infrastructure from Variable Groups)"
-  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
+  condition: and(succeeded(), or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
 
 - task: PowerShell@2
   inputs:
@@ -279,6 +318,7 @@ steps:
       
       Write-Host "✅ Terraform configuration is valid and ready for deployment"
   displayName: "Validate Terraform Configuration with Local State"
+  condition: succeeded()
 
 - task: Bash@3
   displayName: "Remove Manual State Management (No Longer Needed)"
@@ -381,7 +421,7 @@ steps:
       Write-Host "🎉 Terraform deployment completed successfully!"
       Write-Host "📊 Final state saved to: $stateTargetPath/"
   displayName: "Terraform Apply/Modify with Local State Management"
-  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
+  condition: and(succeeded(), or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
 
 - task: PublishBuildArtifacts@1
   inputs:
