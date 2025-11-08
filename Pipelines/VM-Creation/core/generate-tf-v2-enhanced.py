@@ -100,67 +100,59 @@ class TerraformVMGenerator:
             return ""
     
     def parse_tags(self, tags_str: str = None) -> Dict[str, str]:
-        """Parse tags from variable groups only (ignore CSV tags)"""
+        """Parse mandatory tags from JSON format only"""
+        
+        # Define mandatory tags with their required keys
+        mandatory_tag_keys = [
+            "Company", "Department", "ProjectName", "ApplicationName", 
+            "StartDate", "EndDate", "Region", "ApproverName", 
+            "RequesterName", "BusinessOwner", "TechnicalOwner", 
+            "CostCenter", "ServiceClass", "ManagedBy"
+        ]
+        
         tags = {}
         
-        # Method 1: Try JSON format first (most efficient)
+        # Get tags from JSON format (mandatory)
         json_tags = os.getenv('default_tags_json')
-        if json_tags:
-            try:
-                tags.update(json.loads(json_tags))
+        if not json_tags or json_tags.strip() == '{}' or json_tags.strip() == '':
+            print("❌ ERROR: Mandatory tags are required!")
+            print("📋 Required tags JSON format:")
+            print('{"Company": "BAB", "Department": "Information Technology", "ProjectName": "YOUR_PROJECT", "ApplicationName": "YOUR_APP", "StartDate": "2025-11-08", "EndDate": "2025-11-08", "Region": "Sweden Central", "ApproverName": "YOUR_APPROVER", "RequesterName": "CloudOps Team", "BusinessOwner": "YOUR_OWNER", "TechnicalOwner": "YOUR_TECH_OWNER", "CostCenter": "YOUR_COST_CENTER", "ServiceClass": "YOUR_SERVICE_CLASS", "ManagedBy": "CloudOps Team"}')
+            raise ValueError("Mandatory tags JSON is required but not provided")
+        
+        try:
+            parsed_tags = json.loads(json_tags)
+            if isinstance(parsed_tags, dict):
+                tags.update(parsed_tags)
                 print(f"✅ Loaded {len(tags)} tags from JSON format")
-            except json.JSONDecodeError as e:
-                print(f"⚠️ Invalid JSON in default_tags_json: {e}")
-        
-        # Method 2: Try granular tag variables (fallback)
-        if not tags:  # Only if JSON didn't work
-            granular_tag_vars = [
-                ('Company', 'tag_company'),
-                ('Department', 'tag_department'),
-                ('ProjectName', 'tag_project_name'),
-                ('ApplicationName', 'tag_application_name'),
-                ('StartDate', 'tag_start_date'),
-                ('EndDate', 'tag_end_date'),
-                ('Region', 'tag_region'),
-                ('ApproverName', 'tag_approver_name'),
-                ('RequesterName', 'tag_requester_name'),
-                ('BusinessOwner', 'tag_business_owner'),
-                ('TechnicalOwner', 'tag_technical_owner'),
-                ('CostCenter', 'tag_cost_center'),
-                ('ServiceClass', 'tag_service_class'),
-                ('ManagedBy', 'tag_managed_by')
-            ]
-            
-            granular_found = False
-            for tag_name, env_var in granular_tag_vars:
-                value = os.getenv(env_var)
-                if value:
-                    tags[tag_name] = value.strip()
-                    granular_found = True
-            
-            if granular_found:
-                print(f"✅ Loaded {len(tags)} tags from granular variables")
-        
-        # Method 3: Fall back to default_tags string format (legacy)
-        if not tags:
-            default_tags_str = self.config['default_tags']
-            if default_tags_str:
-                tag_lines = default_tags_str.replace(';', '\n').split('\n')
-                for tag_line in tag_lines:
-                    tag_line = tag_line.strip()
-                    if '=' in tag_line:
-                        key, value = tag_line.split('=', 1)
-                        key = key.strip().strip('"\'')
-                        value = value.strip().strip('"\'')
-                        if key and value:
-                            tags[key] = value
                 
-                if tags:
-                    print(f"✅ Loaded {len(tags)} tags from legacy string format")
+                # Validate all mandatory tags are present
+                missing_tags = [key for key in mandatory_tag_keys if key not in tags]
+                if missing_tags:
+                    print(f"❌ ERROR: Missing mandatory tags: {', '.join(missing_tags)}")
+                    print("📋 Required tags:")
+                    for key in mandatory_tag_keys:
+                        print(f"  - {key}")
+                    raise ValueError(f"Missing mandatory tags: {', '.join(missing_tags)}")
+                
+                # Validate Company is BAB
+                if tags.get('Company', '').upper() != 'BAB':
+                    print("❌ ERROR: Company must be 'BAB'")
+                    raise ValueError("Company tag must be 'BAB'")
+                
+                print("✅ All mandatory tags validated successfully")
+            else:
+                raise ValueError("Tags must be a JSON object")
+                
+        except json.JSONDecodeError as e:
+            print(f"❌ ERROR: Invalid JSON format in tags: {e}")
+            print("📋 Expected JSON format:")
+            print('{"Company": "BAB", "Department": "Information Technology", ...}')
+            raise ValueError(f"Invalid JSON format: {e}")
         
-        # NOTE: CSV tags are ignored - tags come only from variable groups
+        # NOTE: CSV tags are ignored - tags come only from mandatory JSON input
         if tags_str and tags_str.strip():
-            print(f"ℹ️ Ignoring CSV tags - using variable group tags only")
+            print("ℹ️  Ignoring CSV tags - using mandatory JSON tags only")
         
         # Add auto-generated tags (these override everything)
         from datetime import datetime
@@ -169,9 +161,7 @@ class TerraformVMGenerator:
         tags['Environment'] = self.environment
         tags['Project'] = self.project_name
         
-        if not tags:
-            print("⚠️ No tags loaded from variable groups - using auto-generated tags only")
-        
+        print(f"🏷️  Final tag count: {len(tags)} (including auto-generated)")
         return tags
     
     def get_subnet_name(self, subnet_type: str, subnet_index: int = 0) -> str:

@@ -23,6 +23,30 @@ parameters:
     displayName: "Project Name"
     type: string
     default: "BaaS-Platform"
+  - name: subscription_id_override
+    displayName: "Azure Subscription ID (leave empty to use variable group)"
+    type: string
+    default: ""
+  - name: location_override
+    displayName: "Azure Region (leave empty to use variable group)"
+    type: string
+    default: ""
+    values:
+      - ""
+      - "Sweden Central"
+      - "West Europe"
+  - name: vnet_name_override
+    displayName: "VNet Name (leave empty to use variable group)"
+    type: string
+    default: ""
+  - name: vnet_rg_override
+    displayName: "VNet Resource Group (leave empty to use variable group)"
+    type: string
+    default: ""
+  - name: tags_json_override
+    displayName: "⚠️ REQUIRED: Mandatory Tags (JSON Format) - See description below"
+    type: string
+    default: '{"Company": "BAB", "Department": "Information Technology", "ProjectName": "pilot-test", "ApplicationName": "pilot-test", "StartDate": "2025-11-08", "EndDate": "2025-11-08", "Region": "Sweden Central", "ApproverName": "pilot-test", "RequesterName": "CloudOps Team", "BusinessOwner": "pilot-test", "TechnicalOwner": "pilot-test", "CostCenter": "pilot-test", "ServiceClass": "pilot-test", "ManagedBy": "CloudOps Team"}'
 
 variables:
   - name: tfWorkingDirectory
@@ -52,18 +76,34 @@ steps:
     targetType: 'inline'
     script: |
       Write-Host "Setting environment variables for ${{ parameters.environment }}..."
+      
+      # Use GUI overrides if provided, otherwise use variable group values
+      $subscriptionId = if ("${{ parameters.subscription_id_override }}" -ne "") { "${{ parameters.subscription_id_override }}" } else { "$(subscription_id)" }
+      $location = if ("${{ parameters.location_override }}" -ne "") { "${{ parameters.location_override }}" } else { "$(location)" }
+      $vnetName = if ("${{ parameters.vnet_name_override }}" -ne "") { "${{ parameters.vnet_name_override }}" } else { "$(vnet_name)" }
+      $vnetRg = if ("${{ parameters.vnet_rg_override }}" -ne "") { "${{ parameters.vnet_rg_override }}" } else { "$(vnet_rg)" }
+      
       $env:PROJECT_NAME = "${{ parameters.project }}"
       $env:ENVIRONMENT = "${{ parameters.environment }}"
-      $env:SUBSCRIPTION_ID = "$(subscription_id)"
+      $env:SUBSCRIPTION_ID = $subscriptionId
+      $env:LOCATION = $location
+      $env:VNET_NAME = $vnetName
+      $env:VNET_RG = $vnetRg
       $env:TF_STATE_PATH = "$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
       
       Write-Host "##vso[task.setvariable variable=PROJECT_NAME]$($env:PROJECT_NAME)"
       Write-Host "##vso[task.setvariable variable=ENVIRONMENT]$($env:ENVIRONMENT)"
       Write-Host "##vso[task.setvariable variable=SUBSCRIPTION_ID]$($env:SUBSCRIPTION_ID)"
+      Write-Host "##vso[task.setvariable variable=LOCATION_USED]$($env:LOCATION)"
+      Write-Host "##vso[task.setvariable variable=VNET_NAME_USED]$($env:VNET_NAME)"
+      Write-Host "##vso[task.setvariable variable=VNET_RG_USED]$($env:VNET_RG)"
       Write-Host "##vso[task.setvariable variable=TF_STATE_PATH]$($env:TF_STATE_PATH)"
+      
       Write-Host "Using Project: $($env:PROJECT_NAME)"
       Write-Host "Using Environment: $($env:ENVIRONMENT)"
       Write-Host "Using Subscription: $($env:SUBSCRIPTION_ID)"
+      Write-Host "Using Location: $($env:LOCATION)"
+      Write-Host "Using VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
       Write-Host "Terraform state will be stored at: $($env:TF_STATE_PATH)"
       
       # Create state directory structure
@@ -104,10 +144,13 @@ steps:
       # Set environment variables for Python script
       $env:ENVIRONMENT = "${{ parameters.environment }}"
       $env:PROJECT_NAME = "${{ parameters.project }}"
-      $env:SUBSCRIPTION_ID = "$(subscription_id)"
+      $env:SUBSCRIPTION_ID = "$(SUBSCRIPTION_ID)"
       $env:TF_STATE_PATH = "$(TF_STATE_PATH)"
-      $env:VNET_NAME = "$(vnet_name)"
-      $env:VNET_RG = "$(vnet_rg)"
+      
+      # Use GUI overrides or variable group values
+      $env:VNET_NAME = "$(VNET_NAME_USED)"
+      $env:VNET_RG = "$(VNET_RG_USED)"
+      $env:LOCATION = "$(LOCATION_USED)"
       $env:SUBNET_RG = "$(subnet_rg)"
       $env:SUBNETS_CONFIG = "$(subnets_config)"
       $env:KEYVAULT_NAME = "$(keyvault_name)"
@@ -120,33 +163,22 @@ steps:
       $env:SCRIPT_STORAGE_CONTAINER = "$(script_storage_container)"
       $env:SCRIPT_BLOB_NAME_LINUX = "$(script_blob_name_linux)"
       $env:SCRIPT_BLOB_NAME_WINDOWS = "$(script_blob_name_windows)"
-      $env:LOCATION = "$(location)"
       
       # Key Vault Configuration for Windows script domain join
       $env:KEYVAULT_NAME = "$(keyvault_name)"
       $env:KEYVAULT_RG = "$(keyvault_rg)"
       
-      # Set tag variables (Method 1: JSON format - preferred)
-      $env:default_tags_json = "$(default_tags_json)"
+      # Handle mandatory tags from GUI JSON input
+      if ("${{ parameters.tags_json_override }}" -ne "") {
+          Write-Host "🏷️ Using mandatory tags from GUI input"
+          $env:default_tags_json = "${{ parameters.tags_json_override }}"
+      } else {
+          Write-Host "❌ ERROR: Mandatory tags are required!"
+          Write-Host "📋 Please provide all mandatory tags in JSON format"
+          exit 1
+      }
       
-      # Set granular tag variables (Method 2: fallback for individual variables)
-      $env:tag_company = "$(tag_company)"
-      $env:tag_department = "$(tag_department)"
-      $env:tag_project_name = "$(tag_project_name)"
-      $env:tag_application_name = "$(tag_application_name)"
-      $env:tag_start_date = "$(tag_start_date)"
-      $env:tag_end_date = "$(tag_end_date)"
-      $env:tag_region = "$(tag_region)"
-      $env:tag_approver_name = "$(tag_approver_name)"
-      $env:tag_requester_name = "$(tag_requester_name)"
-      $env:tag_business_owner = "$(tag_business_owner)"
-      $env:tag_technical_owner = "$(tag_technical_owner)"
-      $env:tag_cost_center = "$(tag_cost_center)"
-      $env:tag_service_class = "$(tag_service_class)"
-      $env:tag_managed_by = "$(tag_managed_by)"
-      
-      # Fallback to legacy default_tags if other methods not available
-      $env:DEFAULT_TAGS = "$(default_tags)"
+      # Fallback to legacy default_tags (should not be used)
       $env:DEFAULT_TAGS = "$(default_tags)"
       
       # Auto Shutdown Configuration
@@ -157,6 +189,8 @@ steps:
       Write-Host "🔧 VM sizes and OS images will be read from CSV file"
       Write-Host "💾 Storage standards are hardcoded in Python script for consistency"
       Write-Host "📁 State will be stored locally at: $(TF_STATE_PATH)"
+      Write-Host "🌐 Using VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
+      Write-Host "📍 Deploying to Location: $($env:LOCATION)"
       
       python "$(tfWorkingDirectory)/core/generate-tf-v2-enhanced.py"
       if ($LASTEXITCODE -ne 0) {
