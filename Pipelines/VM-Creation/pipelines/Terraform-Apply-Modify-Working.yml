@@ -158,33 +158,33 @@ steps:
       $subnetsConfig = '$(subnets_config)'
       Write-Host "🔍 DEBUG: Raw subnets_config value: '$subnetsConfig'"
       
-      if ([string]::IsNullOrWhiteSpace($subnetsConfig) -or $subnetsConfig -eq '$(subnets_config)') {
-          Write-Error "❌ CRITICAL: subnets_config is not defined in variable groups"
-          Write-Host "📋 REQUIRED FORMAT in Azure DevOps Variable Group 'VM-Creation-SIT':"
-          Write-Host 'Variable Name: subnets_config'
-          Write-Host 'Variable Value: {"app": ["snet-sit-nonpci-app-01", "snet-sit-nonpci-app-02", "snet-sit-nonpci-app-03"], "db": ["snet-sit-nonpci-db-01", "snet-sit-nonpci-db-02"], "web": ["snet-sit-nonpci-web-01", "snet-sit-nonpci-web-02"]}'
-          Write-Host ""
-          Write-Host "💡 STEPS TO FIX:"
-          Write-Host "1. Go to Azure DevOps → Pipelines → Library → Variable groups"
-          Write-Host "2. Find 'VM-Creation-SIT' variable group"
-          Write-Host "3. Add or update variable 'subnets_config' with the JSON value above"
-          Write-Host "4. Save the variable group"
-          Write-Host "5. Re-run this pipeline"
-          throw "subnets_config variable is required but not found in variable group"
+      # Check if variable was resolved (not just whitespace check)
+      if ($subnetsConfig -eq '$(subnets_config)') {
+          Write-Error "❌ CRITICAL: subnets_config variable is not defined in variable groups"
+          Write-Host "📋 REQUIRED: Add 'subnets_config' variable to your VM-Creation-${{ parameters.environment }} variable group"
+          throw "subnets_config variable not found in variable group"
+      }
+      
+      # Clean up whitespace in JSON but validate it's not empty
+      $cleanedSubnetsConfig = $subnetsConfig.Trim()
+      if ([string]::IsNullOrWhiteSpace($cleanedSubnetsConfig)) {
+          Write-Error "❌ CRITICAL: subnets_config variable is empty"
+          throw "subnets_config variable is empty"
       }
       
       # Validate JSON format
       try {
-          $testJson = $subnetsConfig | ConvertFrom-Json
+          $testJson = $cleanedSubnetsConfig | ConvertFrom-Json
           Write-Host "✅ SET: SUBNETS_CONFIG (JSON format validated)"
+          Write-Host "📍 Found subnet types: $($testJson.PSObject.Properties.Name -join ', ')"
       } catch {
           Write-Error "❌ CRITICAL: subnets_config contains invalid JSON format"
-          Write-Host "📋 Current value: $subnetsConfig"
-          Write-Host "💡 Expected format: {`"app`": [`"subnet1`", `"subnet2`"], `"db`": [`"subnet3`"]}"
+          Write-Host "📋 Current value: $cleanedSubnetsConfig"
+          Write-Host "💡 Error: $($_.Exception.Message)"
           throw "subnets_config must be valid JSON format"
       }
       
-      $env:SUBNETS_CONFIG = $subnetsConfig
+      $env:SUBNETS_CONFIG = $cleanedSubnetsConfig
       
       # Required Key Vault configuration
       Set-ValidatedEnvVar "KEYVAULT_NAME" "$(keyvault_name)" $true
