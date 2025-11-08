@@ -414,12 +414,23 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
             script_blob_name = self.config['script_blob_name_linux']
             script_description = "Linux shell setup script"
         
-        # Generate SAS URL - TODO: Should be generated dynamically or from Key Vault
-        # For now, using direct blob URL (assumes public read or managed identity access)
-        sas_url = f"https://{self.config['script_storage_account']}.blob.core.windows.net/{self.config['script_storage_container']}/{script_blob_name}"
+        # Check if script storage is configured
+        script_enabled = all([
+            self.config['script_storage_account'],
+            self.config['script_storage_container'],
+            script_blob_name
+        ])
         
-        print(f"[INFO] Using {script_description}: {script_blob_name}")
-        print(f"[WARNING] Using direct blob URL. Consider implementing dynamic SAS token generation.")
+        if script_enabled:
+            # Generate SAS URL - TODO: Should be generated dynamically or from Key Vault
+            # For now, using direct blob URL (assumes public read or managed identity access)
+            sas_url = f"https://{self.config['script_storage_account']}.blob.core.windows.net/{self.config['script_storage_container']}/{script_blob_name}"
+            print(f"[INFO] Using {script_description}: {script_blob_name}")
+            print(f"[WARNING] Using direct blob URL. Consider implementing dynamic SAS token generation.")
+        else:
+            print(f"[WARNING] Script storage not fully configured - Custom Script Extension will be skipped")
+            print(f"[INFO] Missing: storage_account={bool(self.config['script_storage_account'])}, container={bool(self.config['script_storage_container'])}, blob={bool(script_blob_name)}")
+            sas_url = None
         
         # Resource group reference
         rg_reference = f"azurerm_resource_group.{resource_group.replace('-', '_')}_rg.name" if create_rg else f'"{resource_group}"'
@@ -461,9 +472,9 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 
         # Generate VM resource based on OS type
         if os_type == "linux":
-            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, cloud_init_content, sas_url, os_image, rg_reference, script_blob_name)
+            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, cloud_init_content, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
         else:
-            self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name)
+            self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
         
         # Generate additional disks
         self._generate_data_disks(tf_file, vm_name, row, os_type, rg_reference)
@@ -471,7 +482,7 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
         # Generate auto shutdown
         self._generate_auto_shutdown(tf_file, vm_name, tags_str, os_type)
     
-    def _generate_linux_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, cloud_init_content: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str):
+    def _generate_linux_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, cloud_init_content: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str, script_enabled: bool = True):
         """Generate Linux VM resources"""
         tf_file.write(f'''
 # Linux Virtual Machine
@@ -533,7 +544,10 @@ resource "azurerm_monitor_data_collection_rule_association" "{vm_name}_dcr_assoc
   data_collection_rule_id = data.azurerm_monitor_data_collection_rule.main_dcr.id
 }}
 
-# Custom Script Extension
+# Custom Script Extension (Conditional)''')
+        
+        if script_enabled and sas_url:
+            tf_file.write(f'''
 resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   name                 = "CustomScriptExtension"
   virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
@@ -551,8 +565,16 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   }}
 }}
 ''')
+        else:
+            tf_file.write(f'''
+# Custom Script Extension skipped - script storage not configured or accessible
+# To enable: Configure script_storage_account, script_storage_container, and script_blob_name_linux variables
+''')
+        
+        tf_file.write('''
+''')  # Close the section
     
-    def _generate_windows_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str):
+    def _generate_windows_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str, script_enabled: bool = True):
         """Generate Windows VM resources"""
         tf_file.write(f'''
 # Windows Virtual Machine
@@ -612,7 +634,10 @@ resource "azurerm_monitor_data_collection_rule_association" "{vm_name}_dcr_assoc
   data_collection_rule_id = data.azurerm_monitor_data_collection_rule.main_dcr.id
 }}
 
-# Custom Script Extension
+# Custom Script Extension (Conditional)''')
+        
+        if script_enabled and sas_url:
+            tf_file.write(f'''
 resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   name                 = "CustomScriptExtension"
   virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
@@ -630,6 +655,14 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   }}
 }}
 ''')
+        else:
+            tf_file.write(f'''
+# Custom Script Extension skipped - script storage not configured or accessible
+# To enable: Configure script_storage_account, script_storage_container, and script_blob_name_windows variables
+''')
+        
+        tf_file.write('''
+''')  # Close the section
     
     def _generate_data_disks(self, tf_file, vm_name: str, row: Dict[str, str], os_type: str, rg_reference: str):
         """Generate additional data disks for VM"""
