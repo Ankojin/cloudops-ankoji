@@ -22,7 +22,7 @@ parameters:
   - name: project
     displayName: "Project Name"
     type: string
-    default: "BaaS-Platform"
+    default: "pilot-test"
   - name: tags_json_override
     displayName: "Tags (JSON Format) - REQUIRED for Apply | OPTIONAL for Modify"
     type: string
