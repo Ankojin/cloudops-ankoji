@@ -1,7 +1,5 @@
-vm_name,resource_group,vm_role,subnet_type,subnet_index,static_ip,vm_size,os_type,os_publisher,os_offer,os_sku,os_version,disk_1_size,disk_2_size,disk_3_size,custom_tags,create_rg
-DABASDBRDDLV01,bab-dev-baas-swec-rg-01,db_server,db,0,10.189.56.223,Standard_E4s_v5,linux,RedHat,RHEL,92-gen2,latest,256,,,Application name=BaaS Platform;Project Name=BaaS Platform,true
-DABASAPKADLV01,bab-dev-baas-swec-rg-01,app_server,app,0,10.189.56.97,Standard_D4s_v5,linux,RedHat,RHEL,92-gen2,latest,256,,,Application name=BaaS Platform;Project Name=BaaS Platform,false
-DABASAPKADLV02,bab-dev-baas-swec-rg-01,app_server,app,1,10.189.56.98,Standard_D4s_v5,linux,RedHat,RHEL,92-gen2,latest,256,,,Application name=BaaS Platform;Project Name=BaaS Platform,false
-DABASAPKADLV03,bab-dev-baas-swec-rg-01,app_server,app,2,10.189.56.99,Standard_D4s_v5,linux,RedHat,RHEL,92-gen2,latest,256,512,,Application name=BaaS Platform;Project Name=BaaS Platform,false
-DABASWEBSV01,bab-dev-baas-swec-rg-01,web_server,web,0,10.189.57.10,Standard_B2s,linux,RedHat,RHEL,92-gen2,latest,128,,,Application name=BaaS Platform;Project Name=BaaS Platform,false
-DABASWINWEB01,bab-dev-baas-swec-rg-01,web_server,web,1,10.189.57.11,Standard_B4ms,windows,MicrosoftWindowsServer,WindowsServer,2022-Datacenter,latest,200,,,Application name=BaaS Platform;Project Name=BaaS Platform,false
+vm_name,resource_group,vm_role,subnet_type,subnet_index,static_ip,vm_size,os_type,os_publisher,os_offer,os_sku,os_version,disk_1_size,disk_2_size,disk_3_size,create_rg
+ankoji-test-01,ankoji-test-01,app_server,app,1,10.189.57.162,Standard_B2s,windows,MicrosoftWindowsServer,WindowsServer,2019-Datacenter,latest,16,,,TRUE
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,

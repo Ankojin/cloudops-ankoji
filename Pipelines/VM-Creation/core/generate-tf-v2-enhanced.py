@@ -99,8 +99,8 @@ class TerraformVMGenerator:
             print(f"⚠️ Cloud-init file {self.cloud_init_file} not found.")
             return ""
     
-    def parse_tags(self, tags_str: str) -> Dict[str, str]:
-        """Parse tags from CSV format and merge with defaults"""
+    def parse_tags(self, tags_str: str = None) -> Dict[str, str]:
+        """Parse tags from variable groups only (ignore CSV tags)"""
         tags = {}
         
         # Method 1: Try JSON format first (most efficient)
@@ -158,17 +158,9 @@ class TerraformVMGenerator:
                 if tags:
                     print(f"✅ Loaded {len(tags)} tags from legacy string format")
         
-        # Add custom tags from CSV (these can override defaults)
+        # NOTE: CSV tags are ignored - tags come only from variable groups
         if tags_str and tags_str.strip():
-            tag_pairs = tags_str.split(';')
-            for pair in tag_pairs:
-                pair = pair.strip()
-                if '=' in pair:
-                    key, value = pair.split('=', 1)
-                    key = key.strip().strip('"\'')
-                    value = value.strip().strip('"\'')
-                    if key and value:
-                        tags[key] = value
+            print(f"ℹ️ Ignoring CSV tags - using variable group tags only")
         
         # Add auto-generated tags (these override everything)
         from datetime import datetime
@@ -176,6 +168,9 @@ class TerraformVMGenerator:
         tags['CreationDate'] = datetime.now().strftime('%Y-%m-%d')
         tags['Environment'] = self.environment
         tags['Project'] = self.project_name
+        
+        if not tags:
+            print("⚠️ No tags loaded from variable groups - using auto-generated tags only")
         
         return tags
     
@@ -294,8 +289,8 @@ output "deployment_summary" {
         tf_file.write("\n# ==== Resource Groups ====\n")
         
         for rg_name in sorted(self.resource_groups_to_create):
-            # Parse default tags for resource group
-            tags = self.parse_tags("")
+            # Parse default tags for resource group (no CSV tags)
+            tags = self.parse_tags()
             tags_str = ",\n    ".join([f'"{k}" = "{v}"' for k, v in tags.items()])
             
             tf_file.write(f'''
@@ -393,12 +388,12 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
         os_sku = row.get("os_sku", "92-gen2").strip()
         os_version = row.get("os_version", "latest").strip()
         
-        custom_tags = row.get("custom_tags", "").strip()
+        custom_tags = row.get("custom_tags", "").strip()  # Will be ignored
         create_rg = row.get("create_rg", "false").lower() == "true"
         
         # Calculate values
         subnet_name = self.get_subnet_name(subnet_type, subnet_index)
-        tags = self.parse_tags(custom_tags)
+        tags = self.parse_tags()  # No CSV tags - only from variable groups
         
         # Create OS image object from CSV data
         os_image = {
