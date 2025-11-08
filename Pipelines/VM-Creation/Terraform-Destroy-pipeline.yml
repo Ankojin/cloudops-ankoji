@@ -2,7 +2,7 @@ trigger:
 - none  # Manual trigger only
 
 pool:
-  vmImage: 'ubuntu-latest'
+  name: cloudops-agent
 
 parameters:
   - name: action
@@ -11,10 +11,17 @@ parameters:
     default: "destroy"
     values:
       - destroy
+  - name: environment
+    displayName: "Target Environment"
+    type: string
+    default: "DEV"
+    values:
+      - DEV
+      - SIT
   - name: project
     displayName: "Project Name"
     type: string
-    default: "default-project"
+    default: "BaaS-Platform"
   - name: destroySpecificTargets
     displayName: "Destroy Specific Targets (Yes/No)"
     type: string
@@ -29,106 +36,182 @@ parameters:
 
 variables:
   - name: tfWorkingDirectory
-    value: "$(Build.SourcesDirectory)/VM-Creation/"
+    value: "$(Build.SourcesDirectory)/Pipelines/VM-Creation/"
+  - name: tfStateDirectory
+    value: "C:/TerraformState/Project"
   - group: TerraformVariables
+  - ${{ if eq(parameters.environment, 'DEV') }}:
+    - group: VM-Creation-DEV
+  - ${{ if eq(parameters.environment, 'SIT') }}:
+    - group: VM-Creation-SIT
   - name: pythonVersion
     value: "3.9"
 
 steps:
-# Step 1: Set Environment Variables
-- script: |
-    echo "Setting environment variables..."
-    if [[ ! ${{ parameters.project }} =~ ^[a-zA-Z0-9-]+$ ]]; then
-        echo "Error: Invalid project name. Use only letters, numbers, and hyphens."
-        exit 1
-    fi
-    export PROJECT_NAME="${{ parameters.project }}"
-    echo "##vso[task.setvariable variable=PROJECT_NAME]$PROJECT_NAME"
-    export STORAGE_CONTAINER_NAME="${PROJECT_NAME}-tfstate"
-    echo "##vso[task.setvariable variable=STORAGE_CONTAINER_NAME]$STORAGE_CONTAINER_NAME"
-    echo "Using Project: $PROJECT_NAME"
-    echo "Using Storage Container: $STORAGE_CONTAINER_NAME"
+# Step 1: Setup Python
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '$(pythonVersion)'
+    addToPath: true
+    architecture: 'x64'
+  displayName: 'Setup Python $(pythonVersion)'
+
+# Step 2: Set Environment Variables
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Setting environment variables for destroy operation..."
+      if ("${{ parameters.project }}" -notmatch "^[a-zA-Z0-9-]+$") {
+          Write-Error "Error: Invalid project name. Use only letters, numbers, and hyphens."
+          exit 1
+      }
+      
+      $env:PROJECT_NAME = "${{ parameters.project }}"
+      $env:ENVIRONMENT = "${{ parameters.environment }}"
+      $env:TF_STATE_PATH = "$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
+      
+      Write-Host "##vso[task.setvariable variable=PROJECT_NAME]$($env:PROJECT_NAME)"
+      Write-Host "##vso[task.setvariable variable=ENVIRONMENT]$($env:ENVIRONMENT)"
+      Write-Host "##vso[task.setvariable variable=TF_STATE_PATH]$($env:TF_STATE_PATH)"
+      
+      Write-Host "Using Project: $($env:PROJECT_NAME)"
+      Write-Host "Using Environment: $($env:ENVIRONMENT)"
+      Write-Host "Terraform state location: $($env:TF_STATE_PATH)"
+      
+      # Check if state file exists
+      if (Test-Path "$($env:TF_STATE_PATH)/terraform.tfstate") {
+          Write-Host "✅ State file found at: $($env:TF_STATE_PATH)/terraform.tfstate"
+      } else {
+          Write-Host "⚠️ No state file found at: $($env:TF_STATE_PATH)/terraform.tfstate"
+          Write-Host "This may be the first run or resources were already destroyed."
+      }
   displayName: "Set Environment Variables"
 
-# Step 2: Azure Login
-- script: |
-    echo "Logging into Azure..."
-    az login --service-principal \
-        -u $(ARM_CLIENT_ID) \
-        -p $(ARM_CLIENT_SECRET) \
-        --tenant $(ARM_TENANT_ID) || { echo "Azure login failed! Exiting."; exit 1; }
-    echo "Azure login successful."
+# Step 3: Azure Login
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Logging into Azure..."
+      az login --service-principal -u "$(ARM_CLIENT_ID)" -p "$(ARM_CLIENT_SECRET)" --tenant "$(ARM_TENANT_ID)"
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Azure login failed! Exiting."
+          exit 1
+      }
+      Write-Host "Azure login successful."
   displayName: "Azure Login"
-# Step 3: Download Terraform State Files for Destroy
-- task: Bash@3
-  displayName: "Download Terraform State Files for Destroy"
+
+# Step 4: Prepare Terraform Files with Local State
+- task: PowerShell@2
+  displayName: "Prepare Terraform Files with Local State"
   condition: eq('${{ parameters.action }}', 'destroy')
   inputs:
     targetType: 'inline'
     script: |
-      set -x
-      echo "Executing parallel file upload/download preparation."
-      # Use & to run processes in the background
-      (
-          echo "Downloading state files..."
-          az storage blob download-batch \
-            --account-name $(storageAccountName) \
-            --destination $(tfWorkingDirectory) \
-            --source $(STORAGE_CONTAINER_NAME) \
-            --pattern "*.tfstate*" \
-            --account-key $(storageAccountKey) || { echo "Error downloading state files."; exit 1; }
-      ) &
-      wait  # Wait for all background jobs to finish
-      echo "File preparation completed."
+      Write-Host "Preparing Terraform files for destroy operation..."
+      
+      # Generate Terraform configuration for destroy
+      Set-Location "$(tfWorkingDirectory)"
+      
+      # Set environment variables for Python script
+      $env:ENVIRONMENT = "${{ parameters.environment }}"
+      $env:PROJECT_NAME = "${{ parameters.project }}"
+      $env:SUBSCRIPTION_ID = "$(subscription_id)"
+      $env:TF_STATE_PATH = "$(TF_STATE_PATH)"
+      $env:VNET_NAME = "$(vnet_name)"
+      $env:VNET_RG = "$(vnet_rg)"
+      $env:SUBNET_RG = "$(subnet_rg)"
+      $env:SUBNETS_CONFIG = "$(subnets_config)"
+      $env:KEYVAULT_NAME = "$(keyvault_name)"
+      $env:KEYVAULT_RG = "$(keyvault_rg)"
+      $env:DCR_NAME = "$(dcr_name)"
+      $env:DCR_RG = "$(dcr_rg)"
+      $env:DIAGNOSTICS_STORAGE = "$(diagnostics_storage)"
+      $env:SCRIPT_STORAGE_CONTAINER = "$(script_storage_container)"
+      $env:SCRIPT_BLOB_NAME = "$(script_blob_name)"
+      $env:LOCATION = "$(location)"
+      $env:DEFAULT_TAGS = "$(default_tags)"
+      $env:shutdown_enabled = "$(shutdown_enabled)"
+      $env:shutdown_time = "$(shutdown_time)"
+      $env:shutdown_timezone = "$(shutdown_timezone)"
+      
+      python "$(tfWorkingDirectory)/generate-tf-v2-enhanced.py"
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Error: Python script failed to execute."
+          exit 1
+      }
+      
+      # Copy existing state file to working directory
+      Set-Location "$(tfWorkingDirectory)/Project/$(PROJECT_NAME)/"
+      if (Test-Path "$(TF_STATE_PATH)/terraform.tfstate") {
+          Write-Host "📄 Copying existing state file from $(TF_STATE_PATH)/"
+          Copy-Item "$(TF_STATE_PATH)/terraform.tfstate" "./" -Force
+          if (Test-Path "$(TF_STATE_PATH)/.terraform.lock.hcl") {
+              Copy-Item "$(TF_STATE_PATH)/.terraform.lock.hcl" "./" -Force
+          }
+          Write-Host "✅ State file copied successfully"
+      } else {
+          Write-Host "⚠️ No state file found. Nothing to destroy."
+          exit 0
+      }
 
-# Step 4: Validate Destroy Targets (Only if Destroy Specific Targets is Yes)
-- script: |
-    echo "Validating destroy targets..."
-    if [ "${{ parameters.destroySpecificTargets }}" == "Yes" ]; then
-        if [ -z "${{ parameters.destroyTargets }}" ]; then
-            echo "Error: 'destroyTargets' must be specified when 'Destroy Specific Targets' is set to Yes."
-            exit 1
-        fi
-        echo "Destroy targets provided: ${{ parameters.destroyTargets }}"
-    else
-        echo "Destroying all resources. No specific targets specified."
-    fi
-  displayName: "Validate Destroy Targets"
-  condition: eq('${{ parameters.destroySpecificTargets }}', 'Yes')
-
-# Step 5: Terraform Destroy Logic
-- script: |
-    echo "Executing Terraform destroy..."
-    cd $(tfWorkingDirectory)
-    terraform init || { echo "Terraform initialization failed! Exiting."; exit 1; }
-    if [ "${{ parameters.destroySpecificTargets }}" == "Yes" ]; then
-        echo "Destroying specific resources: ${{ parameters.destroyTargets }}"
-        terraform destroy -auto-approve $(echo ${{ parameters.destroyTargets }} | tr ',' '\n' | sed 's/^/-target=/') || { echo "Terraform destroy failed! Exiting."; exit 1; }
-    else
-        echo "Destroying all resources..."
-        terraform destroy -auto-approve || { echo "Terraform destroy failed! Exiting."; exit 1; }
-    fi
-    echo "Terraform destroy completed successfully."
-  displayName: "Terraform Destroy Logic"
-
-# Step 6: Upload Terraform State Files after Destroy
-- task: Bash@3
-  displayName: "Upload Terraform State Files after Destroy"
-  condition: and(succeeded(), eq('${{ parameters.action }}', 'destroy'))
+# Step 5: Validate Destroy Targets (Only if Destroy Specific Targets is Yes)
+- task: PowerShell@2
   inputs:
     targetType: 'inline'
     script: |
-      echo "Uploading files in parallel..."
-      parallel_upload() {
-          az storage blob upload-batch \
-            --account-name $(storageAccountName) \
-            --destination $(STORAGE_CONTAINER_NAME) \
-            --source $(tfWorkingDirectory) \
-            --pattern "$1" \
-            --account-key $(storageAccountKey) \
-            --overwrite true || echo "Error uploading $1 files."
+      Write-Host "Validating destroy targets..."
+      if ("${{ parameters.destroySpecificTargets }}" -eq "Yes") {
+          if ([string]::IsNullOrWhiteSpace("${{ parameters.destroyTargets }}")) {
+              Write-Error "Error: 'destroyTargets' must be specified when 'Destroy Specific Targets' is set to Yes."
+              exit 1
+          }
+          Write-Host "Destroy targets provided: ${{ parameters.destroyTargets }}"
+      } else {
+          Write-Host "Destroying all resources. No specific targets specified."
       }
-      parallel_upload "*.tfstate*" &
-      parallel_upload "*.lock.*" &
-      wait
-      echo "All files uploaded successfully."
+  displayName: "Validate Destroy Targets"
+  condition: eq('${{ parameters.destroySpecificTargets }}', 'Yes')
+
+# Step 6: Terraform Destroy Logic
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Executing Terraform destroy..."
+      Set-Location "$(tfWorkingDirectory)/Project/$(PROJECT_NAME)/"
+      
+      terraform init
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform initialization failed! Exiting."
+          exit 1
+      }
+      
+      if ("${{ parameters.destroySpecificTargets }}" -eq "Yes") {
+          Write-Host "Destroying specific resources: ${{ parameters.destroyTargets }}"
+          $targets = "${{ parameters.destroyTargets }}" -split "," | ForEach-Object { "-target=$($_.Trim())" }
+          $targetArgs = $targets -join " "
+          Invoke-Expression "terraform destroy -auto-approve $targetArgs"
+      } else {
+          Write-Host "Destroying all resources..."
+          terraform destroy -auto-approve
+      }
+      
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform destroy failed! Exiting."
+          exit 1
+      }
+      
+      Write-Host "Terraform destroy completed successfully."
+      
+      # Clean up state files after successful destroy
+      if (Test-Path "$(TF_STATE_PATH)/terraform.tfstate") {
+          Write-Host "🗑️ Removing state files after successful destroy..."
+          Remove-Item "$(TF_STATE_PATH)/terraform.tfstate" -Force
+          if (Test-Path "$(TF_STATE_PATH)/.terraform.lock.hcl") {
+              Remove-Item "$(TF_STATE_PATH)/.terraform.lock.hcl" -Force
+          }
+          Write-Host "✅ State files cleaned up successfully"
+      }
+  displayName: "Terraform Destroy Logic"

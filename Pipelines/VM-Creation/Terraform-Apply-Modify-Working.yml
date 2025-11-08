@@ -2,7 +2,7 @@ trigger:
 - none
 
 pool:
-  vmImage: 'ubuntu-latest'
+  name: cloudops-agent
 
 parameters:
   - name: action
@@ -12,131 +12,237 @@ parameters:
     values:
       - apply
       - modify
+  - name: environment
+    displayName: "Target Environment"
+    type: string
+    default: "DEV"
+    values:
+      - DEV
+      - SIT
   - name: project
     displayName: "Project Name"
     type: string
-    default: "default-project"
+    default: "BaaS-Platform"
 
 variables:
   - name: tfWorkingDirectory
-    value: "$(Build.SourcesDirectory)/VM-Creation"
+    value: "$(Build.SourcesDirectory)/Pipelines/VM-Creation"
+  - name: tfStateDirectory
+    value: "C:/TerraformState/Project"
   - group: TerraformVariables
+  - ${{ if eq(parameters.environment, 'DEV') }}:
+    - group: VM-Creation-DEV
+  - ${{ if eq(parameters.environment, 'SIT') }}:
+    - group: VM-Creation-SIT
   - name: pythonVersion
     value: "3.9"
 
 steps:
-- script: |
-    set -x
-    echo "Setting environment variables..."
-    export PROJECT_NAME="${{ parameters.project }}"
-    echo "##vso[task.setvariable variable=PROJECT_NAME]$PROJECT_NAME"
-    export STORAGE_CONTAINER_NAME="${PROJECT_NAME}-tfstate"
-    echo "##vso[task.setvariable variable=STORAGE_CONTAINER_NAME]$STORAGE_CONTAINER_NAME"
-    echo "Using Project: $PROJECT_NAME"
-    echo "Using Storage Container: $STORAGE_CONTAINER_NAME"
-  displayName: "Set Environment Variables"
+# Step 1: Setup Python
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '$(pythonVersion)'
+    addToPath: true
+    architecture: 'x64'
+  displayName: 'Setup Python $(pythonVersion)'
 
-- script: |
-    set -x
-    echo "Logging into Azure..."
-    az login --service-principal -u $(ARM_CLIENT_ID) -p $(ARM_CLIENT_SECRET) --tenant $(ARM_TENANT_ID) || { echo "Azure login failed! Exiting."; exit 1; }
-    echo "Azure login successful."
+# Step 2: Set Environment Variables
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Setting environment variables for ${{ parameters.environment }}..."
+      $env:PROJECT_NAME = "${{ parameters.project }}"
+      $env:ENVIRONMENT = "${{ parameters.environment }}"
+      $env:SUBSCRIPTION_ID = "$(subscription_id)"
+      $env:TF_STATE_PATH = "$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
+      
+      Write-Host "##vso[task.setvariable variable=PROJECT_NAME]$($env:PROJECT_NAME)"
+      Write-Host "##vso[task.setvariable variable=ENVIRONMENT]$($env:ENVIRONMENT)"
+      Write-Host "##vso[task.setvariable variable=SUBSCRIPTION_ID]$($env:SUBSCRIPTION_ID)"
+      Write-Host "##vso[task.setvariable variable=TF_STATE_PATH]$($env:TF_STATE_PATH)"
+      Write-Host "Using Project: $($env:PROJECT_NAME)"
+      Write-Host "Using Environment: $($env:ENVIRONMENT)"
+      Write-Host "Using Subscription: $($env:SUBSCRIPTION_ID)"
+      Write-Host "Terraform state will be stored at: $($env:TF_STATE_PATH)"
+      
+      # Create state directory structure
+      New-Item -Path $env:TF_STATE_PATH -ItemType Directory -Force
+      Write-Host "📁 Created state directory: $($env:TF_STATE_PATH)"
+  displayName: "Set Environment Variables and Create State Directory"
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Logging into Azure..."
+      az login --service-principal -u "$(ARM_CLIENT_ID)" -p "$(ARM_CLIENT_SECRET)" --tenant "$(ARM_TENANT_ID)"
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Azure login failed! Exiting."
+          exit 1
+      }
+      Write-Host "Azure login successful."
   displayName: "Azure Login"
 
-- script: |
-    set -x
-    echo "Verifying or creating storage container..."
-    containerExists=$(az storage container exists --name $(STORAGE_CONTAINER_NAME) --account-name $(storageAccountName) --account-key $(storageAccountKey) --query 'exists' -o tsv) || { echo "Error checking container existence."; exit 1; }
-    if [ "$containerExists" == "true" ]; then
-        echo "Storage container exists: $STORAGE_CONTAINER_NAME"
-    else
-        echo "Creating storage container: $STORAGE_CONTAINER_NAME"
-        az storage container create --name $(STORAGE_CONTAINER_NAME) --account-name $(storageAccountName) --account-key $(storageAccountKey) || { echo "Failed to create storage container."; exit 1; }
-    fi
-  displayName: "Verify/Create Storage Container"
-  condition: eq('${{ parameters.action }}', 'apply')
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Local state management - no storage container needed"
+      Write-Host "State files will be managed locally at: $(TF_STATE_PATH)"
+      Write-Host "This step is disabled for local state management"
+  displayName: "Local State Management (No Storage Container Needed)"
+  condition: false
 
-- script: |
-    set -x
-    echo "Running Python script for Terraform configuration..."
-    python3 $(tfWorkingDirectory)/*.py || { echo "Error: Python script failed to execute."; exit 1; }
-    echo "Listing files in the working directory after script execution:"
-    ls -la $(tfWorkingDirectory)/Project/BaaS-Platform/
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Running Python script for Terraform configuration..."
+      Set-Location "$(tfWorkingDirectory)"
+      
+      # Set environment variables for Python script
+      $env:ENVIRONMENT = "${{ parameters.environment }}"
+      $env:PROJECT_NAME = "${{ parameters.project }}"
+      $env:SUBSCRIPTION_ID = "$(subscription_id)"
+      $env:TF_STATE_PATH = "$(TF_STATE_PATH)"
+      $env:VNET_NAME = "$(vnet_name)"
+      $env:VNET_RG = "$(vnet_rg)"
+      $env:SUBNET_RG = "$(subnet_rg)"
+      $env:SUBNETS_CONFIG = "$(subnets_config)"
+      $env:KEYVAULT_NAME = "$(keyvault_name)"
+      $env:KEYVAULT_RG = "$(keyvault_rg)"
+      $env:DCR_NAME = "$(dcr_name)"
+      $env:DCR_RG = "$(dcr_rg)"
+      $env:DIAGNOSTICS_STORAGE = "$(diagnostics_storage)"
+      $env:SCRIPT_STORAGE_CONTAINER = "$(script_storage_container)"
+      $env:SCRIPT_BLOB_NAME = "$(script_blob_name)"
+      $env:LOCATION = "$(location)"
+      $env:DEFAULT_TAGS = "$(default_tags)"
+      
+      # Auto Shutdown Configuration
+      $env:shutdown_enabled = "$(shutdown_enabled)"
+      $env:shutdown_time = "$(shutdown_time)"
+      $env:shutdown_timezone = "$(shutdown_timezone)"
+      
+      Write-Host "🔧 VM sizes and OS images will be read from CSV file"
+      Write-Host "💾 Storage standards are hardcoded in Python script for consistency"
+      Write-Host "📁 State will be stored locally at: $(TF_STATE_PATH)"
+      
+      python "$(tfWorkingDirectory)/generate-tf-v2-enhanced.py"
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Error: Python script failed to execute."
+          exit 1
+      }
+      Write-Host "Listing files in the working directory after script execution:"
+      Get-ChildItem "$(tfWorkingDirectory)/Project/$($env:PROJECT_NAME)/" -Force
   displayName: "Run Python Script for Configuration"
   condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
 
-- task: Bash@3
+- task: PowerShell@2
   inputs:
     targetType: 'inline'
     script: |
-      set -x
-      echo "Validating Terraform configuration..."
-      cd $(tfWorkingDirectory)/Project/BaaS-Platform/
-      terraform init -backend=false || { echo "Terraform initialization failed! Exiting."; exit 1; }
-      terraform validate || { echo "Terraform validation failed! Exiting."; exit 1; }
-      echo "Terraform configuration is valid."
-  displayName: "Validate Terraform Configuration"
+      Write-Host "Validating Terraform configuration with local state..."
+      Set-Location "$(tfWorkingDirectory)/Project/$(PROJECT_NAME)/"
+      
+      # Copy existing state file to working directory if it exists
+      if (Test-Path "$(TF_STATE_PATH)/terraform.tfstate") {
+          Write-Host "📄 Copying existing state file from $(TF_STATE_PATH)/"
+          Copy-Item "$(TF_STATE_PATH)/terraform.tfstate" "./" -Force
+          if (Test-Path "$(TF_STATE_PATH)/.terraform.lock.hcl") {
+              Copy-Item "$(TF_STATE_PATH)/.terraform.lock.hcl" "./" -Force
+          }
+      } else {
+          Write-Host "📄 No existing state file found. This will be a new deployment."
+      }
+      
+      # Initialize with local backend
+      terraform init
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform initialization failed! Exiting."
+          exit 1
+      }
+        
+      terraform validate
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform validation failed! Exiting."
+          exit 1
+      }
+      Write-Host "Terraform configuration is valid."
+  displayName: "Validate Terraform Configuration with Local State"
 
 - task: Bash@3
-  displayName: "Download Terraform State Files for Modify"
-  condition: eq('${{ parameters.action }}', 'modify')
+  displayName: "Remove Manual State Management (No Longer Needed)"
+  condition: false  # Disabled - using proper remote backend now
   inputs:
     targetType: 'inline'
     script: |
-      set -x
-      echo "Downloading state files..."
-      az storage blob download-batch --account-name $(storageAccountName) --destination $(tfWorkingDirectory)/Project/BaaS-Platform/ --source $(STORAGE_CONTAINER_NAME) --pattern "*.tfstate*;*.lock.hcl" --account-key $(storageAccountKey) || { echo "Error downloading state files."; exit 1; }
+      echo "Manual state file management is now replaced by proper Terraform backend"
 
-- task: Bash@3
+- task: PowerShell@2
   inputs:
     targetType: 'inline'
     script: |
-      set -x
-      echo "Executing Terraform ${{ parameters.action }}..."
-      cd $(tfWorkingDirectory)/Project/BaaS-Platform/
-      terraform init || { echo "Terraform initialization failed! Exiting."; exit 1; }
-      terraform fmt || { echo "Terraform format failed! Exiting."; exit 1; }
-      terraform validate || { echo "Terraform validation failed! Exiting."; exit 1; }      
-      terraform plan -out=tfplan || { echo "Terraform plan failed! Exiting."; exit 1; }
-      terraform apply -auto-approve tfplan || { echo "Terraform apply failed! Exiting."; exit 1; }
-  displayName: "Terraform Apply/Modify Logic"
-  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
-
-- task: Bash@3
-  inputs:
-    targetType: 'inline'
-    script: |
-      set -x
-            echo "Uploading files in parallel..."
-      (
-          az storage blob upload-batch \
-            --account-name $(storageAccountName) \
-            --destination $(STORAGE_CONTAINER_NAME) \
-            --source $(tfWorkingDirectory)/Project/BaaS-Platform \
-            --pattern "*.tfstate*" \
-            --account-key $(storageAccountKey) \
-            --overwrite true || echo "Error uploading state files."
-      ) &
-
-      (
-          az storage blob upload-batch \
-            --account-name $(storageAccountName) \
-            --destination $(STORAGE_CONTAINER_NAME) \
-            --source $(tfWorkingDirectory)/Project/BaaS-Platform \
-            --pattern "*.lock.*" \
-            --account-key $(storageAccountKey) \
-            --overwrite true || echo "Error uploading lock files."
-      ) &
-
-      wait
-      echo "All files uploaded successfully."
-  displayName: "Upload Terraform Files Apply Or Modify to Azure Storage"
+      Write-Host "Executing Terraform ${{ parameters.action }} with local state..."
+      Set-Location "$(tfWorkingDirectory)/Project/$(PROJECT_NAME)/"
+      
+      # Copy existing state file to working directory if it exists (for modify operations)
+      if ("${{ parameters.action }}" -eq "modify" -and (Test-Path "$(TF_STATE_PATH)/terraform.tfstate")) {
+          Write-Host "📄 Copying existing state file for modify operation"
+          Copy-Item "$(TF_STATE_PATH)/terraform.tfstate" "./" -Force
+          if (Test-Path "$(TF_STATE_PATH)/.terraform.lock.hcl") {
+              Copy-Item "$(TF_STATE_PATH)/.terraform.lock.hcl" "./" -Force
+          }
+      }
+      
+      # Initialize with local backend
+      terraform init
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform initialization failed! Exiting."
+          exit 1
+      }
+        
+      terraform fmt
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform format failed! Exiting."
+          exit 1
+      }
+      
+      terraform validate
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform validation failed! Exiting."
+          exit 1
+      }
+      
+      terraform plan -out=tfplan
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform plan failed! Exiting."
+          exit 1
+      }
+      
+      terraform apply -auto-approve tfplan
+      if ($LASTEXITCODE -ne 0) {
+          Write-Error "Terraform apply failed! Exiting."
+          exit 1
+      }
+      
+      # Copy state file back to persistent location on agent
+      Write-Host "📄 Saving state file to persistent location: $(TF_STATE_PATH)/"
+      New-Item -Path "$(TF_STATE_PATH)" -ItemType Directory -Force | Out-Null
+      Copy-Item "terraform.tfstate" "$(TF_STATE_PATH)/" -Force
+      if (Test-Path ".terraform.lock.hcl") {
+          Copy-Item ".terraform.lock.hcl" "$(TF_STATE_PATH)/" -Force
+      }
+      
+      Write-Host "✅ State file saved successfully to: $(TF_STATE_PATH)/terraform.tfstate"
+  displayName: "Terraform Apply/Modify with Local State Management"
   condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
 
 - task: PublishBuildArtifacts@1
   inputs:
-    PathtoPublish: '$(tfWorkingDirectory)/Project/BaaS-Platform/'
-    ArtifactName: 'TerraformFiles'
+    PathtoPublish: '$(tfWorkingDirectory)/Project/$(PROJECT_NAME)/'
+    ArtifactName: 'TerraformFiles-${{ parameters.environment }}'
     publishLocation: 'Container'
   displayName: "Upload Terraform Files as Build Artifacts"
   condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))

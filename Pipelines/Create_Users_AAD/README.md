@@ -13,40 +13,61 @@
 
 ## 🎯 Overview
 
-This pipeline automates Azure AD user management operations through Azure DevOps. It supports:
-- ✅ Service account creation
-- ✅ AVD (Azure Virtual Desktop) user provisioning
-- ✅ Admin Studio user-group assignments
-- ✅ ABIC user management (new and existing)
+The BAB CloudOps team has developed this Azure DevOps pipeline to streamline Azure AD user management operations across our banking environment. Our solution supports:
+- ✅ Service account creation for applications and automation
+- ✅ AVD (Azure Virtual Desktop) user provisioning for remote workers
+- ✅ Admin Studio user-group assignments for banking application access
+- ✅ ABIC user management for new employee onboarding and existing user updates
 
-**Key Features:**
-- Password complexity validation
-- Retry logic for reliability
-- Detailed logging
-- Rollback-safe operations
-- CSV-based bulk operations
+**Key Features Implemented by Our Team:**
+- Comprehensive password complexity validation
+- Built-in retry logic for enhanced reliability
+- Detailed operational logging and audit trails
+- Rollback-safe operations to prevent data corruption
+- Efficient CSV-based bulk operations for large-scale user management
+
+## 🏢 Environment Information
+
+**Current Environment:** BAB (Bank Albilad) Azure AD Tenant  
+**Domain:** `albtests.com`  
+**Service Principal:** Managed via `cloud-subs` variable group  
+**Agent Pool:** `cloudops-agent`  
+
+**Supported User Types:**
+- Service Accounts (automation/applications)
+- AVD Users (Azure Virtual Desktop access)  
+- Admin Studio Users (banking application access)
+- ABIC Users (internal banking employees with full HR profiles)
+
+## 👥 About This Documentation
+
+This comprehensive guide was created and is maintained by the BAB CloudOps Engineering Team. Our team has extensive experience in Azure AD management, PowerShell automation, and banking compliance requirements. We continuously update this documentation based on operational experience and user feedback to ensure it remains accurate and helpful for our organization's needs.
 
 ---
 
 ## ⚡ Quick Start
 
 ### Prerequisites
-1. **Azure DevOps Access**: Permissions to run pipelines
-2. **Variable Group**: `cloud-subs` configured with:
-   - `AZURE_CLIENT_ID`
-   - `AZURE_CLIENT_SECRET`
-   - `AZURE_TENANT_ID`
-3. **Service Principal Permissions**:
-   - `User.ReadWrite.All`
-   - `Group.ReadWrite.All`
-   - `Directory.ReadWrite.All`
+Our team has configured the following requirements for pipeline execution:
+
+1. **Azure DevOps Access**: Team members need appropriate permissions to run pipelines in our BAB CloudOps project
+2. **Variable Group**: Our CloudOps team maintains the `cloud-subs` variable group with:
+   - `AZURE_CLIENT_ID` (Service Principal App ID)
+   - `AZURE_CLIENT_SECRET` (Secure client secret)
+   - `AZURE_TENANT_ID` (BAB Azure AD tenant identifier)
+3. **Service Principal Permissions** (configured by our team):
+   - `User.ReadWrite.All` - Create and modify user accounts
+   - `Group.ReadWrite.All` - Manage group memberships
+   - `Directory.ReadWrite.All` - Full directory access for user provisioning
 
 ### Running the Pipeline
-1. Navigate to **Pipelines** → **Create-User-AAD**
-2. Click **Run pipeline**
-3. Select your **operation type** (1-5)
-4. Fill in **required parameters** for your operation
-5. Click **Run**
+Follow these steps to execute user management operations:
+
+1. Navigate to **Pipelines** → **Create-User-AAD** in our Azure DevOps project
+2. Click **Run pipeline** to start a new execution
+3. Select your **operation type** (1-5) based on your user management needs
+4. Fill in the **required parameters** specific to your chosen operation
+5. Click **Run** to begin execution and monitor progress in real-time
 
 ---
 
@@ -66,7 +87,7 @@ This pipeline automates Azure AD user management operations through Azure DevOps
 **Example Use Case:**
 ```
 Creating service account for Azure Function App authentication
-UPN: svc-azfunc-prod@contoso.com
+UPN: svc-azfunc-prod@albtests.com
 Group: Azure Service Accounts
 ```
 
@@ -84,8 +105,8 @@ Group: Azure Service Accounts
 **CSV Format:**
 ```csv
 DisplayName,UserPrincipalName,Password
-John Doe,john.doe@contoso.com,P@ssw0rd123!
-Jane Smith,jane.smith@contoso.com,Str0ng@Pass456
+John Doe,john.doe@albtests.com,P@ssw0rd123!
+Jane Smith,jane.smith@albtests.com,Str0ng@Pass456
 ```
 
 **Example Use Case:**
@@ -103,7 +124,7 @@ All users added to: BAB_VDI_DT_Shared_Pool
 - Confirmation checkbox ✔️ (safety check)
 
 **CSV Files:** ✅ Required (both)
-- Users CSV: [`Pipelines/Create_Users_AAD/Admin-Studio-Users.csv`](./Admin-Studio-Users.csv)
+- Users CSV: [`Pipelines/Create_Users_AAD/Admin-studio-users.csv`](./Admin-studio-users.csv)
 - Groups CSV: [`Pipelines/Create_Users_AAD/Admin-Studio-Groups.csv`](./Admin-Studio-Groups.csv)
 
 **CSV Format:**
@@ -147,7 +168,7 @@ Groups: Admin-Studio-Editors, Admin-Studio-Admins
 **Users CSV (Extended Profile):**
 ```csv
 DisplayName,UserPrincipalName,MailNickName,Password,First name,Last name,Job Title,Company name,Department,Employee Type,Manager,Employee ID
-John Doe,john.doe@contoso.com,johndoe,P@ssw0rd123!,John,Doe,Senior Analyst,ABIC,Finance,Permanent,manager@contoso.com,E001234
+John Doe,john.doe@contoso.com,johndoe,P@ssw0rd123!,John,Doe,Senior Analyst,ABIC,Finance,Permanent,manager@contoso.com,
 ```
 
 **Groups CSV:**
@@ -208,7 +229,7 @@ No new user creation needed
 ```
 Pipelines/Create_Users_AAD/
 ├── AVD-users.csv              (Operation 2)
-├── Admin-Studio-Users.csv     (Operation 3)
+├── Admin-studio-users.csv     (Operation 3)
 ├── Admin-Studio-Groups.csv    (Operation 3)
 ├── ABIC-Users.csv             (Operation 4)
 ├── ABIC-Groups.csv            (Operations 4 & 5)
@@ -334,24 +355,25 @@ Before running the pipeline:
 
 1. **Prepare CSV Files**
 
-**Admin-Studio-Users.csv:**
+**Admin-studio-users.csv:**
 ```csv
 UserPrincipalName
-it.admin1@contoso.com
-it.admin2@contoso.com
-it.admin3@contoso.com
+it.admin1@albtests.com
+it.admin2@albtests.com
+it.admin3@albtests.com
 ```
 
 **Admin-Studio-Groups.csv:**
 ```csv
 GroupName
-Admin-Studio-Editors
-Admin-Studio-Admins
+Albilad_Branch
+Reports_printing_HQ
+ROLE_BRANCH_SUPERVISOR
 ```
 
 2. **Commit Both CSVs**
    ```bash
-   git add Pipelines/Create_Users_AAD/Admin-Studio-*.csv
+   git add Pipelines/Create_Users_AAD/Admin-studio-users.csv Pipelines/Create_Users_AAD/Admin-Studio-Groups.csv
    git commit -m "Admin Studio access for 3 IT admins"
    git push
    ```
@@ -369,9 +391,9 @@ Admin-Studio-Admins
 **Expected Result:**
 ```
 ✅ Total Mappings: 6 | Success: 6 | Failed: 0
-✅ it.admin1 → Admin-Studio-Editors, Admin-Studio-Admins
-✅ it.admin2 → Admin-Studio-Editors, Admin-Studio-Admins
-✅ it.admin3 → Admin-Studio-Editors, Admin-Studio-Admins
+✅ it.admin1 → Albilad_Branch, Reports_printing_HQ
+✅ it.admin2 → Albilad_Branch, Reports_printing_HQ  
+✅ it.admin3 → Albilad_Branch, Reports_printing_HQ
 ```
 
 ---
@@ -388,15 +410,15 @@ Admin-Studio-Admins
 **Example Row:**
 ```csv
 DisplayName,UserPrincipalName,MailNickName,Password,First name,Last name,Job Title,Company name,Department,Employee Type,Manager,Employee ID
-Sarah Johnson,sarah.johnson@contoso.com,sjohnson,Welc0me@ABIC,Sarah,Johnson,Financial Analyst,ABIC,Finance,Permanent,finance.mgr@contoso.com,E002345
+Sarah Johnson,sarah.johnson@albtests.com,sjohnson,Welc0me@ABIC,Sarah,Johnson,Financial Analyst,ABIC,Finance,Permanent,finance.mgr@albtests.com,E002345
 ```
 
 2. **Prepare ABIC-Groups.csv**
 ```csv
 GroupName
-ABIC-Finance-Standard
-ABIC-All-Employees
-ABIC-VPN-Access
+ABIC_AML_ADMIN
+ABIC_AMS_ADMIN
+ABIC_AMS_COMPLIANCE
 ```
 
 3. **Commit CSVs**
@@ -420,10 +442,10 @@ ABIC-VPN-Access
 **Expected Result:**
 ```
 ✅ Total: 10 | Success: 10 | Failed: 0 | Skipped: 0
-✅ sarah.johnson@contoso.com created
+✅ sarah.johnson@albtests.com created
 ✅   Job Title: Financial Analyst
-✅   Manager: finance.mgr@contoso.com
-✅   Groups: ABIC-Finance-Standard, ABIC-All-Employees, ABIC-VPN-Access
+✅   Manager: finance.mgr@albtests.com
+✅   Groups: ABIC_AML_ADMIN, ABIC_AMS_ADMIN, ABIC_AMS_COMPLIANCE
 ```
 
 ---
@@ -630,50 +652,59 @@ Enable detailed logging for troubleshooting:
 ### Security Best Practices
 
 1. **Password Management:**
-   - ✅ Use strong, unique passwords
-   - ✅ Store securely (never commit plain text)
-   - ✅ Rotate service account passwords regularly
-   - ✅ Enable MFA for admin accounts
+   - ✅ Use strong, unique passwords for all user accounts
+   - ✅ Store service account credentials securely (never commit plain text)
+   - ✅ Rotate service account passwords quarterly
+   - ✅ Enable MFA for all admin accounts
 
 2. **Service Principal:**
-   - ✅ Use least-privilege permissions
+   - ✅ Use least-privilege permissions (only required Graph API scopes)
    - ✅ Rotate client secrets every 90 days
-   - ✅ Monitor service principal activity
-   - ✅ Separate SPNs for dev/test/prod
+   - ✅ Monitor service principal activity via Azure AD sign-in logs
+   - ✅ Use separate service principals for dev/test/prod environments
 
-3. **CSV Files:**
-   - ✅ Delete CSV files after successful execution (if containing passwords)
-   - ✅ Use `.gitignore` for sensitive CSV files
-   - ✅ Encrypt CSV files if storing long-term
-   - ✅ Audit CSV file access
+3. **CSV File Security:**
+   - ✅ Delete CSV files containing passwords after successful execution
+   - ✅ Use `.gitignore` for sensitive CSV files if they must be stored
+   - ✅ Encrypt CSV files if long-term storage is required
+   - ✅ Audit CSV file access and modifications
+   - ✅ Never commit production passwords to source control
+
+4. **Banking Compliance:**
+   - ✅ Follow BAB security policies for user provisioning
+   - ✅ Ensure proper segregation of duties for user creation
+   - ✅ Maintain audit trails for all user management operations
+   - ✅ Verify manager approvals before bulk user creation
 
 ---
 
 ### Operational Best Practices
 
-1. **Testing:**
-   - ✅ Test with 1-2 users first
-   - ✅ Use test accounts in non-production
-   - ✅ Verify group memberships post-execution
-   - ✅ Test rollback procedures
+Our CloudOps team recommends the following operational procedures:
 
-2. **CSV Preparation:**
-   - ✅ Validate CSV format before committing
-   - ✅ Use Excel formula validation for UPNs
-   - ✅ Review passwords meet complexity
-   - ✅ Remove empty rows and columns
+1. **Testing Approach:**
+   - ✅ Always test with 1-2 users first before bulk operations
+   - ✅ Use dedicated test accounts in non-production environments
+   - ✅ Verify group memberships post-execution through Azure AD Portal
+   - ✅ Test rollback procedures in development environment
 
-3. **Monitoring:**
-   - ✅ Review pipeline logs after each run
-   - ✅ Monitor Azure AD sign-in logs for new users
-   - ✅ Track group membership changes
-   - ✅ Set up alerts for failures
+2. **CSV Preparation Guidelines:**
+   - ✅ Validate CSV format using Excel or text editor before committing
+   - ✅ Use Excel formula validation for UPN format verification
+   - ✅ Review all passwords meet our complexity requirements
+   - ✅ Remove empty rows and columns to prevent processing errors
 
-4. **Documentation:**
-   - ✅ Document group purpose and membership criteria
-   - ✅ Maintain user onboarding runbooks
-   - ✅ Track bulk operations in change log
-   - ✅ Update CSV templates as requirements change
+3. **Monitoring and Verification:**
+   - ✅ Review pipeline logs after each run for success confirmation
+   - ✅ Monitor Azure AD sign-in logs for new user verification
+   - ✅ Track group membership changes through audit logs
+   - ✅ Set up alerts for pipeline failures and investigate promptly
+
+4. **Documentation and Change Management:**
+   - ✅ Document group purpose and membership criteria in our wiki
+   - ✅ Maintain user onboarding runbooks with current procedures
+   - ✅ Track all bulk operations in our change management log
+   - ✅ Update CSV templates as business requirements evolve
 
 ---
 
@@ -717,7 +748,7 @@ Enable detailed logging for troubleshooting:
 | `logPath` | `C:\log` | ✅ Yes | Log file directory |
 | `logFileName` | `user_management_log.txt` | ✅ Yes | Log file name |
 | `avdUsersCsvPath` | `Pipelines/Create_Users_AAD/AVD-users.csv` | ❌ No | AVD users CSV path (hardcoded) |
-| `adminStudioUsersCsvPath` | `Pipelines/Create_Users_AAD/Admin-Studio-Users.csv` | ❌ No | Admin Studio users CSV |
+| `adminStudioUsersCsvPath` | `Pipelines/Create_Users_AAD/Admin-studio-users.csv` | ❌ No | Admin Studio users CSV |
 | `adminStudioGroupsCsvPath` | `Pipelines/Create_Users_AAD/Admin-Studio-Groups.csv` | ❌ No | Admin Studio groups CSV |
 | `abicNewUsersCsvPath` | `Pipelines/Create_Users_AAD/ABIC-Users.csv` | ❌ No | New ABIC users CSV |
 | `abicGroupsCsvPath` | `Pipelines/Create_Users_AAD/ABIC-Groups.csv` | ❌ No | ABIC groups CSV |
@@ -729,27 +760,30 @@ Enable detailed logging for troubleshooting:
 
 ### Internal Support
 
-**CloudOps Team:**
-- Email: `cloudops@contoso.com`
-- Slack: `#cloudops-support`
-- Wiki: [Internal CloudOps Documentation](https://wiki.contoso.com/cloudops)
+**BAB CloudOps Team:**
+- Teams Channel: `BAB CloudOps`
+- Documentation: [BAB CloudOps Repository](https://github.com/Ankojin/BAB_CloudOps)
+- Pipeline: [Create User AAD Pipeline](https://dev.azure.com/BAB/CloudOps/_build?definitionId=xxx)
 
 ### Escalation Process
 
-1. **Level 1 - Self-Service:**
-   - Review this README
-   - Check Troubleshooting section
-   - Review pipeline logs
+Our CloudOps team has established the following support escalation process:
 
-2. **Level 2 - Team Support:**
-   - Post in Slack `#cloudops-support`
-   - Include pipeline run ID
-   - Attach error logs
+1. **Level 1 - Self-Service (User Responsibility):**
+   - Review this comprehensive README documentation
+   - Check the Troubleshooting section for common issues
+   - Review pipeline execution logs for error details
 
-3. **Level 3 - Senior Engineer:**
-   - Create Azure DevOps incident
-   - Attach complete logs and CSV samples
-   - Provide business impact assessment
+2. **Level 2 - Team Support (BAB CloudOps Team):**
+   - Post in Teams `BAB CloudOps` channel for team assistance
+   - Include pipeline run ID and operation type
+   - Attach relevant error logs or screenshots
+
+3. **Level 3 - Senior Engineer Escalation:**
+   - Create Azure DevOps incident in BAB CloudOps project
+   - Attach complete logs, CSV samples, and error details
+   - Provide business impact assessment and urgency level
+   - Our senior engineers will respond based on priority
 
 ---
 
@@ -778,7 +812,7 @@ Enable detailed logging for troubleshooting:
 ```
 Pipelines/Create_Users_AAD/
 ├── AVD-users.csv
-├── Admin-Studio-Users.csv
+├── Admin-studio-users.csv
 ├── Admin-Studio-Groups.csv
 ├── ABIC-Users.csv
 ├── ABIC-Groups.csv
@@ -789,19 +823,27 @@ Pipelines/Create_Users_AAD/
 
 ## 📝 Change Log
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | 2024-01-15 | Initial release |
-| 1.1.0 | 2024-02-01 | Added ABIC operations |
-| 1.2.0 | 2024-03-10 | Enhanced error handling & retry logic |
+Our CloudOps team maintains this version history:
+
+| Version | Date | Changes | Author |
+|---------|------|---------|---------|
+| 1.0.0 | 2024-01-15 | Initial pipeline development and release | CloudOps Team |
+| 1.1.0 | 2024-02-01 | Added ABIC user management operations | CloudOps Team |
+| 1.2.0 | 2024-03-10 | Enhanced error handling & retry logic implementation | CloudOps Team |
+| 1.3.0 | 2025-11-07 | Updated documentation and corrected file references | CloudOps Team |
 
 ---
 
-## 📜 License & Support
+## 📜 Maintenance & Support
 
-**Maintained by:** CloudOps Team  
-**Last Updated:** 2024-03-10  
-**Support Level:** Production (24/7)
+**Developed and Maintained by:** BAB CloudOps Engineering Team  
+**Documentation Last Updated:** 2025-11-07  
+**Support Level:** Production Environment (24/7 Coverage)  
+**Internal Repository:** BAB_CloudOps on GitHub
+
+**Related Microsoft Documentation:**
+- [Azure Active Directory Best Practices](https://learn.microsoft.com/en-us/azure/active-directory)
+- [Microsoft Graph PowerShell SDK](https://learn.microsoft.com/en-us/powershell/microsoftgraph)
 
 **Related Documentation:**
 - [Azure AD Best Practices](https://learn.microsoft.com/en-us/azure/active-directory)
@@ -810,4 +852,4 @@ Pipelines/Create_Users_AAD/
 
 ---
 
-**Questions?** Contact CloudOps Team or open an Azure DevOps ticket.
+**Questions or Issues?** Contact the BAB CloudOps Engineering Team via our Teams channel or create an Azure DevOps work item in the BAB CloudOps project. Our team is committed to providing timely support for all user management operations.

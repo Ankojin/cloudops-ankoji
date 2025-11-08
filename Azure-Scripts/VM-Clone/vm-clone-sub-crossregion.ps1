@@ -40,15 +40,15 @@ param(
 # ---------------------------- CONFIGURATION ----------------------------
 $sourceSubscriptionId = "2a908090-d056-438c-bcf3-00ce359a72b5"
 $targetSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
-$sourceResourceGroup = "sit-ABIC-BAAS-RG-01"
-$targetResourceGroup = "bab-sit-sme-loan-RG-01"
-$sourceVMName = "DABASWBMSSLV1"
-$newVMName = "DASMEWBMSSLV1"
+$sourceResourceGroup = "sit-institutionalbrokerage-rg-01"
+$targetResourceGroup = "bab-sit-abic-ibm-rg-01"
+$sourceVMName = "DAIBMAPSLV1"
+$newVMName = "DAIBMAPSLV1"
 $location = "swedencentral"  # Target region for new disks/VM
 $vnetrg  = "bab-sit-nw-swec-rg-01"
 $vnetName = "bab-sit-nw-swec-vnet-nonpci-01"
-$subnetName = "snet-sit-nonpci-web-01"
-$vmSize = "Standard_D4s_v5"
+$subnetName = "snet-sit-nonpci-app-01"
+$vmSize = "Standard_D8s_v5"
 
 # Storage account for VHD copy (must exist in target region and subscription)
 $storageAccountName = "babsitvmbootdiag02"
@@ -73,18 +73,18 @@ Write-Host "   Location: $($sourceVM.Location)"
 $sourceVMStatus = Get-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName -Status
 $vmStatus = $sourceVMStatus.Statuses | Where-Object { $_.Code -like "PowerState/*" }
 
-if ($vmStatus.Code -ne "PowerState/deallocated") {
-    Write-Warning "Source VM is not deallocated. Current state: $($vmStatus.Code)"
-    Write-Warning "It's recommended to deallocate the VM before cloning to ensure data consistency."
-    $confirm = Read-Host "Do you want to stop and deallocate the VM? (Y/N)"
-    if ($confirm -eq "Y") {
-        Write-Host "Stopping and deallocating VM '$sourceVMName'..."
-        Stop-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName -Force
-        Write-Host "✅ VM deallocated successfully."
-    } else {
-        throw "VM must be deallocated before cloning to ensure disk consistency."
-    }
-}
+# if ($vmStatus.Code -ne "PowerState/deallocated") {
+#     Write-Warning "Source VM is not deallocated. Current state: $($vmStatus.Code)"
+#     Write-Warning "It's recommended to deallocate the VM before cloning to ensure data consistency."
+#     $confirm = Read-Host "Do you want to stop and deallocate the VM? (Y/N)"
+#     if ($confirm -eq "Y") {
+#         Write-Host "Stopping and deallocating VM '$sourceVMName'..."
+#         Stop-AzVM -ResourceGroupName $sourceResourceGroup -Name $sourceVMName -Force
+#         Write-Host "✅ VM deallocated successfully."
+#     } else {
+#         throw "VM must be deallocated before cloning to ensure disk consistency."
+#     }
+# }
 
 # Validate storage profile
 if (-not $sourceVM.StorageProfile -or -not $sourceVM.StorageProfile.OsDisk -or -not $sourceVM.StorageProfile.OsDisk.Name) {
@@ -428,7 +428,7 @@ Write-Host "`n=== CREATING NETWORK INTERFACE ===" -ForegroundColor Cyan
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 
-$staticIpAddress = "10.189.66.50"
+$staticIpAddress = "10.189.66.111" # Change as needed
 Write-Host "VNet: $vnetName, Subnet: $subnetName"
 Write-Host "Static IP: $staticIpAddress"
 
