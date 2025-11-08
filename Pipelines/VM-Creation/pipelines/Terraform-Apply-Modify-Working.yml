@@ -112,106 +112,172 @@ steps:
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
+    errorActionPreference: 'stop'
+    failOnStderr: true
     script: |
-      Write-Host "Running Python script for Terraform configuration..."
+      # Set strict error handling
+      $ErrorActionPreference = "Stop"
+      
+      Write-Host "🔧 Running Python script for Terraform configuration..."
       Set-Location "$(tfWorkingDirectory)"
       
-      # Set environment variables for Python script - all from Variable Groups
-      $env:ENVIRONMENT = "${{ parameters.environment }}"
-      $env:PROJECT_NAME = "${{ parameters.project }}"
-      $env:SUBSCRIPTION_ID = "$(subscription_id)"
-      $env:TF_STATE_PATH = "$(TF_STATE_PATH)"
-      $env:VNET_NAME = "$(vnet_name)"
-      $env:VNET_RG = "$(vnet_rg)"
-      $env:LOCATION = "$(location)"
-      $env:SUBNET_RG = "$(subnet_rg)"
+      # Function to validate and set environment variables with error checking
+      function Set-ValidatedEnvVar {
+          param($Name, $Value, $Required = $true)
+          
+          if ([string]::IsNullOrWhiteSpace($Value) -and $Required) {
+              Write-Error "❌ MISSING REQUIRED VARIABLE: $Name is not defined in variable groups"
+              throw "Required variable $Name is missing or empty"
+          }
+          
+          if (![string]::IsNullOrWhiteSpace($Value)) {
+              Set-Item -Path "env:$Name" -Value $Value
+              Write-Host "✅ SET: $Name"
+          } else {
+              Write-Host "⚠️  SKIP: $Name (empty/optional)"
+          }
+      }
       
-      # Handle JSON configuration with proper escaping
-      $env:SUBNETS_CONFIG = '$(subnets_config)'
+      Write-Host "📋 Validating and setting environment variables from Variable Groups..."
       
-      $env:KEYVAULT_NAME = "$(keyvault_name)"
-      $env:KEYVAULT_RG = "$(keyvault_rg)"
-      $env:DCR_NAME = "$(dcr_name)"
-      $env:DCR_RG = "$(dcr_rg)"
-      $env:DIAGNOSTICS_STORAGE = "$(diagnostics_storage)"
-      $env:DIAGNOSTICS_STORAGE_RG = "$(diagnostics_storage_rg)"
-      $env:SCRIPT_STORAGE_ACCOUNT = "$(script_storage_account)"
-      $env:SCRIPT_STORAGE_CONTAINER = "$(script_storage_container)"
-      $env:SCRIPT_BLOB_NAME_LINUX = "$(script_blob_name_linux)"
-      $env:SCRIPT_BLOB_NAME_WINDOWS = "$(script_blob_name_windows)"
+      # Core parameters (always available)
+      Set-ValidatedEnvVar "ENVIRONMENT" "${{ parameters.environment }}" $true
+      Set-ValidatedEnvVar "PROJECT_NAME" "${{ parameters.project }}" $true
       
-      # Key Vault Configuration for Windows script domain join
-      $env:KEYVAULT_NAME = "$(keyvault_name)"
-      $env:KEYVAULT_RG = "$(keyvault_rg)"
+      # Required Azure configuration
+      Set-ValidatedEnvVar "SUBSCRIPTION_ID" "$(subscription_id)" $true
+      Set-ValidatedEnvVar "TF_STATE_PATH" "$(TF_STATE_PATH)" $true
+      Set-ValidatedEnvVar "LOCATION" "$(location)" $true
+      
+      # Required networking configuration
+      Set-ValidatedEnvVar "VNET_NAME" "$(vnet_name)" $true
+      Set-ValidatedEnvVar "VNET_RG" "$(vnet_rg)" $true
+      Set-ValidatedEnvVar "SUBNET_RG" "$(subnet_rg)" $true
+      
+      # Handle JSON configuration with proper escaping and validation
+      $subnetsConfig = '$(subnets_config)'
+      if ([string]::IsNullOrWhiteSpace($subnetsConfig) -or $subnetsConfig -eq '$(subnets_config)') {
+          Write-Error "❌ CRITICAL: subnets_config is not defined in variable groups"
+          throw "subnets_config variable is required but not found"
+      }
+      $env:SUBNETS_CONFIG = $subnetsConfig
+      Write-Host "✅ SET: SUBNETS_CONFIG (JSON validated)"
+      
+      # Required Key Vault configuration
+      Set-ValidatedEnvVar "KEYVAULT_NAME" "$(keyvault_name)" $true
+      Set-ValidatedEnvVar "KEYVAULT_RG" "$(keyvault_rg)" $true
+      
+      # Required monitoring configuration
+      Set-ValidatedEnvVar "DCR_NAME" "$(dcr_name)" $true
+      Set-ValidatedEnvVar "DCR_RG" "$(dcr_rg)" $true
+      Set-ValidatedEnvVar "DIAGNOSTICS_STORAGE" "$(diagnostics_storage)" $true
+      Set-ValidatedEnvVar "DIAGNOSTICS_STORAGE_RG" "$(diagnostics_storage_rg)" $true
+      
+      # Required script storage configuration
+      Set-ValidatedEnvVar "SCRIPT_STORAGE_ACCOUNT" "$(script_storage_account)" $true
+      Set-ValidatedEnvVar "SCRIPT_STORAGE_CONTAINER" "$(script_storage_container)" $true
+      Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_LINUX" "$(script_blob_name_linux)" $true
+      
+      # Optional auto shutdown configuration
+      Set-ValidatedEnvVar "shutdown_enabled" "$(shutdown_enabled)" $false
+      Set-ValidatedEnvVar "shutdown_time" "$(shutdown_time)" $false
+      Set-ValidatedEnvVar "shutdown_timezone" "$(shutdown_timezone)" $false
       
       # Handle mandatory tags from GUI JSON input
       $tagsInput = '${{ parameters.tags_json_override }}'
-      if ($tagsInput -and $tagsInput -ne "" -and $tagsInput -ne "Use Variable Group") {
-          Write-Host "🏷️ Using mandatory tags from GUI input"
-          $env:default_tags_json = $tagsInput
-      } else {
-          Write-Host "❌ ERROR: Mandatory tags are required!"
+      if ([string]::IsNullOrWhiteSpace($tagsInput) -or $tagsInput -eq "Use Variable Group") {
+          Write-Error "❌ ERROR: Mandatory tags are required!"
           Write-Host "📋 Please provide all mandatory tags in JSON format through the pipeline GUI"
           Write-Host "💡 The tags field must contain all 14 mandatory tags"
-          exit 1
+          throw "Mandatory tags JSON is required but not provided"
       }
       
-      # Fallback to legacy default_tags (should not be used)
-      $env:DEFAULT_TAGS = "$(default_tags)"
+      Write-Host "🏷️ Using mandatory tags from GUI input"
+      $env:default_tags_json = $tagsInput
       
-      # Auto Shutdown Configuration
-      $env:shutdown_enabled = "$(shutdown_enabled)"
-      $env:shutdown_time = "$(shutdown_time)"
-      $env:shutdown_timezone = "$(shutdown_timezone)"
+      # Legacy fallback (should not be used)
+      Set-ValidatedEnvVar "DEFAULT_TAGS" "$(default_tags)" $false
       
-      Write-Host "🔧 VM sizes and OS images will be read from CSV file"
-      Write-Host "💾 Storage standards are hardcoded in Python script for consistency"
-      Write-Host "📁 State will be stored locally at: $(TF_STATE_PATH)"
-      Write-Host "🌐 Using VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
+      Write-Host ""
+      Write-Host "� Configuration Summary:"
+      Write-Host "📁 State location: $($env:TF_STATE_PATH)"
+      Write-Host "🌐 VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
       Write-Host "🏷️ Tags source: GUI input (mandatory)"
       Write-Host "⚙️ Infrastructure config: Variable Groups"
+      Write-Host "💾 Storage standards: Hardcoded in Python script"
+      Write-Host ""
       
+      Write-Host "🐍 Executing Python script..."
       python "$(tfWorkingDirectory)/core/generate-tf-v2-enhanced.py"
       if ($LASTEXITCODE -ne 0) {
-          Write-Error "Error: Python script failed to execute."
-          exit 1
+          Write-Error "❌ ERROR: Python script failed to execute with exit code $LASTEXITCODE"
+          throw "Python script execution failed"
       }
-      Write-Host "Listing files in the working directory after script execution:"
-      Get-ChildItem "$(tfWorkingDirectory)/Project/$($env:PROJECT_NAME)/" -Force
+      
+      Write-Host ""
+      Write-Host "✅ Python script completed successfully"
+      Write-Host "📁 Generated files:"
+      $projectPath = "$(tfWorkingDirectory)/Project/$($env:PROJECT_NAME)/"
+      if (Test-Path $projectPath) {
+          Get-ChildItem $projectPath -Force | ForEach-Object { Write-Host "  - $($_.Name)" }
+      } else {
+          Write-Warning "⚠️  Project directory not found: $projectPath"
+      }
   displayName: "Run Python Script (Tags from GUI, Infrastructure from Variable Groups)"
   condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
 
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
+    errorActionPreference: 'stop'
+    failOnStderr: true
     script: |
-      Write-Host "Validating Terraform configuration with local state..."
-      Set-Location "$(tfWorkingDirectory)/Project/$(PROJECT_NAME)/"
+      # Set strict error handling
+      $ErrorActionPreference = "Stop"
+      
+      Write-Host "🔍 Validating Terraform configuration with local state..."
+      Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
+      
+      # Verify we're in the correct directory
+      $currentDir = Get-Location
+      Write-Host "📁 Working directory: $currentDir"
+      
+      if (!(Test-Path "main-${{ parameters.environment }}.tf".ToLower())) {
+          Write-Error "❌ Terraform configuration file not found in current directory"
+          throw "Missing Terraform configuration file"
+      }
       
       # Copy existing state file to working directory if it exists
-      if (Test-Path "$(TF_STATE_PATH)/terraform.tfstate") {
+      $stateSourcePath = "$(TF_STATE_PATH)/terraform.tfstate"
+      if (Test-Path $stateSourcePath) {
           Write-Host "📄 Copying existing state file from $(TF_STATE_PATH)/"
-          Copy-Item "$(TF_STATE_PATH)/terraform.tfstate" "./" -Force
-          if (Test-Path "$(TF_STATE_PATH)/.terraform.lock.hcl") {
-              Copy-Item "$(TF_STATE_PATH)/.terraform.lock.hcl" "./" -Force
+          Copy-Item $stateSourcePath "./" -Force
+          $lockFile = "$(TF_STATE_PATH)/.terraform.lock.hcl"
+          if (Test-Path $lockFile) {
+              Copy-Item $lockFile "./" -Force
+              Write-Host "📄 Copied lock file"
           }
       } else {
           Write-Host "📄 No existing state file found. This will be a new deployment."
       }
       
       # Initialize with local backend
+      Write-Host "🔧 Initializing Terraform..."
       terraform init
       if ($LASTEXITCODE -ne 0) {
-          Write-Error "Terraform initialization failed! Exiting."
-          exit 1
+          Write-Error "❌ Terraform initialization failed with exit code $LASTEXITCODE"
+          throw "Terraform init failed"
       }
         
+      # Validate configuration
+      Write-Host "✅ Validating Terraform configuration..."
       terraform validate
       if ($LASTEXITCODE -ne 0) {
-          Write-Error "Terraform validation failed! Exiting."
-          exit 1
+          Write-Error "❌ Terraform validation failed with exit code $LASTEXITCODE"
+          throw "Terraform validation failed"
       }
-      Write-Host "Terraform configuration is valid."
+      
+      Write-Host "✅ Terraform configuration is valid and ready for deployment"
   displayName: "Validate Terraform Configuration with Local State"
 
 - task: Bash@3
@@ -225,66 +291,102 @@ steps:
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
+    errorActionPreference: 'stop'
+    failOnStderr: true
     script: |
-      Write-Host "Executing Terraform ${{ parameters.action }} with local state..."
-      Set-Location "$(tfWorkingDirectory)/Project/$(PROJECT_NAME)/"
+      # Set strict error handling
+      $ErrorActionPreference = "Stop"
+      
+      Write-Host "🚀 Executing Terraform ${{ parameters.action }} with local state management..."
+      Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
+      
+      # Verify we're in the correct directory with required files
+      $currentDir = Get-Location
+      Write-Host "📁 Working directory: $currentDir"
+      
+      $tfFile = "main-${{ parameters.environment }}".ToLower() + ".tf"
+      if (!(Test-Path $tfFile)) {
+          Write-Error "❌ Terraform configuration file not found: $tfFile"
+          throw "Missing Terraform configuration file"
+      }
       
       # Copy existing state file to working directory if it exists (for modify operations)
-      if ("${{ parameters.action }}" -eq "modify" -and (Test-Path "$(TF_STATE_PATH)/terraform.tfstate")) {
+      $stateSourcePath = "$(TF_STATE_PATH)/terraform.tfstate"
+      if ("${{ parameters.action }}" -eq "modify" -and (Test-Path $stateSourcePath)) {
           Write-Host "📄 Copying existing state file for modify operation"
-          Copy-Item "$(TF_STATE_PATH)/terraform.tfstate" "./" -Force
-          if (Test-Path "$(TF_STATE_PATH)/.terraform.lock.hcl") {
-              Copy-Item "$(TF_STATE_PATH)/.terraform.lock.hcl" "./" -Force
+          Copy-Item $stateSourcePath "./" -Force
+          $lockFile = "$(TF_STATE_PATH)/.terraform.lock.hcl"
+          if (Test-Path $lockFile) {
+              Copy-Item $lockFile "./" -Force
           }
       }
       
       # Initialize with local backend
+      Write-Host "🔧 Initializing Terraform..."
       terraform init
       if ($LASTEXITCODE -ne 0) {
-          Write-Error "Terraform initialization failed! Exiting."
-          exit 1
+          Write-Error "❌ Terraform initialization failed with exit code $LASTEXITCODE"
+          throw "Terraform init failed"
       }
         
+      # Format code
+      Write-Host "📝 Formatting Terraform code..."
       terraform fmt
       if ($LASTEXITCODE -ne 0) {
-          Write-Error "Terraform format failed! Exiting."
-          exit 1
+          Write-Warning "⚠️  Terraform format failed but continuing..."
       }
       
+      # Validate configuration
+      Write-Host "✅ Validating Terraform configuration..."
       terraform validate
       if ($LASTEXITCODE -ne 0) {
-          Write-Error "Terraform validation failed! Exiting."
-          exit 1
+          Write-Error "❌ Terraform validation failed with exit code $LASTEXITCODE"
+          throw "Terraform validation failed"
       }
       
+      # Create plan
+      Write-Host "📋 Creating Terraform plan..."
       terraform plan -out=tfplan
       if ($LASTEXITCODE -ne 0) {
-          Write-Error "Terraform plan failed! Exiting."
-          exit 1
+          Write-Error "❌ Terraform plan failed with exit code $LASTEXITCODE"
+          throw "Terraform plan failed"
       }
       
+      # Apply changes
+      Write-Host "⚡ Applying Terraform plan..."
       terraform apply -auto-approve tfplan
       if ($LASTEXITCODE -ne 0) {
-          Write-Error "Terraform apply failed! Exiting."
-          exit 1
+          Write-Error "❌ Terraform apply failed with exit code $LASTEXITCODE"
+          throw "Terraform apply failed"
       }
       
-      # Copy state file back to persistent location on agent
-      Write-Host "📄 Saving state file to persistent location: $(TF_STATE_PATH)/"
-      New-Item -Path "$(TF_STATE_PATH)" -ItemType Directory -Force | Out-Null
-      Copy-Item "terraform.tfstate" "$(TF_STATE_PATH)/" -Force
+      # Save state file back to persistent location on agent
+      Write-Host "📄 Saving state file to persistent location..."
+      $stateTargetPath = "$(TF_STATE_PATH)"
+      New-Item -Path $stateTargetPath -ItemType Directory -Force | Out-Null
+      
+      if (Test-Path "terraform.tfstate") {
+          Copy-Item "terraform.tfstate" "$stateTargetPath/" -Force
+          Write-Host "✅ State file saved to: $stateTargetPath/terraform.tfstate"
+      } else {
+          Write-Warning "⚠️  No state file found to save"
+      }
+      
       if (Test-Path ".terraform.lock.hcl") {
-          Copy-Item ".terraform.lock.hcl" "$(TF_STATE_PATH)/" -Force
+          Copy-Item ".terraform.lock.hcl" "$stateTargetPath/" -Force
+          Write-Host "✅ Lock file saved"
       }
       
-      Write-Host "✅ State file saved successfully to: $(TF_STATE_PATH)/terraform.tfstate"
+      Write-Host ""
+      Write-Host "🎉 Terraform deployment completed successfully!"
+      Write-Host "📊 Final state saved to: $stateTargetPath/"
   displayName: "Terraform Apply/Modify with Local State Management"
   condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
 
 - task: PublishBuildArtifacts@1
   inputs:
-    PathtoPublish: '$(tfWorkingDirectory)/Project/$(PROJECT_NAME)/'
-    ArtifactName: 'TerraformFiles-${{ parameters.environment }}'
+    PathtoPublish: '$(tfWorkingDirectory)/Project/${{ parameters.project }}/'
+    ArtifactName: 'TerraformFiles-${{ parameters.environment }}-$(Build.BuildNumber)'
     publishLocation: 'Container'
   displayName: "Upload Terraform Files as Build Artifacts"
-  condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
+  condition: and(succeeded(), or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
