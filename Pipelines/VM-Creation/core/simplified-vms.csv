@@ -1,2 +1,5 @@
-vm_name,resource_group,vm_role,subnet_type,subnet_index,static_ip,vm_size,os_type,os_publisher,os_offer,os_sku,os_version,disk_1_size,disk_2_size,disk_3_size,create_rg
-ankoji-test-01,ankoji-test-01,app_server,app,1,10.189.57.162,Standard_B2s,windows,MicrosoftWindowsServer,WindowsServer,2019-Datacenter,latest,16,,,TRUE
+vm_name,resource_group,vm_role,subnet_name,static_ip,vm_size,os_template,disk_1_size,disk_2_size,disk_3_size,create_rg
+ankoji-test-01,ankoji-test-01,app_server,snet-sit-nonpci-app-02,10.189.57.162,Standard_B2s,windows-2019,16,,,TRUE
+ankoji-test-02,ankoji-test-01,web_server,snet-sit-nonpci-web-01,10.189.59.163,Standard_B2s,ubuntu-22.04,16,50,,TRUE
+ankoji-test-03,ankoji-test-01,database,snet-sit-nonpci-db-02,10.189.58.164,Standard_D4s_v5,windows-2022,64,500,1000,TRUE
+ankoji-test-04,ankoji-test-01,monitoring,snet-sit-nonpci-mgmt-01,10.189.60.165,Standard_B2s,rhel-9,16,100,,TRUE

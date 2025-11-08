@@ -1,3 +1,0 @@
-vm_name,vm_size,os_type,os_image,subnet_name,data_disks,subnet_index
-test-vm-01,Standard_B2s,Windows,Windows Server 2019 Datacenter,app,128:Premium_LRS,0
-test-vm-02,Standard_B2s,Linux,Ubuntu 20.04 LTS,db,64:Standard_LRS;128:Premium_LRS,0

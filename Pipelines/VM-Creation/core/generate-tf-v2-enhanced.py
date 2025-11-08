@@ -25,7 +25,6 @@ class TerraformVMGenerator:
             'vnet_name': os.getenv('VNET_NAME'),
             'vnet_rg': os.getenv('VNET_RG'),
             'subnet_rg': os.getenv('SUBNET_RG'),
-            'subnets_config': os.getenv('SUBNETS_CONFIG', '{}'),
             'keyvault_name': os.getenv('KEYVAULT_NAME'),
             'keyvault_rg': os.getenv('KEYVAULT_RG'),
             'dcr_name': os.getenv('DCR_NAME'),
@@ -36,6 +35,92 @@ class TerraformVMGenerator:
             'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
             'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
             'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS')
+        }
+        
+        # Predefined OS Templates (Corporate Standards)
+        self.os_templates = {
+            # Windows Templates
+            "windows-2019": {
+                "os_type": "windows",
+                "publisher": "MicrosoftWindowsServer", 
+                "offer": "WindowsServer",
+                "sku": "2019-Datacenter",
+                "version": "latest"
+            },
+            "windows-2022": {
+                "os_type": "windows",
+                "publisher": "MicrosoftWindowsServer",
+                "offer": "WindowsServer", 
+                "sku": "2022-Datacenter",
+                "version": "latest"
+            },
+            "windows-2016": {
+                "os_type": "windows",
+                "publisher": "MicrosoftWindowsServer",
+                "offer": "WindowsServer",
+                "sku": "2016-Datacenter",
+                "version": "latest"
+            },
+            # Ubuntu Templates
+            "ubuntu-20.04": {
+                "os_type": "linux",
+                "publisher": "Canonical",
+                "offer": "0001-com-ubuntu-server-focal",
+                "sku": "20_04-lts-gen2",
+                "version": "latest"
+            },
+            "ubuntu-22.04": {
+                "os_type": "linux", 
+                "publisher": "Canonical",
+                "offer": "0001-com-ubuntu-server-jammy",
+                "sku": "22_04-lts-gen2",
+                "version": "latest"
+            },
+            "ubuntu-18.04": {
+                "os_type": "linux",
+                "publisher": "Canonical", 
+                "offer": "UbuntuServer",
+                "sku": "18.04-LTS",
+                "version": "latest"
+            },
+            # Red Hat Enterprise Linux Templates
+            "rhel-8": {
+                "os_type": "linux",
+                "publisher": "RedHat",
+                "offer": "RHEL", 
+                "sku": "8-gen2",
+                "version": "latest"
+            },
+            "rhel-9": {
+                "os_type": "linux",
+                "publisher": "RedHat",
+                "offer": "RHEL",
+                "sku": "9-gen2", 
+                "version": "latest"
+            },
+            "rhel-7": {
+                "os_type": "linux",
+                "publisher": "RedHat",
+                "offer": "RHEL",
+                "sku": "7-gen2",
+                "version": "latest"
+            },
+            # CentOS Templates
+            "centos-7": {
+                "os_type": "linux",
+                "publisher": "OpenLogic",
+                "offer": "CentOS",
+                "sku": "7_9-gen2",
+                "version": "latest"
+            },
+            # SUSE Linux Templates
+            "sles-15": {
+                "os_type": "linux",
+                "publisher": "SUSE",
+                "offer": "sles-15-sp3",
+                "sku": "gen2",
+                "version": "latest"
+            }
         }
         
         # Hardcoded standards (enforced consistency)
@@ -52,13 +137,6 @@ class TerraformVMGenerator:
             'time': os.getenv('shutdown_time', '2000'),
             'timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
         }
-        
-        # Parse subnets configuration
-        try:
-            self.subnets = json.loads(self.config['subnets_config'])
-        except json.JSONDecodeError:
-            print("[ERROR] Invalid subnets configuration JSON")
-            self.subnets = {}
         
         # Paths - relative to pipeline working directory ($(Build.SourcesDirectory)/Pipelines/VM-Creation)
         self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
@@ -79,14 +157,9 @@ class TerraformVMGenerator:
         if missing_vars:
             print(f"[ERROR] Missing required environment variables: {', '.join(missing_vars)}")
             sys.exit(1)
-        
-        # Validate subnets configuration
-        if not self.subnets:
-            print("[ERROR] No subnets configuration found")
-            sys.exit(1)
             
         print(f"[OK] Configuration validated for {self.environment} environment")
-        print(f"Available subnets: {list(self.subnets.keys())}")
+        print(f"[INFO] Available OS templates: {', '.join(self.os_templates.keys())}")
     
     def read_and_encode_cloud_init_yaml(self) -> str:
         """Read and base64 encode cloud-init file"""
@@ -163,18 +236,26 @@ class TerraformVMGenerator:
         print(f"[TAGS] Final tag count: {len(tags)} (including auto-generated)")
         return tags
     
-    def get_subnet_name(self, subnet_type: str, subnet_index: int = 0) -> str:
-        """Get subnet name based on type and index"""
-        if subnet_type not in self.subnets:
-            print(f"[WARNING] Unknown subnet type: {subnet_type}, using first available")
-            subnet_type = list(self.subnets.keys())[0]
+    def resolve_os_template(self, os_template: str) -> Dict[str, str]:
+        """Resolve OS template to detailed OS configuration"""
+        template = os_template.strip().lower()
         
-        subnet_list = self.subnets[subnet_type]
-        if subnet_index >= len(subnet_list):
-            print(f"[WARNING] Subnet index {subnet_index} out of range for {subnet_type}, using index 0")
-            subnet_index = 0
-            
-        return subnet_list[subnet_index]
+        if template not in self.os_templates:
+            print(f"[WARNING] Unknown OS template: {os_template}")
+            print(f"[INFO] Available templates: {', '.join(self.os_templates.keys())}")
+            print(f"[INFO] Defaulting to windows-2019")
+            template = "windows-2019"
+        
+        os_config = self.os_templates[template]
+        print(f"[INFO] Using OS template '{template}': {os_config['publisher']} {os_config['offer']} {os_config['sku']}")
+        
+        return {
+            'os_type': os_config['os_type'],
+            'publisher': os_config['publisher'],
+            'offer': os_config['offer'],
+            'sku': os_config['sku'],
+            'version': os_config['version']
+        }
     
     def generate_terraform(self):
         """Generate Terraform configuration"""
@@ -382,31 +463,32 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
         vm_name = row["vm_name"].strip()
         resource_group = row["resource_group"].strip()
         vm_role = row["vm_role"].strip()
-        subnet_type = row["subnet_type"].strip()
-        subnet_index = int(row.get("subnet_index", 0))
+        subnet_name = row["subnet_name"].strip()
         static_ip = row["static_ip"].strip()
         vm_size = row["vm_size"].strip()  # Read directly from CSV
-        os_type = row.get("os_type", "linux").strip().lower()
+        os_template = row.get("os_template", "windows-2019").strip()
         
-        # OS Image details from CSV
-        os_publisher = row.get("os_publisher", "RedHat").strip()
-        os_offer = row.get("os_offer", "RHEL").strip()
-        os_sku = row.get("os_sku", "92-gen2").strip()
-        os_version = row.get("os_version", "latest").strip()
+        # Resolve OS template to detailed configuration
+        os_config = self.resolve_os_template(os_template)
+        os_type = os_config['os_type']
         
         custom_tags = row.get("custom_tags", "").strip()  # Will be ignored
         create_rg = row.get("create_rg", "false").lower() == "true"
         
-        # Calculate values
-        subnet_name = self.get_subnet_name(subnet_type, subnet_index)
-        tags = self.parse_tags()  # No CSV tags - only from variable groups
+        # Parse tags from environment variables (GUI input)
+        tags = self.parse_tags()
         
-        # Create OS image object from CSV data
+        print(f"[INFO] Processing VM: {vm_name}")
+        print(f"[INFO] Using subnet: {subnet_name}")
+        print(f"[INFO] Static IP: {static_ip}")
+        print(f"[INFO] OS Template: {os_template}")
+        
+        # Create OS image object from resolved template
         os_image = {
-            'publisher': os_publisher,
-            'offer': os_offer,
-            'sku': os_sku,
-            'version': os_version
+            'publisher': os_config['publisher'],
+            'offer': os_config['offer'],
+            'sku': os_config['sku'],
+            'version': os_config['version']
         }
         
         # Validate VM size

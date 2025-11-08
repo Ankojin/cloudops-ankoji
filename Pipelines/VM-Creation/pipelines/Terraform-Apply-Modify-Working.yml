@@ -154,38 +154,6 @@ steps:
       Set-ValidatedEnvVar "VNET_RG" "$(vnet_rg)" $true
       Set-ValidatedEnvVar "SUBNET_RG" "$(subnet_rg)" $true
       
-      # Handle JSON configuration with proper escaping and validation
-      $subnetsConfig = '$(subnets_config)'
-      Write-Host "🔍 DEBUG: Raw subnets_config value: '$subnetsConfig'"
-      
-      # Check if variable was resolved - look for the actual unresolved pattern
-      if ($subnetsConfig -match '^\$\(subnets_config\)$') {
-          Write-Error "❌ CRITICAL: subnets_config variable is not defined in variable groups"
-          Write-Host "📋 REQUIRED: Add 'subnets_config' variable to your VM-Creation-${{ parameters.environment }} variable group"
-          throw "subnets_config variable not found in variable group"
-      }
-      
-      # Clean up whitespace in JSON but validate it's not empty
-      $cleanedSubnetsConfig = $subnetsConfig.Trim()
-      if ([string]::IsNullOrWhiteSpace($cleanedSubnetsConfig)) {
-          Write-Error "❌ CRITICAL: subnets_config variable is empty"
-          throw "subnets_config variable is empty"
-      }
-      
-      # Validate JSON format
-      try {
-          $testJson = $cleanedSubnetsConfig | ConvertFrom-Json
-          Write-Host "✅ SET: SUBNETS_CONFIG (JSON format validated)"
-          Write-Host "📍 Found subnet types: $($testJson.PSObject.Properties.Name -join ', ')"
-      } catch {
-          Write-Error "❌ CRITICAL: subnets_config contains invalid JSON format"
-          Write-Host "📋 Current value: $cleanedSubnetsConfig"
-          Write-Host "💡 Error: $($_.Exception.Message)"
-          throw "subnets_config must be valid JSON format"
-      }
-      
-      $env:SUBNETS_CONFIG = $cleanedSubnetsConfig
-      
       # Required Key Vault configuration
       Set-ValidatedEnvVar "KEYVAULT_NAME" "$(keyvault_name)" $true
       Set-ValidatedEnvVar "KEYVAULT_RG" "$(keyvault_rg)" $true
@@ -230,9 +198,10 @@ steps:
       }
       
       Write-Host ""
-      Write-Host "� Configuration Summary:"
+      Write-Host "📋 Configuration Summary:"
       Write-Host "📁 State location: $($env:TF_STATE_PATH)"
       Write-Host "🌐 VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
+      Write-Host "🔗 Subnet names: Direct from CSV file"
       Write-Host "🏷️ Tags source: GUI input (mandatory)"
       Write-Host "⚙️ Infrastructure config: Variable Groups"
       Write-Host "💾 Storage standards: Hardcoded in Python script"
