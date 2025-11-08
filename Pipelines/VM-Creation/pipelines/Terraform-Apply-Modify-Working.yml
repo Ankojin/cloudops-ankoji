@@ -158,8 +158,8 @@ steps:
       $subnetsConfig = '$(subnets_config)'
       Write-Host "🔍 DEBUG: Raw subnets_config value: '$subnetsConfig'"
       
-      # Check if variable was resolved (not just whitespace check)
-      if ($subnetsConfig -eq '$(subnets_config)') {
+      # Check if variable was resolved - look for the actual unresolved pattern
+      if ($subnetsConfig -match '^\$\(subnets_config\)$') {
           Write-Error "❌ CRITICAL: subnets_config variable is not defined in variable groups"
           Write-Host "📋 REQUIRED: Add 'subnets_config' variable to your VM-Creation-${{ parameters.environment }} variable group"
           throw "subnets_config variable not found in variable group"
