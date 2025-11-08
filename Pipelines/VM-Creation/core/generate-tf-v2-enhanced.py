@@ -57,7 +57,7 @@ class TerraformVMGenerator:
         try:
             self.subnets = json.loads(self.config['subnets_config'])
         except json.JSONDecodeError:
-            print("❌ Invalid subnets configuration JSON")
+            print("[ERROR] Invalid subnets configuration JSON")
             self.subnets = {}
         
         # Paths - relative to pipeline working directory or from environment
@@ -77,16 +77,16 @@ class TerraformVMGenerator:
         missing_vars = [var for var in required_vars if not self.config.get(var)]
         
         if missing_vars:
-            print(f"❌ Missing required environment variables: {', '.join(missing_vars)}")
+            print(f"[ERROR] Missing required environment variables: {', '.join(missing_vars)}")
             sys.exit(1)
         
         # Validate subnets configuration
         if not self.subnets:
-            print("❌ No subnets configuration found")
+            print("[ERROR] No subnets configuration found")
             sys.exit(1)
             
         print(f"[OK] Configuration validated for {self.environment} environment")
-        print(f"📍 Available subnets: {list(self.subnets.keys())}")
+        print(f"Available subnets: {list(self.subnets.keys())}")
     
     def read_and_encode_cloud_init_yaml(self) -> str:
         """Read and base64 encode cloud-init file"""
@@ -95,7 +95,7 @@ class TerraformVMGenerator:
                 content = f.read()
                 return base64.b64encode(content.encode()).decode()
         except FileNotFoundError:
-            print(f"⚠️ Cloud-init file {self.cloud_init_file} not found.")
+            print(f"[WARNING] Cloud-init file {self.cloud_init_file} not found.")
             return ""
     
     def parse_tags(self, tags_str: str = None) -> Dict[str, str]:
@@ -114,8 +114,8 @@ class TerraformVMGenerator:
         # Get tags from JSON format (mandatory)
         json_tags = os.getenv('default_tags_json')
         if not json_tags or json_tags.strip() == '{}' or json_tags.strip() == '':
-            print("❌ ERROR: Mandatory tags are required!")
-            print("📋 Required tags JSON format:")
+            print("[ERROR] Mandatory tags are required!")
+            print("[REQUIRED] Required tags JSON format:")
             print('{"Company": "BAB", "Department": "Information Technology", "ProjectName": "YOUR_PROJECT", "ApplicationName": "YOUR_APP", "StartDate": "2025-11-08", "EndDate": "2025-11-08", "Region": "Sweden Central", "ApproverName": "YOUR_APPROVER", "RequesterName": "CloudOps Team", "BusinessOwner": "YOUR_OWNER", "TechnicalOwner": "YOUR_TECH_OWNER", "CostCenter": "YOUR_COST_CENTER", "ServiceClass": "YOUR_SERVICE_CLASS", "ManagedBy": "CloudOps Team"}')
             raise ValueError("Mandatory tags JSON is required but not provided")
         
@@ -123,35 +123,35 @@ class TerraformVMGenerator:
             parsed_tags = json.loads(json_tags)
             if isinstance(parsed_tags, dict):
                 tags.update(parsed_tags)
-                print(f"✅ Loaded {len(tags)} tags from JSON format")
+                print(f"[OK] Loaded {len(tags)} tags from JSON format")
                 
                 # Validate all mandatory tags are present
                 missing_tags = [key for key in mandatory_tag_keys if key not in tags]
                 if missing_tags:
-                    print(f"❌ ERROR: Missing mandatory tags: {', '.join(missing_tags)}")
-                    print("📋 Required tags:")
+                    print(f"[ERROR] Missing mandatory tags: {', '.join(missing_tags)}")
+                    print("[REQUIRED] Required tags:")
                     for key in mandatory_tag_keys:
                         print(f"  - {key}")
                     raise ValueError(f"Missing mandatory tags: {', '.join(missing_tags)}")
                 
                 # Validate Company is BAB
                 if tags.get('Company', '').upper() != 'BAB':
-                    print("❌ ERROR: Company must be 'BAB'")
+                    print("[ERROR] Company must be 'BAB'")
                     raise ValueError("Company tag must be 'BAB'")
                 
-                print("✅ All mandatory tags validated successfully")
+                print("[OK] All mandatory tags validated successfully")
             else:
                 raise ValueError("Tags must be a JSON object")
                 
         except json.JSONDecodeError as e:
-            print(f"❌ ERROR: Invalid JSON format in tags: {e}")
-            print("📋 Expected JSON format:")
+            print(f"[ERROR] Invalid JSON format in tags: {e}")
+            print("[EXPECTED] Expected JSON format:")
             print('{"Company": "BAB", "Department": "Information Technology", ...}')
             raise ValueError(f"Invalid JSON format: {e}")
         
         # NOTE: CSV tags are ignored - tags come ONLY from mandatory GUI JSON input
         if tags_str and tags_str.strip():
-            print("ℹ️  Ignoring CSV tags - using mandatory GUI JSON tags only")
+            print("[INFO] Ignoring CSV tags - using mandatory GUI JSON tags only")
         
         # Add auto-generated tags (these override everything)
         from datetime import datetime
@@ -160,18 +160,18 @@ class TerraformVMGenerator:
         tags['Environment'] = self.environment
         tags['Project'] = self.project_name
         
-        print(f"🏷️  Final tag count: {len(tags)} (including auto-generated)")
+        print(f"[TAGS] Final tag count: {len(tags)} (including auto-generated)")
         return tags
     
     def get_subnet_name(self, subnet_type: str, subnet_index: int = 0) -> str:
         """Get subnet name based on type and index"""
         if subnet_type not in self.subnets:
-            print(f"⚠️ Unknown subnet type: {subnet_type}, using first available")
+            print(f"[WARNING] Unknown subnet type: {subnet_type}, using first available")
             subnet_type = list(self.subnets.keys())[0]
         
         subnet_list = self.subnets[subnet_type]
         if subnet_index >= len(subnet_list):
-            print(f"⚠️ Subnet index {subnet_index} out of range for {subnet_type}, using index 0")
+            print(f"[WARNING] Subnet index {subnet_index} out of range for {subnet_type}, using index 0")
             subnet_index = 0
             
         return subnet_list[subnet_index]
@@ -208,15 +208,15 @@ class TerraformVMGenerator:
                         vm_outputs.append(vm_name)
                         self._generate_vm_resources(tf_file, row, cloud_init_content)
             except FileNotFoundError:
-                print(f"❌ CSV file not found: {self.csv_file_path}")
+                print(f"[ERROR] CSV file not found: {self.csv_file_path}")
                 sys.exit(1)
             
             # Generate outputs
             self._generate_outputs(tf_file, vm_outputs)
         
         print(f"[OK] Terraform configuration generated: {self.output_tf_file}")
-        print(f"📊 Resource groups to create: {len(self.resource_groups_to_create)}")
-        print(f"🖥️ VMs to deploy: {len(vm_outputs)}")
+        print(f"[INFO] Resource groups to create: {len(self.resource_groups_to_create)}")
+        print(f"[INFO] VMs to deploy: {len(vm_outputs)}")
     
     def _generate_outputs(self, tf_file, vm_list: List[str]):
         """Generate Terraform outputs for VM information"""
@@ -261,7 +261,7 @@ output "deployment_summary" {
 }
 ''')
         
-        print(f"📊 Generated outputs for {len(vm_list)} VMs")
+        print(f"[INFO] Generated outputs for {len(vm_list)} VMs")
     
     def _collect_resource_groups(self):
         """First pass to collect all resource groups that need to be created"""
@@ -400,7 +400,7 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
         
         # Validate VM size
         if not vm_size:
-            print(f"⚠️ No VM size specified for {vm_name}, using Standard_D4s_v5")
+            print(f"[WARNING] No VM size specified for {vm_name}, using Standard_D4s_v5")
             vm_size = "Standard_D4s_v5"
         
         # Format tags for Terraform
@@ -418,8 +418,8 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
         # For now, using direct blob URL (assumes public read or managed identity access)
         sas_url = f"https://{self.config['script_storage_account']}.blob.core.windows.net/{self.config['script_storage_container']}/{script_blob_name}"
         
-        print(f"ℹ️ Using {script_description}: {script_blob_name}")
-        print(f"⚠️ WARNING: Using direct blob URL. Consider implementing dynamic SAS token generation.")
+        print(f"[INFO] Using {script_description}: {script_blob_name}")
+        print(f"[WARNING] Using direct blob URL. Consider implementing dynamic SAS token generation.")
         
         # Resource group reference
         rg_reference = f"azurerm_resource_group.{resource_group.replace('-', '_')}_rg.name" if create_rg else f'"{resource_group}"'
