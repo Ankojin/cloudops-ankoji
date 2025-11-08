@@ -364,6 +364,16 @@ steps:
           Write-Host "📄 No existing state file found. This will be a new deployment."
       }
       
+      # Copy existing Terraform configuration for consistency (important for modify operations)
+      $tfConfigSource = "$(TF_STATE_PATH)/main-${{ parameters.environment }}.tf".ToLower()
+      if (Test-Path $tfConfigSource) {
+          Copy-Item $tfConfigSource "./" -Force
+          Write-Host "📄 Copied existing TF configuration for consistency"
+          Write-Host "[DEBUG] Using persistent TF config: $(Resolve-Path $tfConfigSource)"
+      } else {
+          Write-Host "📄 No existing TF configuration found - using newly generated"
+      }
+      
       # Initialize with local backend
       Write-Host "🔧 Initializing Terraform..."
       terraform init
@@ -472,6 +482,16 @@ steps:
       Write-Host "[DEBUG] Current working directory: $(Get-Location)"
       
       New-Item -Path $stateTargetPath -ItemType Directory -Force | Out-Null
+      
+      # Save Terraform configuration file for future modify operations
+      $tfFileName = "main-${{ parameters.environment }}.tf".ToLower()
+      if (Test-Path $tfFileName) {
+          Copy-Item $tfFileName "$stateTargetPath/" -Force
+          Write-Host "✅ Terraform configuration saved to: $stateTargetPath/$tfFileName"
+          Write-Host "[DEBUG] TF config size: $((Get-Item $tfFileName).Length) bytes"
+      } else {
+          Write-Warning "⚠️  Terraform configuration file not found for persistence"
+      }
       
       if (Test-Path "terraform.tfstate") {
           $stateFileSize = (Get-Item "terraform.tfstate").Length
