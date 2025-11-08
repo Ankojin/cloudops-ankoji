@@ -24,7 +24,7 @@ parameters:
     type: string
     default: "BaaS-Platform"
   - name: tags_json_override
-    displayName: "⚠️ REQUIRED: Mandatory Tags (JSON Format) - See description below"
+    displayName: "Tags (JSON Format) - REQUIRED for Apply | OPTIONAL for Modify"
     type: string
     default: '{"Company": "BAB", "Department": "Information Technology", "ProjectName": "pilot-test", "ApplicationName": "pilot-test", "StartDate": "2025-11-08", "EndDate": "2025-11-08", "Region": "Sweden Central", "ApproverName": "pilot-test", "RequesterName": "CloudOps Team", "BusinessOwner": "pilot-test", "TechnicalOwner": "pilot-test", "CostCenter": "pilot-test", "ServiceClass": "pilot-test", "ManagedBy": "CloudOps Team"}'
 
@@ -206,17 +206,28 @@ steps:
       Set-ValidatedEnvVar "shutdown_time" "$(shutdown_time)" $false
       Set-ValidatedEnvVar "shutdown_timezone" "$(shutdown_timezone)" $false
       
-      # Handle mandatory tags from GUI JSON input
+      # Handle mandatory tags from GUI JSON input - different logic for apply vs modify
       $tagsInput = '${{ parameters.tags_json_override }}'
-      if ([string]::IsNullOrWhiteSpace($tagsInput) -or $tagsInput -eq "Use Variable Group") {
-          Write-Error "❌ ERROR: Mandatory tags are required!"
-          Write-Host "📋 Please provide all mandatory tags in JSON format through the pipeline GUI"
-          Write-Host "💡 The tags field must contain all 14 mandatory tags"
-          throw "Mandatory tags JSON is required but not provided"
+      if ('${{ parameters.action }}' -eq 'apply') {
+          # Apply: Tags are mandatory
+          if ([string]::IsNullOrWhiteSpace($tagsInput) -or $tagsInput -eq "Use Variable Group") {
+              Write-Error "❌ ERROR: Mandatory tags are required for new VM creation!"
+              Write-Host "📋 Please provide all mandatory tags in JSON format through the pipeline GUI"
+              Write-Host "💡 The tags field must contain all 14 mandatory tags"
+              throw "Mandatory tags JSON is required but not provided for apply action"
+          }
+          Write-Host "🏷️ Using mandatory tags from GUI input for new VM creation"
+          $env:default_tags_json = $tagsInput
+      } elseif ('${{ parameters.action }}' -eq 'modify') {
+          # Modify: Tags are optional - use existing tags if not provided
+          if ([string]::IsNullOrWhiteSpace($tagsInput) -or $tagsInput -eq "Use Variable Group") {
+              Write-Host "🏷️ No new tags provided for modify action - will preserve existing VM tags"
+              $env:default_tags_json = "{}"  # Empty JSON to preserve existing tags
+          } else {
+              Write-Host "🏷️ Using updated tags from GUI input for VM modification"
+              $env:default_tags_json = $tagsInput
+          }
       }
-      
-      Write-Host "🏷️ Using mandatory tags from GUI input"
-      $env:default_tags_json = $tagsInput
       
       Write-Host ""
       Write-Host "� Configuration Summary:"
@@ -259,8 +270,56 @@ steps:
           Write-Host "##vso[task.complete result=Failed;]Project directory creation failed"
           throw "Project directory was not created - STOPPING PIPELINE"
       }
-  displayName: "Run Python Script (Tags from GUI, Infrastructure from Variable Groups)"
-  condition: and(succeeded(), or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
+  displayName: "Run Python Script (Generate New VM Configuration - Apply Only)"
+  condition: and(succeeded(), eq('${{ parameters.action }}', 'apply'))
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    errorActionPreference: 'stop'
+    failOnStderr: true
+    script: |
+      # Set strict error handling
+      $ErrorActionPreference = "Stop"
+      
+      Write-Host "🔧 Preparing for modify operation on existing VM infrastructure..."
+      Set-Location "$(tfWorkingDirectory)"
+      
+      # For modify operations, we need to use existing Terraform configuration
+      $projectPath = "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
+      $tfFile = "$projectPath/main-${{ parameters.environment }}.tf".ToLower()
+      
+      Write-Host "📁 Checking for existing Terraform configuration..."
+      if (!(Test-Path $projectPath)) {
+          Write-Error "❌ CRITICAL: Project directory not found: $projectPath"
+          Write-Host "📋 REQUIRED: You must run 'apply' action first to create the initial VM before using 'modify'"
+          throw "Project directory not found - run 'apply' first"
+      }
+      
+      if (!(Test-Path $tfFile)) {
+          Write-Error "❌ CRITICAL: Terraform configuration file not found: $tfFile"
+          Write-Host "📋 REQUIRED: You must run 'apply' action first to create the initial VM before using 'modify'"
+          throw "Terraform configuration file not found - run 'apply' first"
+      }
+      
+      Write-Host "✅ Found existing Terraform configuration for modification"
+      Write-Host "📄 Configuration file: $tfFile"
+      
+      # Verify state file exists
+      $stateFile = "$(TF_STATE_PATH)/terraform.tfstate"
+      if (!(Test-Path $stateFile)) {
+          Write-Error "❌ CRITICAL: Terraform state file not found: $stateFile"
+          Write-Host "📋 REQUIRED: You must run 'apply' action first to create the initial VM state"
+          throw "Terraform state file not found - run 'apply' first"
+      }
+      
+      Write-Host "✅ Found existing Terraform state file"
+      Write-Host "📄 State file: $stateFile"
+      Write-Host ""
+      Write-Host "🎯 Ready for modify operation on existing VM infrastructure"
+      Write-Host "⚠️  NOTE: Modify will only update VM settings, not recreate resources"
+  displayName: "Prepare for Modify Operation (Use Existing Configuration)"
+  condition: and(succeeded(), eq('${{ parameters.action }}', 'modify'))
 
 - task: PowerShell@2
   inputs:
