@@ -1,7 +1,7 @@
 # Pipeline GUI Options
 
 ## Overview
-When running the VM Creation pipeline through Azure DevOps, you'll see a GUI form with the following options.
+When running the VM Creation pipeline through Azure DevOps, you'll see a simplified GUI form focused on mandatory tags.
 
 ## 📋 Required Parameters
 
@@ -17,26 +17,9 @@ When running the VM Creation pipeline through Azure DevOps, you'll see a GUI for
 - Default: `BaaS-Platform`
 - Customize for different projects
 
-## 🔧 Optional Override Parameters
+## 🏷️ **⚠️ MANDATORY: Tags (JSON Format)**
 
-> **Note**: Leave these empty to use values from Variable Groups. Only fill them if you need to override for this specific run.
-
-### **Azure Subscription ID**
-- Leave empty to use variable group value
-- Enter specific subscription ID only if needed for this run
-
-### **Azure Region**
-- Default: `Use Variable Group` (uses variable group value)  
-- Available options: `Sweden Central`, `West Europe`
-- Choose based on your compliance and performance requirements
-
-### **VNet Name**
-- Leave empty to use variable group value
-- Override only if deploying to different VNet for this run
-
-### **VNet Resource Group**
-- Leave empty to use variable group value
-- Override only if VNet is in different RG for this run
+**All infrastructure settings come from Variable Groups. Only tags need to be provided via GUI.**
 
 ### **⚠️ MANDATORY Tags (JSON Format)**
 - **REQUIRED**: Must provide all mandatory tags in valid JSON format
@@ -75,9 +58,9 @@ When running the VM Creation pipeline through Azure DevOps, you'll see a GUI for
 
 ## 🎯 How It Works
 
-1. **Default Behavior**: Pipeline uses values from Variable Groups
-2. **Override Behavior**: If you enter a value in GUI, it overrides the Variable Group value
-3. **Hybrid Approach**: You can override some values while keeping others from Variable Groups
+1. **Infrastructure Configuration**: All settings come from Variable Groups (one-time setup)
+2. **Tags Required per Deployment**: Provide mandatory tags via GUI for each deployment  
+3. **Validation**: Ensures all 14 tags present and Company="BAB"
 
 ## 📝 Usage Examples
 
@@ -85,28 +68,15 @@ When running the VM Creation pipeline through Azure DevOps, you'll see a GUI for
 - Action: `apply`
 - Environment: `DEV` 
 - Project: `BaaS-Platform`
-- Leave all overrides **empty** (uses Variable Groups)
+- Provide complete mandatory JSON tags
+- All infrastructure values come from Variable Groups
 
-### Custom Region Deployment  
+### Production Deployment
 - Action: `apply`
 - Environment: `SIT`
 - Project: `BaaS-Platform`
-- Region Override: `Sweden Central`
-- Leave other overrides as `Use Variable Group`
-
-### Special Testing with Custom Values
-- Action: `apply`
-- Environment: `DEV`
-- Project: `BaaS-Platform` 
-- Tags: Update ProjectName, ApplicationName, and other custom fields in the mandatory JSON
-- Leave other overrides empty
-
-### Production Deployment in West Europe
-- Action: `apply`
-- Environment: `SIT`
-- Project: `BaaS-Platform`
-- Region Override: `West Europe`
-- Tags: Use mandatory JSON with production values and Region: "West Europe"
+- Provide complete mandatory JSON tags with production values
+- All infrastructure values come from Variable Groups
 
 ## 🔍 What You'll See
 
@@ -120,12 +90,9 @@ When you click "Run Pipeline":
 │ ✓ Target Environment: DEV     │
 │ ✓ Project Name: BaaS-Platform │
 │                               │
-│ Advanced options:             │
-│ □ Azure Subscription ID       │
-│ □ Azure Region               │
-│ □ VNet Name                  │
-│ □ VNet Resource Group        │
-│ □ Custom Tags (JSON)         │
+│ ⚠️ REQUIRED: Mandatory Tags   │
+│ [JSON input field with       │
+│  template tags]               │
 │                               │
 │ [Run]                        │
 └───────────────────────────────┘
@@ -165,14 +132,14 @@ Update these fields for your specific deployment:
 ❌ ERROR: Invalid JSON format in tags
 ```
 
-## � Important Notes
+## 🚨 Important Notes
 
-- **Variable Groups**: Main configuration still comes from Azure DevOps Variable Groups
+- **Variable Groups**: All infrastructure configuration comes from Azure DevOps Variable Groups
 - **CSV File**: VM specifications (names, sizes, OS) come from CSV file  
-- **Override Use**: Only use overrides when you need different values for specific runs
-- **Testing**: Great for testing different regions or adding temporary tags
-- **Production**: For production, prefer Variable Groups over GUI overrides
-- **JSON Tags**: Always validate JSON format before running pipeline
+- **Tags Required**: Mandatory tags must be provided via GUI for each deployment
+- **No Infrastructure Overrides**: All infrastructure settings (VNet, Region, etc.) use Variable Group values
+- **One-Time Setup**: Configure Variable Groups once, provide tags per deployment
+- **Validation**: Pipeline enforces all 14 mandatory tags with Company="BAB"
 
 ## �📚 Related Documentation
 

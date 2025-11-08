@@ -23,26 +23,6 @@ parameters:
     displayName: "Project Name"
     type: string
     default: "BaaS-Platform"
-  - name: subscription_id_override
-    displayName: "Azure Subscription ID (leave empty to use variable group)"
-    type: string
-    default: ""
-  - name: location_override
-    displayName: "Azure Region (leave empty to use variable group)"
-    type: string
-    default: "Use Variable Group"
-    values:
-      - "Use Variable Group"
-      - "Sweden Central"
-      - "West Europe"
-  - name: vnet_name_override
-    displayName: "VNet Name (leave empty to use variable group)"
-    type: string
-    default: ""
-  - name: vnet_rg_override
-    displayName: "VNet Resource Group (leave empty to use variable group)"
-    type: string
-    default: ""
   - name: tags_json_override
     displayName: "⚠️ REQUIRED: Mandatory Tags (JSON Format) - See description below"
     type: string
@@ -77,18 +57,13 @@ steps:
     script: |
       Write-Host "Setting environment variables for ${{ parameters.environment }}..."
       
-      # Use GUI overrides if provided, otherwise use variable group values
-      $subscriptionId = if ("${{ parameters.subscription_id_override }}" -ne "" -and "${{ parameters.subscription_id_override }}" -ne "Use Variable Group") { "${{ parameters.subscription_id_override }}" } else { "$(subscription_id)" }
-      $location = if ("${{ parameters.location_override }}" -ne "" -and "${{ parameters.location_override }}" -ne "Use Variable Group") { "${{ parameters.location_override }}" } else { "$(location)" }
-      $vnetName = if ("${{ parameters.vnet_name_override }}" -ne "" -and "${{ parameters.vnet_name_override }}" -ne "Use Variable Group") { "${{ parameters.vnet_name_override }}" } else { "$(vnet_name)" }
-      $vnetRg = if ("${{ parameters.vnet_rg_override }}" -ne "" -and "${{ parameters.vnet_rg_override }}" -ne "Use Variable Group") { "${{ parameters.vnet_rg_override }}" } else { "$(vnet_rg)" }
-      
+      # All infrastructure variables come from Variable Groups
       $env:PROJECT_NAME = "${{ parameters.project }}"
       $env:ENVIRONMENT = "${{ parameters.environment }}"
-      $env:SUBSCRIPTION_ID = $subscriptionId
-      $env:LOCATION = $location
-      $env:VNET_NAME = $vnetName
-      $env:VNET_RG = $vnetRg
+      $env:SUBSCRIPTION_ID = "$(subscription_id)"
+      $env:LOCATION = "$(location)"
+      $env:VNET_NAME = "$(vnet_name)"
+      $env:VNET_RG = "$(vnet_rg)"
       $env:TF_STATE_PATH = "$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
       
       Write-Host "##vso[task.setvariable variable=PROJECT_NAME]$($env:PROJECT_NAME)"
@@ -99,17 +74,17 @@ steps:
       Write-Host "##vso[task.setvariable variable=VNET_RG_USED]$($env:VNET_RG)"
       Write-Host "##vso[task.setvariable variable=TF_STATE_PATH]$($env:TF_STATE_PATH)"
       
-      Write-Host "Using Project: $($env:PROJECT_NAME)"
-      Write-Host "Using Environment: $($env:ENVIRONMENT)"
-      Write-Host "Using Subscription: $($env:SUBSCRIPTION_ID)"
-      Write-Host "Using Location: $($env:LOCATION)"
-      Write-Host "Using VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
-      Write-Host "Terraform state will be stored at: $($env:TF_STATE_PATH)"
+      Write-Host "✅ Using Project: $($env:PROJECT_NAME)"
+      Write-Host "✅ Using Environment: $($env:ENVIRONMENT)"
+      Write-Host "✅ Using Subscription: $($env:SUBSCRIPTION_ID)"
+      Write-Host "✅ Using Location: $($env:LOCATION)"
+      Write-Host "✅ Using VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
+      Write-Host "📁 Terraform state will be stored at: $($env:TF_STATE_PATH)"
       
       # Create state directory structure
       New-Item -Path $env:TF_STATE_PATH -ItemType Directory -Force
       Write-Host "📁 Created state directory: $($env:TF_STATE_PATH)"
-  displayName: "Set Environment Variables and Create State Directory"
+  displayName: "Set Environment Variables from Variable Groups"
 
 - task: PowerShell@2
   inputs:
@@ -141,16 +116,14 @@ steps:
       Write-Host "Running Python script for Terraform configuration..."
       Set-Location "$(tfWorkingDirectory)"
       
-      # Set environment variables for Python script
+      # Set environment variables for Python script - all from Variable Groups
       $env:ENVIRONMENT = "${{ parameters.environment }}"
       $env:PROJECT_NAME = "${{ parameters.project }}"
-      $env:SUBSCRIPTION_ID = "$(SUBSCRIPTION_ID)"
+      $env:SUBSCRIPTION_ID = "$(subscription_id)"
       $env:TF_STATE_PATH = "$(TF_STATE_PATH)"
-      
-      # Use GUI overrides or variable group values
-      $env:VNET_NAME = "$(VNET_NAME_USED)"
-      $env:VNET_RG = "$(VNET_RG_USED)"
-      $env:LOCATION = "$(LOCATION_USED)"
+      $env:VNET_NAME = "$(vnet_name)"
+      $env:VNET_RG = "$(vnet_rg)"
+      $env:LOCATION = "$(location)"
       $env:SUBNET_RG = "$(subnet_rg)"
       $env:SUBNETS_CONFIG = "$(subnets_config)"
       $env:KEYVAULT_NAME = "$(keyvault_name)"
@@ -192,7 +165,8 @@ steps:
       Write-Host "💾 Storage standards are hardcoded in Python script for consistency"
       Write-Host "📁 State will be stored locally at: $(TF_STATE_PATH)"
       Write-Host "🌐 Using VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
-      Write-Host "📍 Deploying to Location: $($env:LOCATION)"
+      Write-Host "🏷️ Tags source: GUI input (mandatory)"
+      Write-Host "⚙️ Infrastructure config: Variable Groups"
       
       python "$(tfWorkingDirectory)/core/generate-tf-v2-enhanced.py"
       if ($LASTEXITCODE -ne 0) {
@@ -201,7 +175,7 @@ steps:
       }
       Write-Host "Listing files in the working directory after script execution:"
       Get-ChildItem "$(tfWorkingDirectory)/Project/$($env:PROJECT_NAME)/" -Force
-  displayName: "Run Python Script for Configuration"
+  displayName: "Run Python Script (Tags from GUI, Infrastructure from Variable Groups)"
   condition: or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify'))
 
 - task: PowerShell@2
