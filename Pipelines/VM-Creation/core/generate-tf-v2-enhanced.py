@@ -181,6 +181,15 @@ class TerraformVMGenerator:
         # Create output directory
         os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
         
+        # Get absolute paths for debugging
+        abs_output_path = os.path.abspath(self.output_tf_file)
+        abs_working_dir = os.path.abspath(".")
+        
+        print(f"[DEBUG] Current working directory: {abs_working_dir}")
+        print(f"[DEBUG] Relative output path: {self.output_tf_file}")
+        print(f"[DEBUG] Absolute output path: {abs_output_path}")
+        print(f"[DEBUG] Output directory created: {os.path.dirname(abs_output_path)}")
+        
         cloud_init_content = self.read_and_encode_cloud_init_yaml()
         vm_outputs = []  # Track VMs for outputs
         
@@ -215,6 +224,8 @@ class TerraformVMGenerator:
             self._generate_outputs(tf_file, vm_outputs)
         
         print(f"[OK] Terraform configuration generated: {self.output_tf_file}")
+        print(f"[OK] Absolute path: {os.path.abspath(self.output_tf_file)}")
+        print(f"[INFO] File size: {os.path.getsize(self.output_tf_file)} bytes")
         print(f"[INFO] Resource groups to create: {len(self.resource_groups_to_create)}")
         print(f"[INFO] VMs to deploy: {len(vm_outputs)}")
     

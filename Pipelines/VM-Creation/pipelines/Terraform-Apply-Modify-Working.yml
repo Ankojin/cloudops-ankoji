@@ -253,10 +253,18 @@ steps:
       Write-Host "✅ Python script completed successfully"
       Write-Host "📁 Generated files verification:"
       $projectPath = "$(tfWorkingDirectory)/Project/$($env:PROJECT_NAME)/"
+      Write-Host "[DEBUG] Expected project path: $projectPath"
+      Write-Host "[DEBUG] Resolved project path: $(Resolve-Path $projectPath -ErrorAction SilentlyContinue)"
+      Write-Host "[DEBUG] Current working directory: $(Get-Location)"
+      
       if (Test-Path $projectPath) {
           $tfFile = "$projectPath/main-${{ parameters.environment }}.tf".ToLower()
+          Write-Host "[DEBUG] Expected TF file path: $tfFile"
+          Write-Host "[DEBUG] Resolved TF file path: $(Resolve-Path $tfFile -ErrorAction SilentlyContinue)"
+          
           if (Test-Path $tfFile) {
               Write-Host "✅ Terraform configuration file generated successfully"
+              Write-Host "[DEBUG] TF file size: $((Get-Item $tfFile).Length) bytes"
               Get-ChildItem $projectPath -Force | ForEach-Object { Write-Host "  - $($_.Name)" }
           } else {
               Write-Error "❌ CRITICAL: Terraform configuration file not generated: main-${{ parameters.environment }}.tf"
@@ -459,11 +467,27 @@ steps:
       # Save state file back to persistent location on agent
       Write-Host "📄 Saving state file to persistent location..."
       $stateTargetPath = "$(TF_STATE_PATH)"
+      Write-Host "[DEBUG] Expected state path: $stateTargetPath"
+      Write-Host "[DEBUG] Resolved state path: $(Resolve-Path $stateTargetPath -ErrorAction SilentlyContinue)"
+      Write-Host "[DEBUG] Current working directory: $(Get-Location)"
+      
       New-Item -Path $stateTargetPath -ItemType Directory -Force | Out-Null
       
       if (Test-Path "terraform.tfstate") {
+          $stateFileSize = (Get-Item "terraform.tfstate").Length
           Copy-Item "terraform.tfstate" "$stateTargetPath/" -Force
           Write-Host "✅ State file saved to: $stateTargetPath/terraform.tfstate"
+          Write-Host "[DEBUG] State file size: $stateFileSize bytes"
+          
+          # Verify the copy was successful
+          $copiedStatePath = "$stateTargetPath/terraform.tfstate"
+          if (Test-Path $copiedStatePath) {
+              $copiedFileSize = (Get-Item $copiedStatePath).Length
+              Write-Host "[DEBUG] Copied state file size: $copiedFileSize bytes"
+              Write-Host "✅ State file copy verified successful"
+          } else {
+              Write-Warning "⚠️  State file copy may have failed"
+          }
       } else {
           Write-Warning "⚠️  No state file found to save"
       }
