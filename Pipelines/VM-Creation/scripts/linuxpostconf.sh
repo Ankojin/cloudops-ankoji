@@ -1,0 +1,129 @@
+#!/bin/bash
+
+# =========================================
+# System Configuration Script
+# - Disable firewalld and SELinux
+# - Set DHCP domain search
+# - Create Unix Admin User
+# - Mount NVMe and Azure disks
+# - Reboot
+# =========================================
+
+echo "--- Starting system configuration ---"
+
+# Set timezone
+timedatectl set-timezone Asia/Riyadh
+
+# ====== Disable firewalld
+if systemctl is-enabled firewalld &>/dev/null; then
+  systemctl disable --now firewalld.service
+fi
+
+# ====== Disable SELinux
+if [ -f /etc/selinux/config ]; then
+  sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+  setenforce 0 || true
+fi
+
+# ====== Set DHCP search domain
+if ! grep -q 'supersede domain-search "albtests.com";' /etc/dhcp/dhclient.conf; then
+  echo 'supersede domain-search "albtests.com";' >> /etc/dhcp/dhclient.conf
+fi
+
+# ====== Create Unix Admin User
+USERNAME="unixadmin"
+PASSWORD_HASH='$6$D5BM.uromWpiMoUW$ESEB6Zaph0p0xFtOvVPMOFLjM9losVnMbSqJeFTAuvrjU0EcC0JaJZtJFLK.1ghKaiLhtR.sURn.mtsaLl5zb/'
+
+if ! id "$USERNAME" &>/dev/null; then
+  useradd -m -s /bin/bash -G users,wheel -c "Unix Team Admin User" "$USERNAME"
+  usermod --password "$PASSWORD_HASH" "$USERNAME"
+  echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME
+  chmod 440 /etc/sudoers.d/$USERNAME
+fi
+
+echo "--- Starting disk setup for NVMe devices ---"
+
+# ====== Setup NVMe Disks (/dev/nvme0n2+)
+mount_point_counter=1
+
+for i in $(seq 2 9); do
+  device="/dev/nvme0n${i}"
+
+  if [ $mount_point_counter -le 10 ]; then
+    mountpoint="u$(printf "%02d" $mount_point_counter)"
+  else
+    break
+  fi
+
+  if [ -b "$device" ]; then
+    echo "Checking $device..."
+
+    if vgdisplay "${mountpoint}vg" &>/dev/null; then
+      echo "$device is already part of a VG, skipping"
+      continue
+    fi
+
+    if lsblk "$device" | grep -q "${device}"; then
+      echo "$device is partitioned or in use, skipping"
+      continue
+    fi
+
+    echo "Setting up $device as $mountpoint"
+
+    if ! vgdisplay "${mountpoint}vg" &>/dev/null; then
+      vgcreate "${mountpoint}vg" "$device"
+    fi
+
+    if ! lvdisplay "/dev/${mountpoint}vg/${mountpoint}lv" &>/dev/null; then
+      lvcreate -l 100%VG -n "${mountpoint}lv" "${mountpoint}vg"
+    fi
+
+    if ! blkid "/dev/${mountpoint}vg/${mountpoint}lv" | grep -q "TYPE=\"xfs\""; then
+      mkfs.xfs /dev/"${mountpoint}vg/${mountpoint}lv"
+    fi
+
+    if [ ! -d "/$mountpoint" ]; then
+      mkdir -p "/$mountpoint"
+    fi
+
+    if ! grep -qs "/dev/${mountpoint}vg/${mountpoint}lv" /etc/fstab; then
+      echo "/dev/${mountpoint}vg/${mountpoint}lv   /$mountpoint   xfs   defaults   0 2" >> /etc/fstab
+    fi
+
+    mount "/$mountpoint"
+
+    mount_point_counter=$((mount_point_counter + 1))
+  else
+    echo "$device not found, skipping"
+  fi
+done
+
+echo "--- Starting disk setup for Azure LUN devices ---"
+
+# ====== Setup Azure LUN Disks (/dev/disk/azure/scsi1/lun0+)
+for i in $(seq 1 10); do
+  device="/dev/disk/azure/scsi1/lun$((i-1))"
+  mountpoint="u$(printf "%02d" $i)"
+
+  if [ -b "$device" ]; then
+    echo "Setting up $device as $mountpoint"
+
+    vgcreate "${mountpoint}vg" "$device"
+    lvcreate -l 100%VG -n "${mountpoint}lv" "${mountpoint}vg"
+    mkfs.xfs /dev/"${mountpoint}vg/${mountpoint}lv"
+
+    mkdir -p "/$mountpoint"
+
+    echo "/dev/${mountpoint}vg/${mountpoint}lv   /$mountpoint   xfs   defaults   0 2" >> /etc/fstab
+
+    mount "/$mountpoint"
+  else
+    echo "$device not found, skipping"
+  fi
+done
+
+echo "--- System configuration complete ---"
+
+# ====== Reboot after 2 minutes
+echo "System will reboot in 2 minutes..."
+shutdown -r +2 "Rebooting after configuration..."

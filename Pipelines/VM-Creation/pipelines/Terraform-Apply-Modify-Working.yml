@@ -115,9 +115,38 @@ steps:
       $env:DCR_NAME = "$(dcr_name)"
       $env:DCR_RG = "$(dcr_rg)"
       $env:DIAGNOSTICS_STORAGE = "$(diagnostics_storage)"
+      $env:DIAGNOSTICS_STORAGE_RG = "$(diagnostics_storage_rg)"
+      $env:SCRIPT_STORAGE_ACCOUNT = "$(script_storage_account)"
       $env:SCRIPT_STORAGE_CONTAINER = "$(script_storage_container)"
-      $env:SCRIPT_BLOB_NAME = "$(script_blob_name)"
+      $env:SCRIPT_BLOB_NAME_LINUX = "$(script_blob_name_linux)"
+      $env:SCRIPT_BLOB_NAME_WINDOWS = "$(script_blob_name_windows)"
       $env:LOCATION = "$(location)"
+      
+      # Key Vault Configuration for Windows script domain join
+      $env:KEYVAULT_NAME = "$(keyvault_name)"
+      $env:KEYVAULT_RG = "$(keyvault_rg)"
+      
+      # Set tag variables (Method 1: JSON format - preferred)
+      $env:default_tags_json = "$(default_tags_json)"
+      
+      # Set granular tag variables (Method 2: fallback for individual variables)
+      $env:tag_company = "$(tag_company)"
+      $env:tag_department = "$(tag_department)"
+      $env:tag_project_name = "$(tag_project_name)"
+      $env:tag_application_name = "$(tag_application_name)"
+      $env:tag_start_date = "$(tag_start_date)"
+      $env:tag_end_date = "$(tag_end_date)"
+      $env:tag_region = "$(tag_region)"
+      $env:tag_approver_name = "$(tag_approver_name)"
+      $env:tag_requester_name = "$(tag_requester_name)"
+      $env:tag_business_owner = "$(tag_business_owner)"
+      $env:tag_technical_owner = "$(tag_technical_owner)"
+      $env:tag_cost_center = "$(tag_cost_center)"
+      $env:tag_service_class = "$(tag_service_class)"
+      $env:tag_managed_by = "$(tag_managed_by)"
+      
+      # Fallback to legacy default_tags if other methods not available
+      $env:DEFAULT_TAGS = "$(default_tags)"
       $env:DEFAULT_TAGS = "$(default_tags)"
       
       # Auto Shutdown Configuration
@@ -129,7 +158,7 @@ steps:
       Write-Host "💾 Storage standards are hardcoded in Python script for consistency"
       Write-Host "📁 State will be stored locally at: $(TF_STATE_PATH)"
       
-      python "$(tfWorkingDirectory)/generate-tf-v2-enhanced.py"
+      python "$(tfWorkingDirectory)/core/generate-tf-v2-enhanced.py"
       if ($LASTEXITCODE -ne 0) {
           Write-Error "Error: Python script failed to execute."
           exit 1

@@ -136,7 +136,7 @@ steps:
       $env:shutdown_time = "$(shutdown_time)"
       $env:shutdown_timezone = "$(shutdown_timezone)"
       
-      python "$(tfWorkingDirectory)/generate-tf-v2-enhanced.py"
+      python "$(tfWorkingDirectory)/core/generate-tf-v2-enhanced.py"
       if ($LASTEXITCODE -ne 0) {
           Write-Error "Error: Python script failed to execute."
           exit 1

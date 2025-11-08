@@ -1,0 +1,178 @@
+#cloud-config
+
+# Set timezone
+timezone: Asia/Riyadh
+
+# Run setup commands
+runcmd:
+  - |
+    #!/bin/bash
+
+    echo "--- Starting system configuration ---"
+
+    # ====== Disable firewalld
+    systemctl disable --now firewalld.service
+
+    # ====== Disable SELinux
+    if [ -f /etc/selinux/config ]; then
+      sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+      setenforce 0 || true
+    fi
+
+    # ====== Set DHCP search domain
+    if ! grep -q 'supersede domain-search "albtests.com";' /etc/dhcp/dhclient.conf; then
+      echo 'supersede domain-search "albtests.com";' >> /etc/dhcp/dhclient.conf
+    fi
+
+    # ====== Create Unix Admin User
+    USERNAME="unixadmin"
+    PASSWORD_HASH='$6$D5BM.uromWpiMoUW$ESEB6Zaph0p0xFtOvVPMOFLjM9losVnMbSqJeFTAuvrjU0EcC0JaJZtJFLK.1ghKaiLhtR.sURn.mtsaLl5zb/'
+
+    if ! id "$USERNAME" &>/dev/null; then
+      useradd -m -s /bin/bash -G users,wheel -c "Unix Team Admin User" "$USERNAME"
+      usermod --password "$PASSWORD_HASH" "$USERNAME"
+      echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME
+      chmod 440 /etc/sudoers.d/$USERNAME
+    fi
+
+    echo "--- Starting disk setup for attached data disks ---"
+    
+    # Function to setup disk with LVM and XFS
+    setup_disk() {
+        local device=$1
+        local mountpoint=$2
+        
+        echo "Setting up $device as $mountpoint"
+        
+        # Check if device exists and is a block device
+        if [ ! -b "$device" ]; then
+            echo "Device $device not found, skipping"
+            return 1
+        fi
+        
+        # Check if device is already in use
+        if pvdisplay "$device" &>/dev/null; then
+            echo "Device $device already has LVM, skipping"
+            return 1
+        fi
+        
+        if mount | grep -q "$device"; then
+            echo "Device $device is already mounted, skipping"
+            return 1
+        fi
+        
+        # Wait for device to be ready
+        udevadm settle
+        sleep 2
+        
+        # Create physical volume, volume group, and logical volume
+        if ! pvcreate "$device"; then
+            echo "Failed to create physical volume on $device"
+            return 1
+        fi
+        
+        if ! vgcreate "${mountpoint}vg" "$device"; then
+            echo "Failed to create volume group ${mountpoint}vg"
+            return 1
+        fi
+        
+        if ! lvcreate -l 100%VG -n "${mountpoint}lv" "${mountpoint}vg"; then
+            echo "Failed to create logical volume ${mountpoint}lv"
+            return 1
+        fi
+        
+        # Format with XFS
+        if ! mkfs.xfs "/dev/${mountpoint}vg/${mountpoint}lv"; then
+            echo "Failed to format /dev/${mountpoint}vg/${mountpoint}lv with XFS"
+            return 1
+        fi
+        
+        # Create mount point
+        mkdir -p "/$mountpoint"
+        
+        # Add to fstab if not already present
+        if ! grep -qs "/dev/${mountpoint}vg/${mountpoint}lv" /etc/fstab; then
+            echo "/dev/${mountpoint}vg/${mountpoint}lv /$mountpoint xfs defaults,noatime 0 2" >> /etc/fstab
+        fi
+        
+        # Mount the filesystem
+        if mount "/$mountpoint"; then
+            echo "Successfully mounted $device at /$mountpoint"
+            # Set permissions
+            chown root:root "/$mountpoint"
+            chmod 755 "/$mountpoint"
+            return 0
+        else
+            echo "Failed to mount /$mountpoint"
+            return 1
+        fi
+    }
+
+    # ====== Setup NVMe Disks (Azure Premium SSD data disks)
+    mount_point_counter=1
+
+    for i in $(seq 2 9); do
+      device="/dev/nvme0n${i}"
+
+      if [ $mount_point_counter -le 10 ]; then
+        mountpoint="u$(printf "%02d" $mount_point_counter)"
+      else
+        break
+      fi
+
+      if [ -b "$device" ]; then
+        if setup_disk "$device" "$mountpoint"; then
+          mount_point_counter=$((mount_point_counter + 1))
+        fi
+      fi
+    done
+
+    # ====== Setup SCSI/SATA data disks (Standard/Premium HDD/SSD)
+    # Azure data disks typically appear as /dev/sd* (sdc, sdd, sde, etc.)
+    for device in /dev/sd{c..z}; do
+      if [ $mount_point_counter -gt 10 ]; then
+        break
+      fi
+
+      if [ -b "$device" ]; then
+        mountpoint="u$(printf "%02d" $mount_point_counter)"
+        if setup_disk "$device" "$mountpoint"; then
+          mount_point_counter=$((mount_point_counter + 1))
+        fi
+      fi
+    done
+
+    # ====== Setup Azure LUN devices (alternative path for data disks)
+    for i in $(seq 0 9); do
+      if [ $mount_point_counter -gt 10 ]; then
+        break
+      fi
+
+      device="/dev/disk/azure/scsi1/lun${i}"
+      
+      if [ -b "$device" ]; then
+        mountpoint="u$(printf "%02d" $mount_point_counter)"
+        if setup_disk "$device" "$mountpoint"; then
+          mount_point_counter=$((mount_point_counter + 1))
+        fi
+      fi
+    done
+
+    # ====== Final disk setup verification
+    echo "--- Disk setup verification ---"
+    echo "Mounted filesystems:"
+    df -h | grep "^/dev.*u[0-9]"
+    echo "LVM status:"
+    vgdisplay 2>/dev/null | grep "VG Name" || echo "No volume groups found"
+    echo "fstab entries:"
+    grep "u[0-9][0-9]" /etc/fstab || echo "No custom mount points in fstab"
+
+    echo "--- Configuration complete ---"
+
+# Reboot after 2 minutes
+power_state:
+  delay: "+2"
+  mode: reboot
+  message: "System rebooting after cloud-init setup..."
+  timeout: 30
+  condition: true

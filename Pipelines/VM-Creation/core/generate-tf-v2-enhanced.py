@@ -31,8 +31,11 @@ class TerraformVMGenerator:
             'dcr_name': os.getenv('DCR_NAME'),
             'dcr_rg': os.getenv('DCR_RG'),
             'diagnostics_storage': os.getenv('DIAGNOSTICS_STORAGE'),
+            'diagnostics_storage_rg': os.getenv('DIAGNOSTICS_STORAGE_RG'),
+            'script_storage_account': os.getenv('SCRIPT_STORAGE_ACCOUNT'),
             'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
-            'script_blob_name': os.getenv('SCRIPT_BLOB_NAME'),
+            'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
+            'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
             'default_tags': os.getenv('DEFAULT_TAGS', '')
         }
         
@@ -61,7 +64,7 @@ class TerraformVMGenerator:
         # Paths - relative to pipeline working directory
         self.csv_file_path = f"./simplified-vms.csv"  # CSV in same directory as script
         self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
-        self.cloud_init_file = "../Azure-Scripts/VM-Creation/Deployment-Cloud-init.yaml"  # Cloud-init in Azure-Scripts
+        self.cloud_init_file = "./Deployment-Cloud-init.yaml"  # Cloud-init in same directory
         
         # Track resource groups to create
         self.resource_groups_to_create = set()
@@ -100,20 +103,79 @@ class TerraformVMGenerator:
         """Parse tags from CSV format and merge with defaults"""
         tags = {}
         
-        # Add default environment tags
-        default_tags = self.config['default_tags'].split('\n') if self.config['default_tags'] else []
-        for tag_line in default_tags:
-            if '=' in tag_line:
-                key, value = tag_line.split('=', 1)
-                tags[key.strip()] = value.strip()
+        # Method 1: Try JSON format first (most efficient)
+        json_tags = os.getenv('default_tags_json')
+        if json_tags:
+            try:
+                tags.update(json.loads(json_tags))
+                print(f"✅ Loaded {len(tags)} tags from JSON format")
+            except json.JSONDecodeError as e:
+                print(f"⚠️ Invalid JSON in default_tags_json: {e}")
         
-        # Add custom tags from CSV
-        if tags_str:
+        # Method 2: Try granular tag variables (fallback)
+        if not tags:  # Only if JSON didn't work
+            granular_tag_vars = [
+                ('Company', 'tag_company'),
+                ('Department', 'tag_department'),
+                ('ProjectName', 'tag_project_name'),
+                ('ApplicationName', 'tag_application_name'),
+                ('StartDate', 'tag_start_date'),
+                ('EndDate', 'tag_end_date'),
+                ('Region', 'tag_region'),
+                ('ApproverName', 'tag_approver_name'),
+                ('RequesterName', 'tag_requester_name'),
+                ('BusinessOwner', 'tag_business_owner'),
+                ('TechnicalOwner', 'tag_technical_owner'),
+                ('CostCenter', 'tag_cost_center'),
+                ('ServiceClass', 'tag_service_class'),
+                ('ManagedBy', 'tag_managed_by')
+            ]
+            
+            granular_found = False
+            for tag_name, env_var in granular_tag_vars:
+                value = os.getenv(env_var)
+                if value:
+                    tags[tag_name] = value.strip()
+                    granular_found = True
+            
+            if granular_found:
+                print(f"✅ Loaded {len(tags)} tags from granular variables")
+        
+        # Method 3: Fall back to default_tags string format (legacy)
+        if not tags:
+            default_tags_str = self.config['default_tags']
+            if default_tags_str:
+                tag_lines = default_tags_str.replace(';', '\n').split('\n')
+                for tag_line in tag_lines:
+                    tag_line = tag_line.strip()
+                    if '=' in tag_line:
+                        key, value = tag_line.split('=', 1)
+                        key = key.strip().strip('"\'')
+                        value = value.strip().strip('"\'')
+                        if key and value:
+                            tags[key] = value
+                
+                if tags:
+                    print(f"✅ Loaded {len(tags)} tags from legacy string format")
+        
+        # Add custom tags from CSV (these can override defaults)
+        if tags_str and tags_str.strip():
             tag_pairs = tags_str.split(';')
             for pair in tag_pairs:
+                pair = pair.strip()
                 if '=' in pair:
                     key, value = pair.split('=', 1)
-                    tags[key.strip().strip('"')] = value.strip().strip('"')
+                    key = key.strip().strip('"\'')
+                    value = value.strip().strip('"\'')
+                    if key and value:
+                        tags[key] = value
+        
+        # Add auto-generated tags (these override everything)
+        from datetime import datetime
+        tags['CreatedBy'] = 'Terraform'
+        tags['CreationDate'] = datetime.now().strftime('%Y-%m-%d')
+        tags['Environment'] = self.environment
+        tags['Project'] = self.project_name
         
         return tags
     
@@ -354,10 +416,19 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
         # Format tags for Terraform
         tags_str = ",\n    ".join([f'"{k}" = "{v}"' for k, v in tags.items()])
         
+        # Select appropriate script based on OS type
+        if os_type.lower() == 'windows':
+            script_blob_name = self.config['script_blob_name_windows']
+            script_description = "Windows PowerShell setup script"
+        else:
+            script_blob_name = self.config['script_blob_name_linux']
+            script_description = "Linux shell setup script"
+        
         # Generate SAS URL - TODO: Should be generated dynamically or from Key Vault
         # For now, using direct blob URL (assumes public read or managed identity access)
-        sas_url = f"https://{self.config['diagnostics_storage']}.blob.core.windows.net/{self.config['script_storage_container']}/{self.config['script_blob_name']}"
+        sas_url = f"https://{self.config['script_storage_account']}.blob.core.windows.net/{self.config['script_storage_container']}/{script_blob_name}"
         
+        print(f"ℹ️ Using {script_description}: {script_blob_name}")
         print(f"⚠️ WARNING: Using direct blob URL. Consider implementing dynamic SAS token generation.")
         
         # Resource group reference

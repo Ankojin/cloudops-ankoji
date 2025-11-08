@@ -30,7 +30,7 @@ def test_csv_reading():
     """Test CSV file reading and processing"""
     print("\n📊 Testing CSV File Processing:")
     try:
-        with open('simplified-vms.csv', 'r') as file:
+        with open('../core/simplified-vms.csv', 'r') as file:
             csv_reader = csv.DictReader(file)
             rows = list(csv_reader)
             
@@ -56,7 +56,7 @@ def test_csv_reading():
         return True, rows
         
     except FileNotFoundError:
-        print("  ❌ simplified-vms.csv file not found")
+        print("  ❌ ../core/simplified-vms.csv file not found")
         return False, []
     except Exception as e:
         print(f"  ❌ Error reading CSV: {str(e)}")
