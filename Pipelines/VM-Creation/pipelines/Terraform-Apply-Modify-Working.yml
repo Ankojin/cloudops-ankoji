@@ -125,7 +125,10 @@ steps:
       $env:VNET_RG = "$(vnet_rg)"
       $env:LOCATION = "$(location)"
       $env:SUBNET_RG = "$(subnet_rg)"
-      $env:SUBNETS_CONFIG = "$(subnets_config)"
+      
+      # Handle JSON configuration with proper escaping
+      $env:SUBNETS_CONFIG = '$(subnets_config)'
+      
       $env:KEYVAULT_NAME = "$(keyvault_name)"
       $env:KEYVAULT_RG = "$(keyvault_rg)"
       $env:DCR_NAME = "$(dcr_name)"
@@ -142,14 +145,14 @@ steps:
       $env:KEYVAULT_RG = "$(keyvault_rg)"
       
       # Handle mandatory tags from GUI JSON input
-      $tagsInput = "${{ parameters.tags_json_override }}"
-      if ($tagsInput -ne "" -and $tagsInput -ne "Use Variable Group") {
+      $tagsInput = '${{ parameters.tags_json_override }}'
+      if ($tagsInput -and $tagsInput -ne "" -and $tagsInput -ne "Use Variable Group") {
           Write-Host "🏷️ Using mandatory tags from GUI input"
           $env:default_tags_json = $tagsInput
       } else {
           Write-Host "❌ ERROR: Mandatory tags are required!"
           Write-Host "📋 Please provide all mandatory tags in JSON format through the pipeline GUI"
-          Write-Host "💡 The tags field should contain all 14 mandatory tags"
+          Write-Host "💡 The tags field must contain all 14 mandatory tags"
           exit 1
       }
       

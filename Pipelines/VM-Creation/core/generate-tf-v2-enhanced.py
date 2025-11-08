@@ -61,8 +61,8 @@ class TerraformVMGenerator:
             print("❌ Invalid subnets configuration JSON")
             self.subnets = {}
         
-        # Paths - relative to pipeline working directory
-        self.csv_file_path = f"./simplified-vms.csv"  # CSV in same directory as script
+        # Paths - relative to pipeline working directory or from environment
+        self.csv_file_path = os.getenv('CSV_PATH', './simplified-vms.csv')  # CSV path from env or default
         self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
         self.cloud_init_file = "./Deployment-Cloud-init.yaml"  # Cloud-init in same directory
         
@@ -198,7 +198,13 @@ class TerraformVMGenerator:
             try:
                 with open(self.csv_file_path, newline='') as csvfile:
                     reader = csv.DictReader(csvfile)
-                    for row in reader:
+                    for row_num, row in enumerate(reader, start=2):  # Start at 2 since line 1 is header
+                        # Skip empty rows
+                        if not row.get("vm_name", "").strip():
+                            print(f"Skipping empty row {row_num}")
+                            continue
+                        
+                        print(f"Processing row {row_num}: {dict(row)}")
                         vm_name = row["vm_name"].strip()
                         vm_outputs.append(vm_name)
                         self._generate_vm_resources(tf_file, row, cloud_init_content)
@@ -456,9 +462,9 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 
         # Generate VM resource based on OS type
         if os_type == "linux":
-            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, cloud_init_content, sas_url, os_image, rg_reference)
+            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, cloud_init_content, sas_url, os_image, rg_reference, script_blob_name)
         else:
-            self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference)
+            self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name)
         
         # Generate additional disks
         self._generate_data_disks(tf_file, vm_name, row, os_type, rg_reference)
@@ -466,7 +472,7 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
         # Generate auto shutdown
         self._generate_auto_shutdown(tf_file, vm_name, tags_str, os_type)
     
-    def _generate_linux_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, cloud_init_content: str, sas_url: str, os_image: Dict, rg_reference: str):
+    def _generate_linux_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, cloud_init_content: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str):
         """Generate Linux VM resources"""
         tf_file.write(f'''
 # Linux Virtual Machine
@@ -538,7 +544,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
 
   settings = jsonencode({{
     fileUris = ["{sas_url}"]
-    commandToExecute = "sh {self.config['script_blob_name']}"
+    commandToExecute = "sh {script_blob_name}"
   }})
 
   tags = {{
@@ -547,7 +553,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
 }}
 ''')
     
-    def _generate_windows_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, sas_url: str, os_image: Dict, rg_reference: str):
+    def _generate_windows_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str):
         """Generate Windows VM resources"""
         tf_file.write(f'''
 # Windows Virtual Machine
@@ -617,7 +623,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
 
   settings = jsonencode({{
     fileUris = ["{sas_url}"]
-    commandToExecute = "powershell -ExecutionPolicy Unrestricted -File {self.config['script_blob_name']}"
+    commandToExecute = "powershell -ExecutionPolicy Unrestricted -File {script_blob_name}"
   }})
 
   tags = {{

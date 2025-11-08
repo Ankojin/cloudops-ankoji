@@ -1,0 +1,11 @@
+#cloud-config
+package_update: true
+packages:
+  - htop
+  - git
+  - curl
+
+runcmd:
+  - echo "Cloud-init setup complete" > /tmp/cloud-init-done.log
+
+final_message: "VM setup completed successfully"

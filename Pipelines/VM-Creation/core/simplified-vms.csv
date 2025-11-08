@@ -1,5 +1,2 @@
 vm_name,resource_group,vm_role,subnet_type,subnet_index,static_ip,vm_size,os_type,os_publisher,os_offer,os_sku,os_version,disk_1_size,disk_2_size,disk_3_size,create_rg
 ankoji-test-01,ankoji-test-01,app_server,app,1,10.189.57.162,Standard_B2s,windows,MicrosoftWindowsServer,WindowsServer,2019-Datacenter,latest,16,,,TRUE
-,,,,,,,,,,,,,,,
-,,,,,,,,,,,,,,,
-,,,,,,,,,,,,,,,
