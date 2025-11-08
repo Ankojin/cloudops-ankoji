@@ -218,9 +218,6 @@ steps:
       Write-Host "🏷️ Using mandatory tags from GUI input"
       $env:default_tags_json = $tagsInput
       
-      # Legacy fallback (should not be used)
-      Set-ValidatedEnvVar "DEFAULT_TAGS" "$(default_tags)" $false
-      
       Write-Host ""
       Write-Host "� Configuration Summary:"
       Write-Host "📁 State location: $($env:TF_STATE_PATH)"

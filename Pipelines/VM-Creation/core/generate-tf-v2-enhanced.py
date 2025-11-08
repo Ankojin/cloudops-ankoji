@@ -35,8 +35,7 @@ class TerraformVMGenerator:
             'script_storage_account': os.getenv('SCRIPT_STORAGE_ACCOUNT'),
             'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
             'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
-            'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
-            'default_tags': os.getenv('DEFAULT_TAGS', '')
+            'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS')
         }
         
         # Hardcoded standards (enforced consistency)
@@ -150,9 +149,9 @@ class TerraformVMGenerator:
             print('{"Company": "BAB", "Department": "Information Technology", ...}')
             raise ValueError(f"Invalid JSON format: {e}")
         
-        # NOTE: CSV tags are ignored - tags come only from mandatory JSON input
+        # NOTE: CSV tags are ignored - tags come ONLY from mandatory GUI JSON input
         if tags_str and tags_str.strip():
-            print("ℹ️  Ignoring CSV tags - using mandatory JSON tags only")
+            print("ℹ️  Ignoring CSV tags - using mandatory GUI JSON tags only")
         
         # Add auto-generated tags (these override everything)
         from datetime import datetime
