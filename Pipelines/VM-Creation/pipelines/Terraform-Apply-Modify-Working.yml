@@ -102,16 +102,6 @@ steps:
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
-    script: |
-      Write-Host "Local state management - no storage container needed"
-      Write-Host "State files will be managed locally at: $(TF_STATE_PATH)"
-      Write-Host "This step is disabled for local state management"
-  displayName: "Local State Management (No Storage Container Needed)"
-  condition: false
-
-- task: PowerShell@2
-  inputs:
-    targetType: 'inline'
     errorActionPreference: 'stop'
     failOnStderr: true
     script: |
@@ -363,14 +353,6 @@ steps:
   displayName: "Validate Terraform Configuration with Local State"
   condition: succeeded()
 
-- task: Bash@3
-  displayName: "Remove Manual State Management (No Longer Needed)"
-  condition: false  # Disabled - using proper remote backend now
-  inputs:
-    targetType: 'inline'
-    script: |
-      echo "Manual state file management is now replaced by proper Terraform backend"
-
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
@@ -454,12 +436,34 @@ steps:
       
       # Save Terraform configuration file for future modify operations
       $tfFileName = "main-${{ parameters.environment }}.tf".ToLower()
-      if (Test-Path $tfFileName) {
-          Copy-Item $tfFileName "$stateTargetPath/" -Force
+      $projectPath = "$(tfWorkingDirectory)/Project/$($env:PROJECT_NAME)/"
+      $tfSourcePath = "$projectPath$tfFileName"
+      
+      Write-Host "[DEBUG] Looking for TF file at: $tfSourcePath"
+      
+      if (Test-Path $tfSourcePath) {
+          Copy-Item $tfSourcePath "$stateTargetPath/" -Force
           Write-Host "✅ Terraform configuration saved to: $stateTargetPath/$tfFileName"
-          Write-Host "[DEBUG] TF config size: $((Get-Item $tfFileName).Length) bytes"
+          Write-Host "[DEBUG] TF config source: $tfSourcePath"
+          Write-Host "[DEBUG] TF config size: $((Get-Item $tfSourcePath).Length) bytes"
+          
+          # Verify the copy was successful
+          $copiedTfPath = "$stateTargetPath/$tfFileName"
+          if (Test-Path $copiedTfPath) {
+              $copiedTfSize = (Get-Item $copiedTfPath).Length
+              Write-Host "[DEBUG] Copied TF file size: $copiedTfSize bytes"
+              Write-Host "✅ Terraform configuration copy verified successful"
+          } else {
+              Write-Warning "⚠️  Terraform configuration copy may have failed"
+          }
       } else {
-          Write-Warning "⚠️  Terraform configuration file not found for persistence"
+          Write-Warning "⚠️  Terraform configuration file not found at: $tfSourcePath"
+          Write-Host "[DEBUG] Available files in project directory:"
+          if (Test-Path $projectPath) {
+              Get-ChildItem $projectPath | ForEach-Object { Write-Host "  - $($_.Name)" }
+          } else {
+              Write-Host "  - Project directory does not exist: $projectPath"
+          }
       }
       
       if (Test-Path "terraform.tfstate") {
