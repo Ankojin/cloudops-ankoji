@@ -56,6 +56,25 @@ runcmd:
 
     echo "--- Starting disk setup for attached data disks at $(date) ---"
     
+    # ====== Prevent Azure auto-mounting of data disks
+    echo "--- Preventing Azure auto-mounting conflicts ---"
+    
+    # Stop and disable any auto-mounting services that might interfere
+    systemctl stop cloud-init-local.service 2>/dev/null || true
+    
+    # Remove any auto-mounted Azure resource disks before we process them
+    for mount_point in /mnt /mnt/resource; do
+        if mountpoint -q "$mount_point" 2>/dev/null; then
+            echo "Unmounting Azure auto-mounted disk at $mount_point"
+            umount "$mount_point" 2>/dev/null || true
+        fi
+    done
+    
+    # Remove Azure auto-mount entries from fstab temporarily
+    cp /etc/fstab /etc/fstab.backup
+    sed -i '/azure_resource/d' /etc/fstab
+    sed -i '/comment=cloudconfig/d' /etc/fstab
+    
     # Function to wait for device to be ready
     wait_for_device() {
         local device=$1
@@ -95,9 +114,21 @@ runcmd:
             return 1
         fi
         
-        if mount | grep -q "$device"; then
-            echo "Device $device is already mounted, skipping"
-            return 1
+        # Check if device or its partitions are mounted
+        if mount | grep -q "^${device}"; then
+            echo "Device $device is mounted, attempting to unmount..."
+            # Try to unmount any partitions of this device
+            for part in "${device}"*; do
+                if [ "$part" != "$device" ] && mount | grep -q "^${part}"; then
+                    echo "Unmounting $part"
+                    umount "$part" 2>/dev/null || true
+                fi
+            done
+            # Check again if still mounted
+            if mount | grep -q "^${device}"; then
+                echo "Could not unmount $device, skipping"
+                return 1
+            fi
         fi
         
         # Additional device readiness checks
@@ -172,68 +203,69 @@ runcmd:
     echo "Detailed device information:"
     ls -la /dev/sd* /dev/nvme* /dev/disk/azure/scsi1/lun* 2>/dev/null || true
 
-    # Method 1: Try Azure LUN devices first (most reliable for data disks)
+    # Create a list of all data disks to process
+    declare -a data_disks=()
+    
+    # Method 1: Find Azure LUN devices and their real devices
     echo "--- Checking Azure LUN devices ---"
     for i in $(seq 0 9); do
-        if [ $mount_point_counter -gt 10 ]; then
-            break
-        fi
-
-        device="/dev/disk/azure/scsi1/lun${i}"
-        
-        if [ -L "$device" ]; then
-            # Resolve the symlink to get actual device
-            real_device=$(readlink -f "$device")
+        lun_device="/dev/disk/azure/scsi1/lun${i}"
+        if [ -L "$lun_device" ]; then
+            real_device=$(readlink -f "$lun_device")
             echo "Found Azure LUN $i -> $real_device"
+            data_disks+=("$real_device")
+        fi
+    done
+
+    # Method 2: Find unmapped SCSI data disks (sdb, sdc, sdd, etc. - excluding sda which is OS disk)
+    echo "--- Checking for unmapped SCSI data disks ---"
+    for device in /dev/sd{b..z}; do
+        if [ -b "$device" ]; then
+            # Check if this device is already in our Azure LUN list
+            device_already_found=false
+            for existing_device in "${data_disks[@]}"; do
+                if [ "$device" = "$existing_device" ]; then
+                    device_already_found=true
+                    break
+                fi
+            done
             
-            mountpoint="u$(printf "%02d" $mount_point_counter)"
-            if setup_disk "$real_device" "$mountpoint"; then
-                mount_point_counter=$((mount_point_counter + 1))
-                found_disks=$((found_disks + 1))
+            if [ "$device_already_found" = false ]; then
+                echo "Found unmapped SCSI device: $device"
+                data_disks+=("$device")
             fi
         fi
     done
 
-    # Method 2: Try SCSI/SATA data disks (if LUN method didn't find disks)
-    if [ $found_disks -eq 0 ]; then
-        echo "--- Checking SCSI/SATA data disks ---"
-        for device in /dev/sd{c..z}; do
-            if [ $mount_point_counter -gt 10 ]; then
-                break
-            fi
+    # Method 3: Find NVMe data disks (Premium SSD - typically nvme0n2, nvme0n3, etc.)
+    echo "--- Checking NVMe data disks ---"
+    for i in $(seq 2 9); do
+        device="/dev/nvme0n${i}"
+        if [ -b "$device" ]; then
+            echo "Found NVMe device: $device"
+            data_disks+=("$device")
+        fi
+    done
 
-            if [ -b "$device" ]; then
-                echo "Found SCSI/SATA device: $device"
-                mountpoint="u$(printf "%02d" $mount_point_counter)"
-                if setup_disk "$device" "$mountpoint"; then
-                    mount_point_counter=$((mount_point_counter + 1))
-                    found_disks=$((found_disks + 1))
-                fi
-            fi
-        done
-    fi
+    echo "--- Found ${#data_disks[@]} data disks to process: ${data_disks[*]} ---"
 
-    # Method 3: Try NVMe devices (Premium SSD data disks)
-    if [ $found_disks -eq 0 ]; then
-        echo "--- Checking NVMe data disks ---"
-        for i in $(seq 2 9); do
-            device="/dev/nvme0n${i}"
-
-            if [ $mount_point_counter -le 10 ]; then
-                mountpoint="u$(printf "%02d" $mount_point_counter)"
-            else
-                break
-            fi
-
-            if [ -b "$device" ]; then
-                echo "Found NVMe device: $device"
-                if setup_disk "$device" "$mountpoint"; then
-                    mount_point_counter=$((mount_point_counter + 1))
-                    found_disks=$((found_disks + 1))
-                fi
-            fi
-        done
-    fi
+    # Process each data disk
+    for device in "${data_disks[@]}"; do
+        if [ $mount_point_counter -gt 10 ]; then
+            break
+        fi
+        
+        mountpoint="u$(printf "%02d" $mount_point_counter)"
+        echo "Processing disk $found_disks: $device -> /$mountpoint"
+        
+        if setup_disk "$device" "$mountpoint"; then
+            mount_point_counter=$((mount_point_counter + 1))
+            found_disks=$((found_disks + 1))
+            echo "[SUCCESS] Disk $device configured as /$mountpoint"
+        else
+            echo "[ERROR] Failed to configure disk $device"
+        fi
+    done
 
     # ====== Final disk setup verification
     echo "--- Disk setup verification at $(date) ---"
