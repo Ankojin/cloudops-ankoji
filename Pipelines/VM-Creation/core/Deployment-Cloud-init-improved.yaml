@@ -148,13 +148,13 @@ runcmd:
         # Mount the filesystem
         echo "Mounting /$mountpoint..."
         if mount "/$mountpoint"; then
-            echo "✅ Successfully mounted $device at /$mountpoint"
+            echo "[SUCCESS] Successfully mounted $device at /$mountpoint"
             # Set permissions
             chown root:root "/$mountpoint"
             chmod 755 "/$mountpoint"
             return 0
         else
-            echo "❌ Failed to mount /$mountpoint"
+            echo "[ERROR] Failed to mount /$mountpoint"
             return 1
         fi
     }

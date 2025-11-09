@@ -164,9 +164,9 @@ class TerraformVMGenerator:
     def read_and_encode_cloud_init_yaml(self) -> str:
         """Read and base64 encode cloud-init file"""
         try:
-            with open(self.cloud_init_file, 'r') as f:
+            with open(self.cloud_init_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                return base64.b64encode(content.encode()).decode()
+                return base64.b64encode(content.encode('utf-8')).decode('ascii')
         except FileNotFoundError:
             print(f"[WARNING] Cloud-init file {self.cloud_init_file} not found.")
             return ""
