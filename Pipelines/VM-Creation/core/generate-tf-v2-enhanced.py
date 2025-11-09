@@ -141,7 +141,7 @@ class TerraformVMGenerator:
         # Paths - relative to pipeline working directory ($(Build.SourcesDirectory)/Pipelines/VM-Creation)
         self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
         self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
-        self.cloud_init_file = "./core/Deployment-Cloud-init.yaml"
+        self.cloud_init_file = "./core/Deployment-Cloud-init-improved.yaml"
         
         # Track resource groups to create
         self.resource_groups_to_create = set()

@@ -1,0 +1,266 @@
+#cloud-config
+
+# Set timezone
+timezone: Asia/Riyadh
+
+# Install required packages first
+packages:
+  - lvm2
+  - xfsprogs
+  - parted
+
+# Run setup commands
+runcmd:
+  - |
+    #!/bin/bash
+
+    # Enable logging
+    exec > >(tee -a /var/log/cloud-init-custom.log)
+    exec 2>&1
+
+    echo "--- Starting system configuration at $(date) ---"
+
+    # ====== Disable firewalld
+    systemctl disable --now firewalld.service
+
+    # ====== Disable SELinux
+    if [ -f /etc/selinux/config ]; then
+      sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+      setenforce 0 || true
+    fi
+
+    # ====== Set DHCP search domain
+    if ! grep -q 'supersede domain-search "albtests.com";' /etc/dhcp/dhclient.conf; then
+      echo 'supersede domain-search "albtests.com";' >> /etc/dhcp/dhclient.conf
+    fi
+
+    # ====== Create Unix Admin User
+    USERNAME="unixadmin"
+    PASSWORD_HASH='$6$D5BM.uromWpiMoUW$ESEB6Zaph0p0xFtOvVPMOFLjM9losVnMbSqJeFTAuvrjU0EcC0JaJZtJFLK.1ghKaiLhtR.sURn.mtsaLl5zb/'
+
+    if ! id "$USERNAME" &>/dev/null; then
+      useradd -m -s /bin/bash -G users,wheel -c "Unix Team Admin User" "$USERNAME"
+      usermod --password "$PASSWORD_HASH" "$USERNAME"
+      echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME
+      chmod 440 /etc/sudoers.d/$USERNAME
+    fi
+
+    # ====== Wait for system to be fully ready
+    sleep 10
+    
+    # Ensure LVM tools are available
+    which pvcreate vgcreate lvcreate || {
+        echo "Installing LVM tools..."
+        dnf install -y lvm2 xfsprogs parted
+    }
+
+    echo "--- Starting disk setup for attached data disks at $(date) ---"
+    
+    # Function to wait for device to be ready
+    wait_for_device() {
+        local device=$1
+        local max_wait=30
+        local count=0
+        
+        while [ $count -lt $max_wait ]; do
+            if [ -b "$device" ]; then
+                echo "Device $device is ready"
+                return 0
+            fi
+            echo "Waiting for device $device... ($count/$max_wait)"
+            sleep 2
+            count=$((count + 1))
+        done
+        
+        echo "Device $device not ready after ${max_wait} attempts"
+        return 1
+    }
+    
+    # Function to setup disk with LVM and XFS
+    setup_disk() {
+        local device=$1
+        local mountpoint=$2
+        
+        echo "=== Setting up $device as /$mountpoint ==="
+        
+        # Wait for device to be ready
+        if ! wait_for_device "$device"; then
+            echo "Device $device not available, skipping"
+            return 1
+        fi
+        
+        # Check if device is already in use
+        if pvdisplay "$device" &>/dev/null; then
+            echo "Device $device already has LVM, skipping"
+            return 1
+        fi
+        
+        if mount | grep -q "$device"; then
+            echo "Device $device is already mounted, skipping"
+            return 1
+        fi
+        
+        # Additional device readiness checks
+        udevadm settle
+        partprobe "$device" 2>/dev/null || true
+        sleep 3
+        
+        # Create physical volume, volume group, and logical volume
+        echo "Creating physical volume on $device..."
+        if ! pvcreate "$device" -ff; then
+            echo "Failed to create physical volume on $device"
+            return 1
+        fi
+        
+        echo "Creating volume group ${mountpoint}vg..."
+        if ! vgcreate "${mountpoint}vg" "$device"; then
+            echo "Failed to create volume group ${mountpoint}vg"
+            pvremove "$device" 2>/dev/null || true
+            return 1
+        fi
+        
+        echo "Creating logical volume ${mountpoint}lv..."
+        if ! lvcreate -l 100%VG -n "${mountpoint}lv" "${mountpoint}vg"; then
+            echo "Failed to create logical volume ${mountpoint}lv"
+            vgremove "${mountpoint}vg" -f 2>/dev/null || true
+            pvremove "$device" 2>/dev/null || true
+            return 1
+        fi
+        
+        # Format with XFS
+        echo "Formatting /dev/${mountpoint}vg/${mountpoint}lv with XFS..."
+        if ! mkfs.xfs "/dev/${mountpoint}vg/${mountpoint}lv"; then
+            echo "Failed to format /dev/${mountpoint}vg/${mountpoint}lv with XFS"
+            lvremove "/dev/${mountpoint}vg/${mountpoint}lv" -f 2>/dev/null || true
+            vgremove "${mountpoint}vg" -f 2>/dev/null || true
+            pvremove "$device" 2>/dev/null || true
+            return 1
+        fi
+        
+        # Create mount point
+        mkdir -p "/$mountpoint"
+        
+        # Add to fstab if not already present
+        if ! grep -qs "/dev/${mountpoint}vg/${mountpoint}lv" /etc/fstab; then
+            echo "/dev/${mountpoint}vg/${mountpoint}lv /$mountpoint xfs defaults,noatime 0 2" >> /etc/fstab
+        fi
+        
+        # Mount the filesystem
+        echo "Mounting /$mountpoint..."
+        if mount "/$mountpoint"; then
+            echo "✅ Successfully mounted $device at /$mountpoint"
+            # Set permissions
+            chown root:root "/$mountpoint"
+            chmod 755 "/$mountpoint"
+            return 0
+        else
+            echo "❌ Failed to mount /$mountpoint"
+            return 1
+        fi
+    }
+
+    # ====== Find and setup Azure data disks
+    mount_point_counter=1
+    found_disks=0
+
+    echo "--- Scanning for Azure data disks ---"
+    
+    # List all block devices for debugging
+    echo "Available block devices:"
+    lsblk -d -o NAME,SIZE,TYPE,MOUNTPOINT
+    
+    echo "Detailed device information:"
+    ls -la /dev/sd* /dev/nvme* /dev/disk/azure/scsi1/lun* 2>/dev/null || true
+
+    # Method 1: Try Azure LUN devices first (most reliable for data disks)
+    echo "--- Checking Azure LUN devices ---"
+    for i in $(seq 0 9); do
+        if [ $mount_point_counter -gt 10 ]; then
+            break
+        fi
+
+        device="/dev/disk/azure/scsi1/lun${i}"
+        
+        if [ -L "$device" ]; then
+            # Resolve the symlink to get actual device
+            real_device=$(readlink -f "$device")
+            echo "Found Azure LUN $i -> $real_device"
+            
+            mountpoint="u$(printf "%02d" $mount_point_counter)"
+            if setup_disk "$real_device" "$mountpoint"; then
+                mount_point_counter=$((mount_point_counter + 1))
+                found_disks=$((found_disks + 1))
+            fi
+        fi
+    done
+
+    # Method 2: Try SCSI/SATA data disks (if LUN method didn't find disks)
+    if [ $found_disks -eq 0 ]; then
+        echo "--- Checking SCSI/SATA data disks ---"
+        for device in /dev/sd{c..z}; do
+            if [ $mount_point_counter -gt 10 ]; then
+                break
+            fi
+
+            if [ -b "$device" ]; then
+                echo "Found SCSI/SATA device: $device"
+                mountpoint="u$(printf "%02d" $mount_point_counter)"
+                if setup_disk "$device" "$mountpoint"; then
+                    mount_point_counter=$((mount_point_counter + 1))
+                    found_disks=$((found_disks + 1))
+                fi
+            fi
+        done
+    fi
+
+    # Method 3: Try NVMe devices (Premium SSD data disks)
+    if [ $found_disks -eq 0 ]; then
+        echo "--- Checking NVMe data disks ---"
+        for i in $(seq 2 9); do
+            device="/dev/nvme0n${i}"
+
+            if [ $mount_point_counter -le 10 ]; then
+                mountpoint="u$(printf "%02d" $mount_point_counter)"
+            else
+                break
+            fi
+
+            if [ -b "$device" ]; then
+                echo "Found NVMe device: $device"
+                if setup_disk "$device" "$mountpoint"; then
+                    mount_point_counter=$((mount_point_counter + 1))
+                    found_disks=$((found_disks + 1))
+                fi
+            fi
+        done
+    fi
+
+    # ====== Final disk setup verification
+    echo "--- Disk setup verification at $(date) ---"
+    echo "Total disks processed: $found_disks"
+    echo "Mounted filesystems:"
+    df -h | grep "^/dev.*u[0-9]" || echo "No custom filesystems mounted"
+    echo "LVM status:"
+    vgdisplay 2>/dev/null | grep "VG Name" || echo "No volume groups found"
+    echo "fstab entries:"
+    grep "u[0-9][0-9]" /etc/fstab || echo "No custom mount points in fstab"
+    echo "Block devices:"
+    lsblk
+
+    echo "--- Configuration complete at $(date) ---"
+
+# Write final status to a file
+write_files:
+  - content: |
+      Cloud-init disk setup completed
+      Check /var/log/cloud-init-custom.log for details
+    path: /root/disk-setup-status.txt
+    permissions: '0644'
+
+# Reboot after 3 minutes to ensure all changes take effect
+power_state:
+  delay: "+3"
+  mode: reboot
+  message: "System rebooting after cloud-init setup..."
+  timeout: 30
+  condition: true
