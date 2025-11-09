@@ -349,6 +349,13 @@ steps:
           throw "Terraform validation failed"
       }
       
+      # Format code for consistency
+      Write-Host "📝 Formatting Terraform code..."
+      terraform fmt
+      if ($LASTEXITCODE -ne 0) {
+          Write-Warning "⚠️  Terraform format failed but continuing..."
+      }
+      
       Write-Host "✅ Terraform configuration is valid and ready for deployment"
   displayName: "Validate Terraform Configuration with Local State"
   condition: succeeded()
@@ -386,31 +393,9 @@ steps:
           }
       }
       
-      # Initialize with local backend
-      Write-Host "🔧 Initializing Terraform..."
-      terraform init
-      if ($LASTEXITCODE -ne 0) {
-          Write-Error "❌ Terraform initialization failed with exit code $LASTEXITCODE"
-          throw "Terraform init failed"
-      }
-        
-      # Format code
-      Write-Host "📝 Formatting Terraform code..."
-      terraform fmt
-      if ($LASTEXITCODE -ne 0) {
-          Write-Warning "⚠️  Terraform format failed but continuing..."
-      }
-      
-      # Validate configuration
-      Write-Host "✅ Validating Terraform configuration..."
-      terraform validate
-      if ($LASTEXITCODE -ne 0) {
-          Write-Error "❌ Terraform validation failed with exit code $LASTEXITCODE"
-          throw "Terraform validation failed"
-      }
-      
-      # Create plan
-      Write-Host "📋 Creating Terraform plan..."
+      # Note: Terraform init, validate, and fmt already completed in previous validation step
+      # Create execution plan and apply (no redundant initialization needed)
+      Write-Host "📋 Creating Terraform execution plan..."
       terraform plan -out=tfplan
       if ($LASTEXITCODE -ne 0) {
           Write-Error "❌ Terraform plan failed with exit code $LASTEXITCODE"
