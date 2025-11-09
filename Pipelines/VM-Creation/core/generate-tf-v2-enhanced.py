@@ -507,16 +507,20 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
             script_blob_name = self.config['script_blob_name_linux']
             script_description = "Linux shell setup script"
         
+        # Custom Script Extension Configuration
+        # Set to False to disable custom script extensions for all VMs
+        # Useful when having blob storage authentication issues or 409 conflicts
+        self.enable_custom_scripts = False  # DISABLED - Skip custom script extensions
+        
         # Check if script storage is configured
-        script_enabled = all([
+        script_storage_configured = all([
             self.config['script_storage_account'],
             self.config['script_storage_container'],
             script_blob_name
         ])
         
-        # TEMPORARILY DISABLE Custom Script Extension due to 409 Conflict errors
-        # TODO: Enable after resolving blob storage authentication
-        script_enabled = False
+        # Final decision: Both configuration and storage must be ready
+        script_enabled = self.enable_custom_scripts and script_storage_configured
         
         if script_enabled:
             # Generate SAS URL - TODO: Should be generated dynamically or from Key Vault
@@ -525,9 +529,14 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
             print(f"[INFO] Using {script_description}: {script_blob_name}")
             print(f"[WARNING] Using direct blob URL. Consider implementing dynamic SAS token generation.")
         else:
-            print(f"[INFO] Custom Script Extension disabled - preventing 409 Conflict errors")
-            print(f"[INFO] Script storage config: storage_account={bool(self.config['script_storage_account'])}, container={bool(self.config['script_storage_container'])}, blob={bool(script_blob_name)}")
-            print(f"[TODO] Enable Custom Script Extension after resolving blob storage authentication")
+            print(f"[SKIP] Custom Script Extensions disabled globally")
+            if not self.enable_custom_scripts:
+                print(f"[INFO] Custom scripts disabled by configuration (enable_custom_scripts = False)")
+            if not script_storage_configured:
+                print(f"[INFO] Script storage not fully configured")
+                print(f"[INFO] Storage account: {'✓' if self.config['script_storage_account'] else '✗'}")
+                print(f"[INFO] Container: {'✓' if self.config['script_storage_container'] else '✗'}")
+                print(f"[INFO] Script blob: {'✓' if script_blob_name else '✗'}")
             sas_url = None
         
         # Resource group reference
@@ -665,10 +674,10 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
 ''')
         else:
             tf_file.write(f'''
-# Custom Script Extension disabled - preventing 409 Conflict errors  
-# ISSUE: Blob storage authentication causing deployment failures
-# TODO: Configure SAS token generation or managed identity access
-# To enable: Resolve blob storage access and set script_enabled = True
+# Custom Script Extension DISABLED
+# Reason: Custom script extensions are disabled in configuration
+# To enable: Set enable_custom_scripts = True in Python script
+# Note: Also ensure blob storage authentication is configured
 ''')
         
         tf_file.write('''
@@ -757,10 +766,10 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
 ''')
         else:
             tf_file.write(f'''
-# Custom Script Extension disabled - preventing 409 Conflict errors
-# ISSUE: Blob storage authentication causing deployment failures
-# TODO: Configure SAS token generation or managed identity access
-# To enable: Resolve blob storage access and set script_enabled = True
+# Custom Script Extension DISABLED
+# Reason: Custom script extensions are disabled in configuration
+# To enable: Set enable_custom_scripts = True in Python script
+# Note: Also ensure blob storage authentication is configured
 ''')
         
         tf_file.write('''
