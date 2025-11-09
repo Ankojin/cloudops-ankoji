@@ -59,10 +59,7 @@ runcmd:
     # ====== Prevent Azure auto-mounting of data disks
     echo "--- Preventing Azure auto-mounting conflicts ---"
     
-    # Stop and disable any auto-mounting services that might interfere
-    systemctl stop cloud-init-local.service 2>/dev/null || true
-    
-    # Remove any auto-mounted Azure resource disks before we process them
+    # Check if any Azure resource disks are auto-mounted and unmount them
     for mount_point in /mnt /mnt/resource; do
         if mountpoint -q "$mount_point" 2>/dev/null; then
             echo "Unmounting Azure auto-mounted disk at $mount_point"
@@ -70,10 +67,13 @@ runcmd:
         fi
     done
     
-    # Remove Azure auto-mount entries from fstab temporarily
+    # Backup fstab and temporarily remove Azure auto-mount entries
     cp /etc/fstab /etc/fstab.backup
     sed -i '/azure_resource/d' /etc/fstab
     sed -i '/comment=cloudconfig/d' /etc/fstab
+    
+    # Prevent systemd from auto-mounting any additional disks during our setup
+    systemctl mask tmp.mount 2>/dev/null || true
     
     # Function to wait for device to be ready
     wait_for_device() {
@@ -129,6 +129,15 @@ runcmd:
                 echo "Could not unmount $device, skipping"
                 return 1
             fi
+        fi
+        
+        # If the device has existing partitions, remove them first
+        if [ -b "${device}1" ]; then
+            echo "Removing existing partitions on $device"
+            # Use parted to remove all partitions
+            parted "$device" --script mklabel gpt 2>/dev/null || true
+            partprobe "$device" 2>/dev/null || true
+            sleep 2
         fi
         
         # Additional device readiness checks
