@@ -20,6 +20,18 @@ runcmd:
 
     echo "--- Starting system configuration at $(date) ---"
 
+    # ====== Disable Azure waagent resource disk auto-mount (CRITICAL FIX)
+    # Standard_B2s has no temp disk, so waagent tries to mount data disks
+    echo "--- Configuring waagent to prevent data disk interference ---"
+    if [ -f /etc/waagent.conf ]; then
+      # Disable resource disk mounting and swap
+      sed -i 's/ResourceDisk.MountPoint=\/mnt/ResourceDisk.MountPoint=\/mnt\/resource/' /etc/waagent.conf
+      sed -i 's/ResourceDisk.EnableSwap=y/ResourceDisk.EnableSwap=n/' /etc/waagent.conf
+      sed -i 's/ResourceDisk.Format=y/ResourceDisk.Format=n/' /etc/waagent.conf
+      echo "--- waagent configured to not auto-mount disks ---"
+      # Don't restart waagent here - it will be handled after disk setup
+    fi
+
     # ====== Disable firewalld
     systemctl disable --now firewalld.service
 
@@ -132,12 +144,33 @@ runcmd:
         fi
         
         # If the device has existing partitions, remove them first
-        if [ -b "${device}1" ]; then
-            echo "Removing existing partitions on $device"
-            # Use parted to remove all partitions
+        if [ -b "${device}1" ] || parted "$device" print 2>/dev/null | grep -q "Number"; then
+            echo "Removing existing partitions on $device (including Azure waagent auto-created partitions)"
+            
+            # Unmount if mounted (Azure waagent might have mounted it)
+            umount "$device"* 2>/dev/null || true
+            
+            # Use multiple methods to ensure partitions are completely removed
+            
+            # Method 1: Use parted to remove all partitions and create fresh GPT
             parted "$device" --script mklabel gpt 2>/dev/null || true
+            
+            # Method 2: Use wipefs to remove all filesystem signatures
+            wipefs -af "$device" 2>/dev/null || true
+            
+            # Method 3: Use sgdisk to clear GPT structures
+            sgdisk --clear "$device" 2>/dev/null || true
+            
+            # Method 4: Use dd to zero out first and last 1MB (partition tables)
+            dd if=/dev/zero of="$device" bs=1M count=1 2>/dev/null || true
+            dd if=/dev/zero of="$device" bs=1M seek=$(($(blockdev --getsz "$device") / 2048 - 1)) count=1 2>/dev/null || true
+            
+            # Force kernel to re-read partition table
             partprobe "$device" 2>/dev/null || true
-            sleep 2
+            udevadm settle
+            sleep 5
+            
+            echo "Aggressive partition removal completed for $device"
         fi
         
         # Additional device readiness checks
@@ -256,16 +289,21 @@ runcmd:
         fi
     done
 
-    echo "--- Found ${#data_disks[@]} data disks to process: ${data_disks[*]} ---"
+    # Sort the data disks array to ensure consistent mounting order (sdb -> u01, sdc -> u02, etc.)
+    echo "--- Sorting disks for consistent mount order ---"
+    IFS=$'\n' sorted_disks=($(sort <<<"${data_disks[*]}"))
+    unset IFS
 
-    # Process each data disk
-    for device in "${data_disks[@]}"; do
+    echo "--- Found ${#sorted_disks[@]} data disks to process in order: ${sorted_disks[*]} ---"
+
+    # Process each data disk in sorted order
+    for device in "${sorted_disks[@]}"; do
         if [ $mount_point_counter -gt 10 ]; then
             break
         fi
         
         mountpoint="u$(printf "%02d" $mount_point_counter)"
-        echo "Processing disk $found_disks: $device -> /$mountpoint"
+        echo "Processing disk $found_disks: $device -> /$mountpoint (ordered by device name)"
         
         if setup_disk "$device" "$mountpoint"; then
             mount_point_counter=$((mount_point_counter + 1))
@@ -289,6 +327,11 @@ runcmd:
     lsblk
 
     echo "--- Configuration complete at $(date) ---"
+    
+    # ====== Restart waagent with new configuration (safe now that disks are set up)
+    echo "--- Restarting waagent with disk-safe configuration ---"
+    systemctl restart walinuxagent || true
+    echo "--- waagent restarted successfully ---"
 
 # Write final status to a file
 write_files:
