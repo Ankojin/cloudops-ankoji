@@ -237,8 +237,8 @@ steps:
           Write-Host "##vso[task.complete result=Failed;]Project directory creation failed"
           throw "Project directory was not created - STOPPING PIPELINE"
       }
-  displayName: "Run Python Script (Generate New VM Configuration - Apply Only)"
-  condition: and(succeeded(), eq('${{ parameters.action }}', 'apply'))
+  displayName: "Run Python Script (Generate VM Configuration - Apply & Modify)"
+  condition: and(succeeded(), or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
 
 - task: PowerShell@2
   inputs:
