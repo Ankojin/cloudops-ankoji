@@ -88,21 +88,21 @@ class TerraformVMGenerator:
                 "os_type": "linux",
                 "publisher": "RedHat",
                 "offer": "RHEL", 
-                "sku": "8-gen2",
+                "sku": "8-LVM",
                 "version": "latest"
             },
             "rhel-9": {
                 "os_type": "linux",
                 "publisher": "RedHat",
                 "offer": "RHEL",
-                "sku": "9-gen2", 
+                "sku": "9_4",
                 "version": "latest"
             },
             "rhel-7": {
                 "os_type": "linux",
                 "publisher": "RedHat",
                 "offer": "RHEL",
-                "sku": "7-gen2",
+                "sku": "7-LVM",
                 "version": "latest"
             },
             # CentOS Templates
