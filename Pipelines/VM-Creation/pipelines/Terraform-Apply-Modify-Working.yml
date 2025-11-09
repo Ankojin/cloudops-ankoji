@@ -394,17 +394,9 @@ steps:
       }
       
       # Note: Terraform init, validate, and fmt already completed in previous validation step
-      # Create execution plan and apply (no redundant initialization needed)
-      Write-Host "📋 Creating Terraform execution plan..."
-      terraform plan -out=tfplan
-      if ($LASTEXITCODE -ne 0) {
-          Write-Error "❌ Terraform plan failed with exit code $LASTEXITCODE"
-          throw "Terraform plan failed"
-      }
-      
-      # Apply changes
-      Write-Host "⚡ Applying Terraform plan..."
-      terraform apply -auto-approve tfplan
+      # Apply changes directly (no separate plan file needed since we already validated)
+      Write-Host "⚡ Applying Terraform changes with confirmation..."
+      terraform apply -auto-approve
       if ($LASTEXITCODE -ne 0) {
           Write-Error "❌ Terraform apply failed with exit code $LASTEXITCODE"
           throw "Terraform apply failed"
