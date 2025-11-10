@@ -1,4 +1,9 @@
+
 #!/bin/bash
+
+# Output log file
+LOGFILE="/var/log/linuxpostconf.log"
+exec > >(tee -a "$LOGFILE") 2>&1
 
 # =========================================
 # System Configuration Script
@@ -10,6 +15,7 @@
 # =========================================
 
 echo "--- Starting system configuration ---"
+echo "Logging to $LOGFILE"
 
 # Set timezone
 timedatectl set-timezone Asia/Riyadh

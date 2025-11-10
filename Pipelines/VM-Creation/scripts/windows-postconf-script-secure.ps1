@@ -5,7 +5,7 @@ $logFilePath = "C:\WindowsAzure\postconf.txt"
 Start-Transcript -Path $logFilePath -Append
 
 # Function to log success and failure
-function Log-Result ($taskDescription, $success) {
+function Write-Result ($taskDescription, $success) {
     if ($success) {
         Write-Output "$taskDescription - SUCCESS"
     } else {
@@ -24,25 +24,25 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 # Set PowerShell to RemoteSigned mode (more secure than Unrestricted)
 try {
     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force
-    Log-Result "Set Execution Policy to RemoteSigned" $true
+    Write-Result "Set Execution Policy to RemoteSigned" $true
 } catch {
-    Log-Result "Set Execution Policy to RemoteSigned" $false
+    Write-Result "Set Execution Policy to RemoteSigned" $false
 }
 
 # Disable firewall for all profiles
 try {
     Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
-    Log-Result "Disable Firewall for All Profiles" $true
+    Write-Result "Disable Firewall for All Profiles" $true
 } catch {
-    Log-Result "Disable Firewall for All Profiles" $false
+    Write-Result "Disable Firewall for All Profiles" $false
 }
 
 # Set timezone
 try {
     Set-TimeZone -Id "Arab Standard Time"
-    Log-Result "Set Time Zone to Arab Standard Time" $true
+    Write-Result "Set Time Zone to Arab Standard Time" $true
 } catch {
-    Log-Result "Set Time Zone to Arab Standard Time" $false
+    Write-Result "Set Time Zone to Arab Standard Time" $false
 }
 
 ########### Initialize (RAW) disks and create a new partition and format it ###########
@@ -72,10 +72,10 @@ foreach ($disk in $disks) {
     try {
         Initialize-Disk -Number $disk.Number -PartitionStyle GPT -Force
         Write-Output "Successfully initialized disk $($disk.Number)"
-        Log-Result "Initialize Disk $($disk.Number)" $true
+        Write-Result "Initialize Disk $($disk.Number)" $true
     } catch {
         Write-Output "Failed to initialize disk $($disk.Number): $($_.Exception.Message)"
-        Log-Result "Initialize Disk $($disk.Number)" $false
+        Write-Result "Initialize Disk $($disk.Number)" $false
         continue
     }
 
@@ -105,10 +105,10 @@ try {
     $searchSuffix = "albtests.com"
     Set-DnsClientGlobalSetting -SuffixSearchList $searchSuffix
     Write-Output "Set DNS search suffix to: $searchSuffix"
-    Log-Result "Configure DNS Search Suffix" $true
+    Write-Result "Configure DNS Search Suffix" $true
 } catch {
     Write-Output "Failed to set DNS search suffix: $($_.Exception.Message)"
-    Log-Result "Configure DNS Search Suffix" $false
+    Write-Result "Configure DNS Search Suffix" $false
 }
 
 #### Join to Domain with Enhanced Security ####
@@ -124,10 +124,10 @@ $keyVaultRG = $env:KEYVAULT_RG
 # Validate Key Vault environment variables
 if (-not $keyVaultName) {
     Write-Output "ERROR: KEYVAULT_NAME environment variable not set"
-    Log-Result "Key Vault Name Environment Variable Check" $false
+    Write-Result "Key Vault Name Environment Variable Check" $false
 } else {
     Write-Output "Using Key Vault: $keyVaultName in Resource Group: $keyVaultRG"
-    Log-Result "Key Vault Environment Variables Loaded" $true
+    Write-Result "Key Vault Environment Variables Loaded" $true
 }
 
 # OPTION 1: Use Azure Key Vault (Recommended for Production)
@@ -139,7 +139,7 @@ try {
         Write-Output "Installing Az.KeyVault module..."
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Install-Module -Name Az.KeyVault -Force -AllowClobber -Scope CurrentUser -Repository PSGallery
-        Log-Result "Install Az.KeyVault Module" $true
+        Write-Result "Install Az.KeyVault Module" $true
     } else {
         Write-Output "Az.KeyVault module already available"
     }
@@ -149,7 +149,7 @@ try {
         Write-Output "Installing Az.Accounts module..."
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Install-Module -Name Az.Accounts -Force -AllowClobber -Scope CurrentUser -Repository PSGallery
-        Log-Result "Install Az.Accounts Module" $true
+        Write-Result "Install Az.Accounts Module" $true
     } else {
         Write-Output "Az.Accounts module already available"
     }
@@ -157,22 +157,22 @@ try {
     # Connect using Managed Identity
     Write-Output "Connecting to Azure using Managed Identity..."
     Connect-AzAccount -Identity
-    Log-Result "Connect to Azure with Managed Identity" $true
+    Write-Result "Connect to Azure with Managed Identity" $true
     
     # Retrieve password from Key Vault
     $keyVaultSecret = Get-AzKeyVaultSecret -VaultName $keyVaultName -Name "adjoin-password"
     $domain_password = $keyVaultSecret.SecretValue
     Write-Output "Successfully retrieved domain password from Key Vault"
-    Log-Result "Retrieved domain password from Key Vault" $true
+    Write-Result "Retrieved domain password from Key Vault" $true
     
 } catch {
     Write-Output "Failed to retrieve password from Key Vault: $($_.Exception.Message)"
-    Log-Result "Failed to retrieve password from Key Vault" $false
+    Write-Result "Failed to retrieve password from Key Vault" $false
     
     # OPTION 2: Fallback to hardcoded password (not recommended for production)
     Write-Output "Using fallback hardcoded password for domain join"
     $domain_password = ConvertTo-SecureString "AdJo1n@!qaz@wsx" -AsPlainText -Force
-    Log-Result "Using fallback hardcoded password" $true
+    Write-Result "Using fallback hardcoded password" $true
 }
 
 # Create credential object
@@ -188,11 +188,11 @@ do {
         Write-Output "Attempting to join domain $domain_name (Attempt $($retryCount + 1)/$maxRetries)"
         Add-Computer -DomainName $domain_name -Credential $credential -Force -Restart
         $domainJoined = $true
-        Log-Result "Join Computer to Domain $domain_name" $true
+        Write-Result "Join Computer to Domain $domain_name" $true
         break
     } catch {
         $retryCount++
-        Log-Result "Domain join attempt $retryCount failed" $false
+        Write-Result "Domain join attempt $retryCount failed" $false
         if ($retryCount -lt $maxRetries) {
             Write-Output "Retrying in 30 seconds..."
             Start-Sleep -Seconds 30
@@ -202,7 +202,7 @@ do {
 
 if (!$domainJoined) {
     Write-Output "Failed to join domain after $maxRetries attempts. Manual intervention may be required."
-    Log-Result "Final domain join status" $false
+    Write-Result "Final domain join status" $false
 }
 
 # Stop logging
