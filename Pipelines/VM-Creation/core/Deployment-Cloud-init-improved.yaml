@@ -127,20 +127,20 @@ runcmd:
             fi
         done
 
-        # ====== Setup SCSI/SATA data disks (Standard/Premium HDD/SSD)
-        # Azure data disks typically appear as /dev/sd* (sdc, sdd, sde, etc.)
-        for device in /dev/sd{c..z}; do
-            if [ $mount_point_counter -gt 10 ]; then
-                break
-            fi
-
-            if [ -b "$device" ]; then
-                mountpoint="u$(printf "%02d" $mount_point_counter)"
-                if setup_disk "$device" "$mountpoint"; then
-                    mount_point_counter=$((mount_point_counter + 1))
+            # ====== Setup SCSI/SATA data disks (Standard/Premium HDD/SSD)
+            # Azure data disks typically appear as /dev/sd* (sda, sdb, sdc, etc.)
+            for device in /dev/sd{a..z}; do
+                if [ $mount_point_counter -gt 10 ]; then
+                    break
                 fi
-            fi
-        done
+
+                if [ -b "$device" ]; then
+                    mountpoint="u$(printf "%02d" $mount_point_counter)"
+                    if setup_disk "$device" "$mountpoint"; then
+                        mount_point_counter=$((mount_point_counter + 1))
+                    fi
+                fi
+            done
 
         # ====== Setup Azure LUN devices (alternative path for data disks)
         for i in $(seq 0 9); do
