@@ -45,10 +45,17 @@ steps:
 # Step 1: Setup Python
 - task: UsePythonVersion@0
   inputs:
-    versionSpec: '$(pythonVersion)'
+    versionSpec: '3.x'
     addToPath: true
-    architecture: 'x64'
-  displayName: 'Setup Python $(pythonVersion)'
+
+- script: |
+    python -m pip install --upgrade pip
+    python -m pip install azure-storage-blob
+  displayName: 'Install Python dependencies'
+
+- script: |
+    python Pipelines/VM-Creation/core/generate-tf-v2-enhanced.py
+  displayName: 'Run Terraform VM Generator'
 
 # Step 2: Set Environment Variables
 - task: PowerShell@2
