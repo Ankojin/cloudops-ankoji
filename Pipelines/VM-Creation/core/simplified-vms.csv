@@ -1,2 +1,2 @@
 vm_name,resource_group,vm_role,subnet_name,static_ip,vm_size,os_template,disk_1_size,disk_2_size,disk_3_size,create_rg
-ankoji-linux-test-01,ankoji-test-01,app_server,snet-dev-nonpci-app-02,10.189.57.162,Standard_D2s_v5,rhel-9,16,8,,TRUE
+ankoji-linux-test-01,ankoji-test-01,app_server,snet-dev-nonpci-app-02,10.189.57.162,Standard_D2s_v5,rhel-9,16,8,10,TRUE
