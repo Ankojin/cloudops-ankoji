@@ -41,7 +41,7 @@ class TerraformVMGenerator:
             'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
             'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
             'script_storage_key': os.getenv('SCRIPT_STORAGE_KEY'),
-            'enable_custom_script': os.getenv('ENABLE_CUSTOM_SCRIPT', 'false').lower() == 'true',
+            'enable_custom_script': os.getenv('ENABLE_CUSTOM_SCRIPT', 'true').lower() == 'true',
             'shutdown_enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
             'shutdown_time': os.getenv('shutdown_time', '2000'),
             'shutdown_timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
