@@ -162,11 +162,14 @@ class TerraformVMGenerator:
         print(f"[INFO] Available OS templates: {', '.join(self.os_templates.keys())}")
     
     def read_and_encode_cloud_init_yaml(self) -> str:
-        """Read and base64 encode cloud-init file"""
+        """Read cloud-init file - return base64 encoded content for Terraform custom_data"""
         try:
             with open(self.cloud_init_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                return base64.b64encode(content.encode('utf-8')).decode('ascii')
+                # For Terraform custom_data, we need base64 encoded content
+                encoded = base64.b64encode(content.encode('utf-8')).decode('ascii')
+                print(f"[DEBUG] Cloud-init file size: {len(content)} chars, encoded: {len(encoded)} chars")
+                return encoded
         except FileNotFoundError:
             print(f"[WARNING] Cloud-init file {self.cloud_init_file} not found.")
             return ""
@@ -582,6 +585,19 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
             self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, cloud_init_content, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
         else:
             self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
+        
+        # DEBUG: Save decoded cloud-init for comparison with Azure Portal
+        if vm_name == next(iter([row["vm_name"].strip() for row in csv.DictReader(open(self.csv_file_path))]), None):
+            try:
+                decoded_content = base64.b64decode(cloud_init_content).decode('utf-8')
+                debug_file = f"./Project/{self.project_name}/debug-cloud-init.yaml"
+                os.makedirs(os.path.dirname(debug_file), exist_ok=True)
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    f.write(decoded_content)
+                print(f"[DEBUG] Saved decoded cloud-init to: {debug_file}")
+                print(f"[DEBUG] Compare this with what you used in Azure Portal GUI")
+            except Exception as e:
+                print(f"[DEBUG] Could not save debug file: {e}")
         
         # Generate additional disks
         self._generate_data_disks(tf_file, vm_name, row, os_type, rg_reference)
