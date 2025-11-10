@@ -196,6 +196,22 @@ provider "azurerm" {{
 variable "location" {{
   default = "{self.config['location']}"
 }}
+
+# Required data sources for VM creation
+data "azurerm_virtual_network" "main_vnet" {{
+  name                = "{self.config['vnet_name']}"
+  resource_group_name = "{self.config['vnet_rg']}"
+}}
+
+data "azurerm_key_vault" "main_kv" {{
+  name                = "{self.config['keyvault_name']}"
+  resource_group_name = "{self.config['keyvault_rg']}"
+}}
+
+data "azurerm_monitor_data_collection_rule" "main_dcr" {{
+  name                = "{self.config['dcr_name']}"
+  resource_group_name = "{self.config['dcr_rg']}"
+}}
 ''')
 
     def _collect_resource_groups(self):
