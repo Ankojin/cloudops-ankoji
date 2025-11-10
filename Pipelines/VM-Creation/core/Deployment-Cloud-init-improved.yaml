@@ -3,348 +3,176 @@
 # Set timezone
 timezone: Asia/Riyadh
 
-# Install required packages first
-packages:
-  - lvm2
-  - xfsprogs
-  - parted
-
 # Run setup commands
 runcmd:
-  - |
-    #!/bin/bash
+    - |
+        #!/bin/bash
 
-    # Enable logging
-    exec > >(tee -a /var/log/cloud-init-custom.log)
-    exec 2>&1
+        echo "--- Starting system configuration ---"
 
-    echo "--- Starting system configuration at $(date) ---"
+        # ====== Disable firewalld
+        systemctl disable --now firewalld.service
 
-    # ====== Disable Azure waagent resource disk auto-mount (CRITICAL FIX)
-    # Standard_B2s has no temp disk, so waagent tries to mount data disks
-    echo "--- Configuring waagent to prevent data disk interference ---"
-    if [ -f /etc/waagent.conf ]; then
-      # Disable resource disk mounting and swap
-      sed -i 's/ResourceDisk.MountPoint=\/mnt/ResourceDisk.MountPoint=\/mnt\/resource/' /etc/waagent.conf
-      sed -i 's/ResourceDisk.EnableSwap=y/ResourceDisk.EnableSwap=n/' /etc/waagent.conf
-      sed -i 's/ResourceDisk.Format=y/ResourceDisk.Format=n/' /etc/waagent.conf
-      echo "--- waagent configured to not auto-mount disks ---"
-      # Don't restart waagent here - it will be handled after disk setup
-    fi
-
-    # ====== Disable firewalld
-    systemctl disable --now firewalld.service
-
-    # ====== Disable SELinux
-    if [ -f /etc/selinux/config ]; then
-      sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
-      setenforce 0 || true
-    fi
-
-    # ====== Set DHCP search domain
-    if ! grep -q 'supersede domain-search "albtests.com";' /etc/dhcp/dhclient.conf; then
-      echo 'supersede domain-search "albtests.com";' >> /etc/dhcp/dhclient.conf
-    fi
-
-    # ====== Create Unix Admin User
-    USERNAME="unixadmin"
-    PASSWORD_HASH='$6$D5BM.uromWpiMoUW$ESEB6Zaph0p0xFtOvVPMOFLjM9losVnMbSqJeFTAuvrjU0EcC0JaJZtJFLK.1ghKaiLhtR.sURn.mtsaLl5zb/'
-
-    if ! id "$USERNAME" &>/dev/null; then
-      useradd -m -s /bin/bash -G users,wheel -c "Unix Team Admin User" "$USERNAME"
-      usermod --password "$PASSWORD_HASH" "$USERNAME"
-      echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME
-      chmod 440 /etc/sudoers.d/$USERNAME
-    fi
-
-    # ====== Wait for system to be fully ready
-    sleep 10
-    
-    # Ensure LVM tools are available
-    which pvcreate vgcreate lvcreate || {
-        echo "Installing LVM tools..."
-        dnf install -y lvm2 xfsprogs parted
-    }
-
-    echo "--- Starting disk setup for attached data disks at $(date) ---"
-    
-    # ====== Prevent Azure auto-mounting of data disks
-    echo "--- Preventing Azure auto-mounting conflicts ---"
-    
-    # Check if any Azure resource disks are auto-mounted and unmount them
-    for mount_point in /mnt /mnt/resource; do
-        if mountpoint -q "$mount_point" 2>/dev/null; then
-            echo "Unmounting Azure auto-mounted disk at $mount_point"
-            umount "$mount_point" 2>/dev/null || true
+        # ====== Disable SELinux
+        if [ -f /etc/selinux/config ]; then
+            sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+            setenforce 0 || true
         fi
-    done
+
+        # ====== Set DHCP search domain
+        if ! grep -q 'supersede domain-search "albtests.com";' /etc/dhcp/dhclient.conf; then
+            echo 'supersede domain-search "albtests.com";' >> /etc/dhcp/dhclient.conf
+        fi
+
+        # ====== Create Unix Admin User
+        USERNAME="unixadmin"
+        PASSWORD_HASH='$6$D5BM.uromWpiMoUW$ESEB6Zaph0p0xFtOvVPMOFLjM9losVnMbSqJeFTAuvrjU0EcC0JaJZtJFLK.1ghKaiLhtR.sURn.mtsaLl5zb/'
+
+        if ! id "$USERNAME" &>/dev/null; then
+            useradd -m -s /bin/bash -G users,wheel -c "Unix Team Admin User" "$USERNAME"
+            usermod --password "$PASSWORD_HASH" "$USERNAME"
+            echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME
+            chmod 440 /etc/sudoers.d/$USERNAME
+        fi
+
+        echo "--- Starting disk setup for attached data disks ---"
     
-    # Backup fstab and temporarily remove Azure auto-mount entries
-    cp /etc/fstab /etc/fstab.backup
-    sed -i '/azure_resource/d' /etc/fstab
-    sed -i '/comment=cloudconfig/d' /etc/fstab
-    
-    # Prevent systemd from auto-mounting any additional disks during our setup
-    systemctl mask tmp.mount 2>/dev/null || true
-    
-    # Function to wait for device to be ready
-    wait_for_device() {
-        local device=$1
-        local max_wait=30
-        local count=0
+        # Function to setup disk with LVM and XFS
+        setup_disk() {
+                local device=$1
+                local mountpoint=$2
         
-        while [ $count -lt $max_wait ]; do
+                echo "Setting up $device as $mountpoint"
+        
+                # Check if device exists and is a block device
+                if [ ! -b "$device" ]; then
+                        echo "Device $device not found, skipping"
+                        return 1
+                fi
+        
+                # Check if device is already in use
+                if pvdisplay "$device" &>/dev/null; then
+                        echo "Device $device already has LVM, skipping"
+                        return 1
+                fi
+        
+                if mount | grep -q "$device"; then
+                        echo "Device $device is already mounted, skipping"
+                        return 1
+                fi
+        
+                # Wait for device to be ready
+                udevadm settle
+                sleep 2
+        
+                # Create physical volume, volume group, and logical volume
+                if ! pvcreate "$device"; then
+                        echo "Failed to create physical volume on $device"
+                        return 1
+                fi
+        
+                if ! vgcreate "${mountpoint}vg" "$device"; then
+                        echo "Failed to create volume group ${mountpoint}vg"
+                        return 1
+                fi
+        
+                if ! lvcreate -l 100%VG -n "${mountpoint}lv" "${mountpoint}vg"; then
+                        echo "Failed to create logical volume ${mountpoint}lv"
+                        return 1
+                fi
+        
+                # Format with XFS
+                if ! mkfs.xfs "/dev/${mountpoint}vg/${mountpoint}lv"; then
+                        echo "Failed to format /dev/${mountpoint}vg/${mountpoint}lv with XFS"
+                        return 1
+                fi
+        
+                # Create mount point
+                mkdir -p "/$mountpoint"
+        
+                # Add to fstab if not already present
+                if ! grep -qs "/dev/${mountpoint}vg/${mountpoint}lv" /etc/fstab; then
+                        echo "/dev/${mountpoint}vg/${mountpoint}lv /$mountpoint xfs defaults,noatime 0 2" >> /etc/fstab
+                fi
+        
+                # Mount the filesystem
+                if mount "/$mountpoint"; then
+                        echo "Successfully mounted $device at /$mountpoint"
+                        # Set permissions
+                        chown root:root "/$mountpoint"
+                        chmod 755 "/$mountpoint"
+                        return 0
+                else
+                        echo "Failed to mount /$mountpoint"
+                        return 1
+                fi
+        }
+
+        # ====== Setup NVMe Disks (Azure Premium SSD data disks)
+        mount_point_counter=1
+
+        for i in $(seq 2 9); do
+            device="/dev/nvme0n${i}"
+
+            if [ $mount_point_counter -le 10 ]; then
+                mountpoint="u$(printf "%02d" $mount_point_counter)"
+            else
+                break
+            fi
+
             if [ -b "$device" ]; then
-                echo "Device $device is ready"
-                return 0
+                if setup_disk "$device" "$mountpoint"; then
+                    mount_point_counter=$((mount_point_counter + 1))
+                fi
             fi
-            echo "Waiting for device $device... ($count/$max_wait)"
-            sleep 2
-            count=$((count + 1))
         done
-        
-        echo "Device $device not ready after ${max_wait} attempts"
-        return 1
-    }
-    
-    # Function to setup disk with LVM and XFS
-    setup_disk() {
-        local device=$1
-        local mountpoint=$2
-        
-        echo "=== Setting up $device as /$mountpoint ==="
-        
-        # Wait for device to be ready
-        if ! wait_for_device "$device"; then
-            echo "Device $device not available, skipping"
-            return 1
-        fi
-        
-        # Check if device is already in use
-        if pvdisplay "$device" &>/dev/null; then
-            echo "Device $device already has LVM, skipping"
-            return 1
-        fi
-        
-        # Check if device or its partitions are mounted
-        if mount | grep -q "^${device}"; then
-            echo "Device $device is mounted, attempting to unmount..."
-            # Try to unmount any partitions of this device
-            for part in "${device}"*; do
-                if [ "$part" != "$device" ] && mount | grep -q "^${part}"; then
-                    echo "Unmounting $part"
-                    umount "$part" 2>/dev/null || true
-                fi
-            done
-            # Check again if still mounted
-            if mount | grep -q "^${device}"; then
-                echo "Could not unmount $device, skipping"
-                return 1
+
+        # ====== Setup SCSI/SATA data disks (Standard/Premium HDD/SSD)
+        # Azure data disks typically appear as /dev/sd* (sdc, sdd, sde, etc.)
+        for device in /dev/sd{c..z}; do
+            if [ $mount_point_counter -gt 10 ]; then
+                break
             fi
-        fi
-        
-        # If the device has existing partitions, remove them first
-        if [ -b "${device}1" ] || parted "$device" print 2>/dev/null | grep -q "Number"; then
-            echo "Removing existing partitions on $device (including Azure waagent auto-created partitions)"
-            
-            # Unmount if mounted (Azure waagent might have mounted it)
-            umount "$device"* 2>/dev/null || true
-            
-            # Use multiple methods to ensure partitions are completely removed
-            
-            # Method 1: Use parted to remove all partitions and create fresh GPT
-            parted "$device" --script mklabel gpt 2>/dev/null || true
-            
-            # Method 2: Use wipefs to remove all filesystem signatures
-            wipefs -af "$device" 2>/dev/null || true
-            
-            # Method 3: Use sgdisk to clear GPT structures
-            sgdisk --clear "$device" 2>/dev/null || true
-            
-            # Method 4: Use dd to zero out first and last 1MB (partition tables)
-            dd if=/dev/zero of="$device" bs=1M count=1 2>/dev/null || true
-            dd if=/dev/zero of="$device" bs=1M seek=$(($(blockdev --getsz "$device") / 2048 - 1)) count=1 2>/dev/null || true
-            
-            # Force kernel to re-read partition table
-            partprobe "$device" 2>/dev/null || true
-            udevadm settle
-            sleep 5
-            
-            echo "Aggressive partition removal completed for $device"
-        fi
-        
-        # Additional device readiness checks
-        udevadm settle
-        partprobe "$device" 2>/dev/null || true
-        sleep 3
-        
-        # Create physical volume, volume group, and logical volume
-        echo "Creating physical volume on $device..."
-        if ! pvcreate "$device" -ff; then
-            echo "Failed to create physical volume on $device"
-            return 1
-        fi
-        
-        echo "Creating volume group ${mountpoint}vg..."
-        if ! vgcreate "${mountpoint}vg" "$device"; then
-            echo "Failed to create volume group ${mountpoint}vg"
-            pvremove "$device" 2>/dev/null || true
-            return 1
-        fi
-        
-        echo "Creating logical volume ${mountpoint}lv..."
-        if ! lvcreate -l 100%VG -n "${mountpoint}lv" "${mountpoint}vg"; then
-            echo "Failed to create logical volume ${mountpoint}lv"
-            vgremove "${mountpoint}vg" -f 2>/dev/null || true
-            pvremove "$device" 2>/dev/null || true
-            return 1
-        fi
-        
-        # Format with XFS
-        echo "Formatting /dev/${mountpoint}vg/${mountpoint}lv with XFS..."
-        if ! mkfs.xfs "/dev/${mountpoint}vg/${mountpoint}lv"; then
-            echo "Failed to format /dev/${mountpoint}vg/${mountpoint}lv with XFS"
-            lvremove "/dev/${mountpoint}vg/${mountpoint}lv" -f 2>/dev/null || true
-            vgremove "${mountpoint}vg" -f 2>/dev/null || true
-            pvremove "$device" 2>/dev/null || true
-            return 1
-        fi
-        
-        # Create mount point
-        mkdir -p "/$mountpoint"
-        
-        # Add to fstab if not already present
-        if ! grep -qs "/dev/${mountpoint}vg/${mountpoint}lv" /etc/fstab; then
-            echo "/dev/${mountpoint}vg/${mountpoint}lv /$mountpoint xfs defaults,noatime 0 2" >> /etc/fstab
-        fi
-        
-        # Mount the filesystem
-        echo "Mounting /$mountpoint..."
-        if mount "/$mountpoint"; then
-            echo "[SUCCESS] Successfully mounted $device at /$mountpoint"
-            # Set permissions
-            chown root:root "/$mountpoint"
-            chmod 755 "/$mountpoint"
-            return 0
-        else
-            echo "[ERROR] Failed to mount /$mountpoint"
-            return 1
-        fi
-    }
 
-    # ====== Find and setup Azure data disks
-    mount_point_counter=1
-    found_disks=0
-
-    echo "--- Scanning for Azure data disks ---"
-    
-    # List all block devices for debugging
-    echo "Available block devices:"
-    lsblk -d -o NAME,SIZE,TYPE,MOUNTPOINT
-    
-    echo "Detailed device information:"
-    ls -la /dev/sd* /dev/nvme* /dev/disk/azure/scsi1/lun* 2>/dev/null || true
-
-    # Create a list of all data disks to process
-    declare -a data_disks=()
-    
-    # Method 1: Find Azure LUN devices and their real devices
-    echo "--- Checking Azure LUN devices ---"
-    for i in $(seq 0 9); do
-        lun_device="/dev/disk/azure/scsi1/lun${i}"
-        if [ -L "$lun_device" ]; then
-            real_device=$(readlink -f "$lun_device")
-            echo "Found Azure LUN $i -> $real_device"
-            data_disks+=("$real_device")
-        fi
-    done
-
-    # Method 2: Find unmapped SCSI data disks (sdb, sdc, sdd, etc. - excluding sda which is OS disk)
-    echo "--- Checking for unmapped SCSI data disks ---"
-    for device in /dev/sd{b..z}; do
-        if [ -b "$device" ]; then
-            # Check if this device is already in our Azure LUN list
-            device_already_found=false
-            for existing_device in "${data_disks[@]}"; do
-                if [ "$device" = "$existing_device" ]; then
-                    device_already_found=true
-                    break
+            if [ -b "$device" ]; then
+                mountpoint="u$(printf "%02d" $mount_point_counter)"
+                if setup_disk "$device" "$mountpoint"; then
+                    mount_point_counter=$((mount_point_counter + 1))
                 fi
-            done
-            
-            if [ "$device_already_found" = false ]; then
-                echo "Found unmapped SCSI device: $device"
-                data_disks+=("$device")
             fi
-        fi
-    done
+        done
 
-    # Method 3: Find NVMe data disks (Premium SSD - typically nvme0n2, nvme0n3, etc.)
-    echo "--- Checking NVMe data disks ---"
-    for i in $(seq 2 9); do
-        device="/dev/nvme0n${i}"
-        if [ -b "$device" ]; then
-            echo "Found NVMe device: $device"
-            data_disks+=("$device")
-        fi
-    done
+        # ====== Setup Azure LUN devices (alternative path for data disks)
+        for i in $(seq 0 9); do
+            if [ $mount_point_counter -gt 10 ]; then
+                break
+            fi
 
-    # Sort the data disks array to ensure consistent mounting order (sdb -> u01, sdc -> u02, etc.)
-    echo "--- Sorting disks for consistent mount order ---"
-    IFS=$'\n' sorted_disks=($(sort <<<"${data_disks[*]}"))
-    unset IFS
+            device="/dev/disk/azure/scsi1/lun${i}"
+      
+            if [ -b "$device" ]; then
+                mountpoint="u$(printf "%02d" $mount_point_counter)"
+                if setup_disk "$device" "$mountpoint"; then
+                    mount_point_counter=$((mount_point_counter + 1))
+                fi
+            fi
+        done
 
-    echo "--- Found ${#sorted_disks[@]} data disks to process in order: ${sorted_disks[*]} ---"
+        # ====== Final disk setup verification
+        echo "--- Disk setup verification ---"
+        echo "Mounted filesystems:"
+        df -h | grep "^/dev.*u[0-9]"
+        echo "LVM status:"
+        vgdisplay 2>/dev/null | grep "VG Name" || echo "No volume groups found"
+        echo "fstab entries:"
+        grep "u[0-9][0-9]" /etc/fstab || echo "No custom mount points in fstab"
 
-    # Process each data disk in sorted order
-    for device in "${sorted_disks[@]}"; do
-        if [ $mount_point_counter -gt 10 ]; then
-            break
-        fi
-        
-        mountpoint="u$(printf "%02d" $mount_point_counter)"
-        echo "Processing disk $found_disks: $device -> /$mountpoint (ordered by device name)"
-        
-        if setup_disk "$device" "$mountpoint"; then
-            mount_point_counter=$((mount_point_counter + 1))
-            found_disks=$((found_disks + 1))
-            echo "[SUCCESS] Disk $device configured as /$mountpoint"
-        else
-            echo "[ERROR] Failed to configure disk $device"
-        fi
-    done
+        echo "--- Configuration complete ---"
 
-    # ====== Final disk setup verification
-    echo "--- Disk setup verification at $(date) ---"
-    echo "Total disks processed: $found_disks"
-    echo "Mounted filesystems:"
-    df -h | grep "^/dev.*u[0-9]" || echo "No custom filesystems mounted"
-    echo "LVM status:"
-    vgdisplay 2>/dev/null | grep "VG Name" || echo "No volume groups found"
-    echo "fstab entries:"
-    grep "u[0-9][0-9]" /etc/fstab || echo "No custom mount points in fstab"
-    echo "Block devices:"
-    lsblk
-
-    echo "--- Configuration complete at $(date) ---"
-    
-    # ====== Restart waagent with new configuration (safe now that disks are set up)
-    echo "--- Restarting waagent with disk-safe configuration ---"
-    systemctl restart walinuxagent || true
-    echo "--- waagent restarted successfully ---"
-
-# Write final status to a file
-write_files:
-  - content: |
-      Cloud-init disk setup completed
-      Check /var/log/cloud-init-custom.log for details
-    path: /root/disk-setup-status.txt
-    permissions: '0644'
-
-# Reboot after 3 minutes to ensure all changes take effect
+# Reboot after 2 minutes
 power_state:
-  delay: "+3"
-  mode: reboot
-  message: "System rebooting after cloud-init setup..."
-  timeout: 30
-  condition: true
+    delay: "+2"
+    mode: reboot
+    message: "System rebooting after cloud-init setup..."
+    timeout: 30
+    condition: true
