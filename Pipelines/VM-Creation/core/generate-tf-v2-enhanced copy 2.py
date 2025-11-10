@@ -4,7 +4,7 @@ Enhanced VM Creation Terraform Generator v3.4
 - No cloud-init/custom_data
 - Keeps DCR, boot diagnostics, auto-shutdown
 - Adds automatic SAS generation for Windows and Linux Custom Script Extensions
-- Controlled by ENABLE_CUSTOM_SCRIPT flag (hardcoded to True)
+- Controlled by ENABLE_CUSTOM_SCRIPT flag
 """
 
 import csv
@@ -14,88 +14,86 @@ import sys
 from datetime import datetime, timedelta
 from typing import Dict, List
 from urllib.parse import quote_plus
-import hmac
-import hashlib
-import base64
+import hmac, hashlib, base64
 
 
 class TerraformVMGenerator:
-    def __init__(self):
-        """Initialize generator with environment variables"""
-        self.environment = os.getenv('ENVIRONMENT', 'DEV')
-        self.project_name = os.getenv('PROJECT_NAME', 'BaaS-Platform')
+  def __init__(self):
+    """Initialize generator with environment variables"""
+    self.environment = os.getenv('ENVIRONMENT', 'DEV')
+    self.project_name = os.getenv('PROJECT_NAME', 'BaaS-Platform')
 
-        # Environment configuration
-        self.config = {
-            'subscription_id': os.getenv('SUBSCRIPTION_ID'),
-            'location': os.getenv('LOCATION', 'swedencentral'),
-            'vnet_name': os.getenv('VNET_NAME'),
-            'vnet_rg': os.getenv('VNET_RG'),
-            'subnet_rg': os.getenv('SUBNET_RG'),
-            'keyvault_name': os.getenv('KEYVAULT_NAME'),
-            'keyvault_rg': os.getenv('KEYVAULT_RG'),
-            'dcr_name': os.getenv('DCR_NAME'),
-            'dcr_rg': os.getenv('DCR_RG'),
-            'diagnostics_storage': os.getenv('DIAGNOSTICS_STORAGE'),
-            'diagnostics_storage_rg': os.getenv('DIAGNOSTICS_STORAGE_RG'),
-            'script_storage_account': os.getenv('SCRIPT_STORAGE_ACCOUNT'),
-            'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
-            'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
-            'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
-            'script_storage_key': os.getenv('SCRIPT_STORAGE_KEY'),
-            'enable_custom_script': True,  # Always enabled
-            'shutdown_enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
-            'shutdown_time': os.getenv('shutdown_time', '2000'),
-            'shutdown_timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
-        }
+    # Environment configuration
+    self.config = {
+      'subscription_id': os.getenv('SUBSCRIPTION_ID'),
+      'location': os.getenv('LOCATION', 'swedencentral'),
+      'vnet_name': os.getenv('VNET_NAME'),
+      'vnet_rg': os.getenv('VNET_RG'),
+      'subnet_rg': os.getenv('SUBNET_RG'),
+      'keyvault_name': os.getenv('KEYVAULT_NAME'),
+      'keyvault_rg': os.getenv('KEYVAULT_RG'),
+      'dcr_name': os.getenv('DCR_NAME'),
+      'dcr_rg': os.getenv('DCR_RG'),
+      'diagnostics_storage': os.getenv('DIAGNOSTICS_STORAGE'),
+      'diagnostics_storage_rg': os.getenv('DIAGNOSTICS_STORAGE_RG'),
+      'script_storage_account': os.getenv('SCRIPT_STORAGE_ACCOUNT'),
+      'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
+      'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
+      'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
+      'script_storage_key': os.getenv('SCRIPT_STORAGE_KEY'),
+      'enable_custom_script': True,  # Always enabled, hardcoded
+      'shutdown_enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
+      'shutdown_time': os.getenv('shutdown_time', '2000'),
+      'shutdown_timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
+    }
 
-        # OS Templates
-        self.os_templates = {
-            "windows-2019": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2019-Datacenter", "version": "latest"},
-            "windows-2022": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2022-Datacenter", "version": "latest"},
-            "ubuntu-22.04": {"os_type": "linux", "publisher": "Canonical", "offer": "0001-com-ubuntu-server-jammy", "sku": "22_04-lts-gen2", "version": "latest"},
-            "rhel-8": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "8-LVM", "version": "latest"},
-            "rhel-9": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "9_4", "version": "latest"}
-        }
+    # OS Templates
+    self.os_templates = {
+      "windows-2019": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2019-Datacenter", "version": "latest"},
+      "windows-2022": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2022-Datacenter", "version": "latest"},
+      "ubuntu-22.04": {"os_type": "linux", "publisher": "Canonical", "offer": "0001-com-ubuntu-server-jammy", "sku": "22_04-lts-gen2", "version": "latest"},
+      "rhel-8": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "8-LVM", "version": "latest"},
+      "rhel-9": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "9_4", "version": "latest"}
+    }
 
-        # Disk standards
-        self.storage_standards = {
-            'os_disk_type': 'StandardSSD_LRS',
-            'data_disk_type': 'StandardSSD_LRS',
-            'disk_caching': 'ReadWrite',
-            'data_disk_caching': 'None'
-        }
+    # Disk standards
+    self.storage_standards = {
+      'os_disk_type': 'StandardSSD_LRS',
+      'data_disk_type': 'StandardSSD_LRS',
+      'disk_caching': 'ReadWrite',
+      'data_disk_caching': 'None'
+    }
 
-        # Auto shutdown
-        self.shutdown_config = {
-            'enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
-            'time': os.getenv('shutdown_time', '2000'),
-            'timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
-        }
+    # Auto shutdown
+    self.shutdown_config = {
+      'enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
+      'time': os.getenv('shutdown_time', '2000'),
+      'timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
+    }
 
-        # Paths
-        self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
-        self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
-        self.resource_groups_to_create = set()
+    # Paths
+    self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
+    self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
+    self.resource_groups_to_create = set()
 
-        self.validate_config()
+    self.validate_config()
 
-    # --------------------------
-    # Validation
-    # --------------------------
-    def validate_config(self):
-        required = ['subscription_id', 'vnet_name', 'keyvault_name', 'dcr_name']
-        missing = [x for x in required if not self.config.get(x)]
-        if missing:
-            print(f"[ERROR] Missing required environment variables: {', '.join(missing)}")
-            sys.exit(1)
-        print(f"[OK] Configuration validated for {self.environment}")
-        print("[INFO] Custom Script Extensions: ENABLED for Windows & Linux (hardcoded)")
+  # --------------------------
+  # Validation
+  # --------------------------
+  def validate_config(self):
+    required = ['subscription_id', 'vnet_name', 'keyvault_name', 'dcr_name']
+    missing = [x for x in required if not self.config.get(x)]
+    if missing:
+      print(f"[ERROR] Missing required environment variables: {', '.join(missing)}")
+      sys.exit(1)
+    print(f"[OK] Configuration validated for {self.environment}")
+    print("[INFO] Custom Script Extensions: ENABLED for Windows & Linux (hardcoded)")
 
     # --------------------------
     # Tags
     # --------------------------
-    def parse_tags(self) -> Dict[str, str]:
+  def parse_tags(self) -> Dict[str, str]:
         json_tags = os.getenv('default_tags_json')
         if not json_tags:
             raise ValueError("Missing default_tags_json environment variable")
@@ -109,7 +107,7 @@ class TerraformVMGenerator:
     # --------------------------
     # OS template
     # --------------------------
-    def resolve_os_template(self, name: str) -> Dict[str, str]:
+  def resolve_os_template(self, name: str) -> Dict[str, str]:
         name = name.strip().lower()
         if name not in self.os_templates:
             print(f"[WARN] Unknown OS template '{name}', defaulting to windows-2019")
@@ -119,7 +117,7 @@ class TerraformVMGenerator:
     # --------------------------
     # SAS Token Generator
     # --------------------------
-    def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
+  def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
         """Generate a read-only SAS URL for the blob."""
         if not all([account, container, blob, key]):
             print("[WARN] SAS generation skipped due to missing info")
@@ -146,45 +144,42 @@ class TerraformVMGenerator:
     # --------------------------
     # Main Generator
     # --------------------------
-    def generate_terraform(self):
-        os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
-        vm_outputs = []
+  def generate_terraform(self):
+    os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
+    vm_outputs = []
 
-        with open(self.output_tf_file, "w") as tf_file:
-            self._write_provider_block(tf_file)
-            self._collect_resource_groups()
-            self._generate_resource_groups(tf_file)
+    with open(self.output_tf_file, "w") as tf_file:
+      self._write_provider_block(tf_file)
+      self._collect_resource_groups()
+      self._generate_resource_groups(tf_file)
 
-            try:
-                with open(self.csv_file_path, newline='') as csvfile:
-                    reader = csv.DictReader(csvfile)
-                    for row in reader:
-                        if not row.get("vm_name", "").strip():
-                            continue
-                        vm_name = row["vm_name"].strip()
-                        vm_outputs.append(vm_name)
-                        self._generate_vm_resources(tf_file, row)
-            except FileNotFoundError:
-                print(f"[ERROR] CSV file not found: {self.csv_file_path}")
-                sys.exit(1)
+      try:
+        with open(self.csv_file_path, newline='') as csvfile:
+          reader = csv.DictReader(csvfile)
+          for row in reader:
+            if not row.get("vm_name", "").strip():
+              continue
+            vm_name = row["vm_name"].strip()
+            vm_outputs.append(vm_name)
+            self._generate_vm_resources(tf_file, row)
+      except FileNotFoundError:
+        print(f"[ERROR] CSV file not found: {self.csv_file_path}")
+        sys.exit(1)
 
-            self._generate_outputs(tf_file, vm_outputs)
+      self._generate_outputs(tf_file, vm_outputs)
 
-        # Verification: main.tf exists and contains SAS token
-        if not os.path.exists(self.output_tf_file):
-            print(f"[ERROR] Terraform file not generated: {self.output_tf_file}")
-            sys.exit(2)
-        with open(self.output_tf_file, "r") as tf_file:
-            content = tf_file.read()
-            if "blob.core.windows.net" not in content or "sv=" not in content:
-                print(f"[ERROR] SAS token not found in generated Terraform file: {self.output_tf_file}")
-                sys.exit(3)
-        print(f"[OK] Terraform configuration generated: {self.output_tf_file} (SAS token verified)")
+    # Verification: main.tf exists and contains SAS token
+    if not os.path.exists(self.output_tf_file):
+      print(f"[ERROR] Terraform file not generated: {self.output_tf_file}")
+      sys.exit(2)
+    with open(self.output_tf_file, "r") as tf_file:
+      content = tf_file.read()
+      if "blob.core.windows.net" not in content or "sv=" not in content:
+        print(f"[ERROR] SAS token not found in generated Terraform file: {self.output_tf_file}")
+        sys.exit(3)
+    print(f"[OK] Terraform configuration generated: {self.output_tf_file} (SAS token verified)")
 
-    # --------------------------
-    # Provider Block
-    # --------------------------
-    def _write_provider_block(self, tf_file):
+  def _write_provider_block(self, tf_file):
         tf_file.write(f'''
 terraform {{
   required_version = ">= 1.0"
@@ -209,6 +204,7 @@ variable "location" {{
   default = "{self.config['location']}"
 }}
 
+# Required data sources for VM creation
 data "azurerm_virtual_network" "main_vnet" {{
   name                = "{self.config['vnet_name']}"
   resource_group_name = "{self.config['vnet_rg']}"
@@ -225,10 +221,7 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
 }}
 ''')
 
-    # --------------------------
-    # Resource Group Creation
-    # --------------------------
-    def _collect_resource_groups(self):
+  def _collect_resource_groups(self):
         try:
             with open(self.csv_file_path, newline='') as csvfile:
                 reader = csv.DictReader(csvfile)
@@ -240,7 +233,7 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
         except FileNotFoundError:
             pass
 
-    def _generate_resource_groups(self, tf_file):
+  def _generate_resource_groups(self, tf_file):
         for rg in self.resource_groups_to_create:
             tags = self.parse_tags()
             tags_str = ",\n    ".join([f'"{k}" = "{v}"' for k, v in tags.items()])
@@ -254,10 +247,7 @@ resource "azurerm_resource_group" "{rg.replace('-', '_')}_rg" {{
 }}
 ''')
 
-    # --------------------------
-    # VM Generation (Windows/Linux)
-    # --------------------------
-    def _generate_vm_resources(self, tf_file, row: Dict[str, str]):
+  def _generate_vm_resources(self, tf_file, row: Dict[str, str]):
         vm_name = row["vm_name"].strip()
         rg = row["resource_group"].strip()
         subnet = row["subnet_name"].strip()
@@ -271,6 +261,7 @@ resource "azurerm_resource_group" "{rg.replace('-', '_')}_rg" {{
         rg_ref = f'"{rg}"'
         create_rg = row.get("create_rg", "false").lower() == "true"
 
+        # Build depends_on if resource group is being created
         depends_on_str = ""
         if create_rg:
             depends_on_str = f'  depends_on = [azurerm_resource_group.{rg.replace("-", "_")}_rg]\n'
@@ -300,6 +291,7 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
     private_ip_address_allocation = "Static"
     private_ip_address            = "{static_ip}"
   }}
+
   tags = {{
     {tags_str}
   }}
@@ -313,10 +305,14 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 
         self._generate_dcr_and_shutdown(tf_file, vm_name, os_type, tags_str)
 
-    # --------------------------
-    # Linux VM
-    # --------------------------
-    def _generate_linux_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
+  def _generate_linux_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
+  # --------------------------
+  # Linux VM Creation Section
+  # --------------------------
+  # This method generates Terraform resources for a Linux VM, including:
+  # - azurerm_linux_virtual_machine resource
+  # - Optional Custom Script Extension (if enabled)
+  # The VM uses admin credentials from Key Vault and applies standard tags and disk settings.
         script_enabled = self.config['enable_custom_script']
         script_sas_url = None
 
@@ -386,10 +382,15 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
         else:
             tf_file.write(f"# [WARN] Skipped Linux script extension for {vm_name} (SAS generation failed)\n")
 
-    # --------------------------
-    # Windows VM
-    # --------------------------
-    def _generate_windows_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
+  def _generate_windows_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
+  # --------------------------
+  # Windows VM Creation Section
+  # --------------------------
+  # This method generates Terraform resources for a Windows VM, including:
+  # - azurerm_windows_virtual_machine resource
+  # - Optional Custom Script Extension (if enabled)
+  # The VM uses admin credentials from Key Vault and applies standard tags and disk settings.
+        """Windows VM with optional SAS-based custom script"""
         script_enabled = self.config['enable_custom_script']
         script_sas_url = None
 
@@ -459,10 +460,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
         else:
             tf_file.write(f"# [WARN] Skipped Windows script extension for {vm_name} (SAS generation failed)\n")
 
-    # --------------------------
-    # DCR + Shutdown
-    # --------------------------
-    def _generate_dcr_and_shutdown(self, tf_file, vm_name, os_type, tags_str):
+  def _generate_dcr_and_shutdown(self, tf_file, vm_name, os_type, tags_str):
         vm_type = "linux_virtual_machine" if os_type == "linux" else "windows_virtual_machine"
         tf_file.write(f'''
 # Azure Monitor Agent + DCR
@@ -500,10 +498,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
 }}
 ''')
 
-    # --------------------------
-    # Outputs
-    # --------------------------
-    def _generate_outputs(self, tf_file, vm_list: List[str]):
+  def _generate_outputs(self, tf_file, vm_list: List[str]):
         tf_file.write("\n# ==== Outputs ====\n")
         tf_file.write('output "vm_private_ips" {\n  value = {\n')
         for vm_name in vm_list:

@@ -165,7 +165,8 @@ steps:
       Set-ValidatedEnvVar "shutdown_enabled" "$(shutdown_enabled)" $true
       Set-ValidatedEnvVar "shutdown_time" "$(shutdown_time)" $true
       Set-ValidatedEnvVar "shutdown_timezone" "$(shutdown_timezone)" $true
-           
+      Set-ValidatedEnvVar "ENABLE_CUSTOM_SCRIPT" "$(enable_custom_script)" $true
+      
       # Handle mandatory tags from GUI JSON input - different logic for apply vs modify
       $tagsInput = '${{ parameters.tags_json_override }}'
       if ('${{ parameters.action }}' -eq 'apply') {
@@ -370,131 +371,105 @@ steps:
     script: |
       # Set strict error handling
       $ErrorActionPreference = "Stop"
-
+      
       Write-Host "🚀 Executing Terraform ${{ parameters.action }} with local state management..."
       Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
-
+      
       # Verify we're in the correct directory with required files
       $currentDir = Get-Location
       Write-Host "📁 Working directory: $currentDir"
-
+      
       $tfFile = "main-${{ parameters.environment }}".ToLower() + ".tf"
       if (!(Test-Path $tfFile)) {
-        Write-Error "❌ Terraform configuration file not found: $tfFile"
-        throw "Missing Terraform configuration file"
+          Write-Error "❌ Terraform configuration file not found: $tfFile"
+          throw "Missing Terraform configuration file"
       }
-
+      
       # Copy existing state file to working directory if it exists (for modify operations)
       $stateSourcePath = "$(TF_STATE_PATH)/terraform.tfstate"
       if ("${{ parameters.action }}" -eq "modify" -and (Test-Path $stateSourcePath)) {
-        Write-Host "📄 Copying existing state file for modify operation"
-        Copy-Item $stateSourcePath "./" -Force
-        $lockFile = "$(TF_STATE_PATH)/.terraform.lock.hcl"
-        if (Test-Path $lockFile) {
-          Copy-Item $lockFile "./" -Force
-        }
+          Write-Host "📄 Copying existing state file for modify operation"
+          Copy-Item $stateSourcePath "./" -Force
+          $lockFile = "$(TF_STATE_PATH)/.terraform.lock.hcl"
+          if (Test-Path $lockFile) {
+              Copy-Item $lockFile "./" -Force
+          }
       }
-
-      # Always run terraform init, validate, and plan before apply for modify
-      Write-Host "🔧 Initializing Terraform..."
-      terraform init
-      if ($LASTEXITCODE -ne 0) {
-        Write-Error "❌ Terraform init failed with exit code $LASTEXITCODE"
-        throw "Terraform init failed"
-      }
-
-      Write-Host "✅ Validating Terraform configuration..."
-      terraform validate
-      if ($LASTEXITCODE -ne 0) {
-        Write-Error "❌ Terraform validation failed with exit code $LASTEXITCODE"
-        throw "Terraform validation failed"
-      }
-
-      Write-Host "📝 Formatting Terraform code..."
-      terraform fmt
-      if ($LASTEXITCODE -ne 0) {
-        Write-Warning "⚠️  Terraform format failed but continuing..."
-      }
-
-      Write-Host "🔎 Planning Terraform changes..."
-      terraform plan -out=tfplan
-      if ($LASTEXITCODE -ne 0) {
-        Write-Error "❌ Terraform plan failed with exit code $LASTEXITCODE"
-        throw "Terraform plan failed"
-      }
-
+      
+      # Note: Terraform init, validate, and fmt already completed in previous validation step
+      # Apply changes directly (no separate plan file needed since we already validated)
       Write-Host "⚡ Applying Terraform changes with confirmation..."
-      terraform apply -auto-approve tfplan
+      terraform apply -auto-approve
       if ($LASTEXITCODE -ne 0) {
-        Write-Error "❌ Terraform apply failed with exit code $LASTEXITCODE"
-        throw "Terraform apply failed"
+          Write-Error "❌ Terraform apply failed with exit code $LASTEXITCODE"
+          throw "Terraform apply failed"
       }
-
+      
       # Save state file back to persistent location on agent
       Write-Host "📄 Saving state file to persistent location..."
       $stateTargetPath = "$(TF_STATE_PATH)"
       Write-Host "[DEBUG] Expected state path: $stateTargetPath"
       Write-Host "[DEBUG] Resolved state path: $(Resolve-Path $stateTargetPath -ErrorAction SilentlyContinue)"
       Write-Host "[DEBUG] Current working directory: $(Get-Location)"
-
+      
       New-Item -Path $stateTargetPath -ItemType Directory -Force | Out-Null
-
+      
       # Save Terraform configuration file for future modify operations
       $tfFileName = "main-${{ parameters.environment }}.tf".ToLower()
       $projectPath = "$(tfWorkingDirectory)/Project/$($env:PROJECT_NAME)/"
       $tfSourcePath = "$projectPath$tfFileName"
-
+      
       Write-Host "[DEBUG] Looking for TF file at: $tfSourcePath"
-
+      
       if (Test-Path $tfSourcePath) {
-        Copy-Item $tfSourcePath "$stateTargetPath/" -Force
-        Write-Host "✅ Terraform configuration saved to: $stateTargetPath/$tfFileName"
-        Write-Host "[DEBUG] TF config source: $tfSourcePath"
-        Write-Host "[DEBUG] TF config size: $((Get-Item $tfSourcePath).Length) bytes"
-
-        # Verify the copy was successful
-        $copiedTfPath = "$stateTargetPath/$tfFileName"
-        if (Test-Path $copiedTfPath) {
-          $copiedTfSize = (Get-Item $copiedTfPath).Length
-          Write-Host "[DEBUG] Copied TF file size: $copiedTfSize bytes"
-          Write-Host "✅ Terraform configuration copy verified successful"
-        } else {
-          Write-Warning "⚠️  Terraform configuration copy may have failed"
-        }
+          Copy-Item $tfSourcePath "$stateTargetPath/" -Force
+          Write-Host "✅ Terraform configuration saved to: $stateTargetPath/$tfFileName"
+          Write-Host "[DEBUG] TF config source: $tfSourcePath"
+          Write-Host "[DEBUG] TF config size: $((Get-Item $tfSourcePath).Length) bytes"
+          
+          # Verify the copy was successful
+          $copiedTfPath = "$stateTargetPath/$tfFileName"
+          if (Test-Path $copiedTfPath) {
+              $copiedTfSize = (Get-Item $copiedTfPath).Length
+              Write-Host "[DEBUG] Copied TF file size: $copiedTfSize bytes"
+              Write-Host "✅ Terraform configuration copy verified successful"
+          } else {
+              Write-Warning "⚠️  Terraform configuration copy may have failed"
+          }
       } else {
-        Write-Warning "⚠️  Terraform configuration file not found at: $tfSourcePath"
-        Write-Host "[DEBUG] Available files in project directory:"
-        if (Test-Path $projectPath) {
-          Get-ChildItem $projectPath | ForEach-Object { Write-Host "  - $($_.Name)" }
-        } else {
-          Write-Host "  - Project directory does not exist: $projectPath"
-        }
+          Write-Warning "⚠️  Terraform configuration file not found at: $tfSourcePath"
+          Write-Host "[DEBUG] Available files in project directory:"
+          if (Test-Path $projectPath) {
+              Get-ChildItem $projectPath | ForEach-Object { Write-Host "  - $($_.Name)" }
+          } else {
+              Write-Host "  - Project directory does not exist: $projectPath"
+          }
       }
-
+      
       if (Test-Path "terraform.tfstate") {
-        $stateFileSize = (Get-Item "terraform.tfstate").Length
-        Copy-Item "terraform.tfstate" "$stateTargetPath/" -Force
-        Write-Host "✅ State file saved to: $stateTargetPath/terraform.tfstate"
-        Write-Host "[DEBUG] State file size: $stateFileSize bytes"
-
-        # Verify the copy was successful
-        $copiedStatePath = "$stateTargetPath/terraform.tfstate"
-        if (Test-Path $copiedStatePath) {
-          $copiedFileSize = (Get-Item $copiedStatePath).Length
-          Write-Host "[DEBUG] Copied state file size: $copiedFileSize bytes"
-          Write-Host "✅ State file copy verified successful"
-        } else {
-          Write-Warning "⚠️  State file copy may have failed"
-        }
+          $stateFileSize = (Get-Item "terraform.tfstate").Length
+          Copy-Item "terraform.tfstate" "$stateTargetPath/" -Force
+          Write-Host "✅ State file saved to: $stateTargetPath/terraform.tfstate"
+          Write-Host "[DEBUG] State file size: $stateFileSize bytes"
+          
+          # Verify the copy was successful
+          $copiedStatePath = "$stateTargetPath/terraform.tfstate"
+          if (Test-Path $copiedStatePath) {
+              $copiedFileSize = (Get-Item $copiedStatePath).Length
+              Write-Host "[DEBUG] Copied state file size: $copiedFileSize bytes"
+              Write-Host "✅ State file copy verified successful"
+          } else {
+              Write-Warning "⚠️  State file copy may have failed"
+          }
       } else {
-        Write-Warning "⚠️  No state file found to save"
+          Write-Warning "⚠️  No state file found to save"
       }
-
+      
       if (Test-Path ".terraform.lock.hcl") {
-        Copy-Item ".terraform.lock.hcl" "$stateTargetPath/" -Force
-        Write-Host "✅ Lock file saved"
+          Copy-Item ".terraform.lock.hcl" "$stateTargetPath/" -Force
+          Write-Host "✅ Lock file saved"
       }
-
+      
       Write-Host ""
       Write-Host "🎉 Terraform deployment completed successfully!"
       Write-Host "📊 Final state saved to: $stateTargetPath/"
