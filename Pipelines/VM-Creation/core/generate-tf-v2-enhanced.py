@@ -179,7 +179,7 @@ class TerraformVMGenerator:
         sys.exit(3)
     print(f"[OK] Terraform configuration generated: {self.output_tf_file} (SAS token verified)")
 
-    def _write_provider_block(self, tf_file):
+  def _write_provider_block(self, tf_file):
         tf_file.write(f'''
 terraform {{
   required_version = ">= 1.0"
@@ -221,7 +221,7 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
 }}
 ''')
 
-    def _collect_resource_groups(self):
+  def _collect_resource_groups(self):
         try:
             with open(self.csv_file_path, newline='') as csvfile:
                 reader = csv.DictReader(csvfile)
@@ -233,7 +233,7 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
         except FileNotFoundError:
             pass
 
-    def _generate_resource_groups(self, tf_file):
+  def _generate_resource_groups(self, tf_file):
         for rg in self.resource_groups_to_create:
             tags = self.parse_tags()
             tags_str = ",\n    ".join([f'"{k}" = "{v}"' for k, v in tags.items()])
@@ -247,7 +247,7 @@ resource "azurerm_resource_group" "{rg.replace('-', '_')}_rg" {{
 }}
 ''')
 
-    def _generate_vm_resources(self, tf_file, row: Dict[str, str]):
+  def _generate_vm_resources(self, tf_file, row: Dict[str, str]):
         vm_name = row["vm_name"].strip()
         rg = row["resource_group"].strip()
         subnet = row["subnet_name"].strip()
@@ -305,7 +305,7 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 
         self._generate_dcr_and_shutdown(tf_file, vm_name, os_type, tags_str)
 
-    def _generate_linux_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
+  def _generate_linux_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
   # --------------------------
   # Linux VM Creation Section
   # --------------------------
@@ -382,7 +382,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
         else:
             tf_file.write(f"# [WARN] Skipped Linux script extension for {vm_name} (SAS generation failed)\n")
 
-    def _generate_windows_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
+  def _generate_windows_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
   # --------------------------
   # Windows VM Creation Section
   # --------------------------
@@ -460,7 +460,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
         else:
             tf_file.write(f"# [WARN] Skipped Windows script extension for {vm_name} (SAS generation failed)\n")
 
-    def _generate_dcr_and_shutdown(self, tf_file, vm_name, os_type, tags_str):
+  def _generate_dcr_and_shutdown(self, tf_file, vm_name, os_type, tags_str):
         vm_type = "linux_virtual_machine" if os_type == "linux" else "windows_virtual_machine"
         tf_file.write(f'''
 # Azure Monitor Agent + DCR
@@ -498,7 +498,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
 }}
 ''')
 
-    def _generate_outputs(self, tf_file, vm_list: List[str]):
+  def _generate_outputs(self, tf_file, vm_list: List[str]):
         tf_file.write("\n# ==== Outputs ====\n")
         tf_file.write('output "vm_private_ips" {\n  value = {\n')
         for vm_name in vm_list:
