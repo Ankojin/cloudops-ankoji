@@ -93,7 +93,7 @@ class TerraformVMGenerator:
     # --------------------------
     # Tags
     # --------------------------
-    def parse_tags(self) -> Dict[str, str]:
+  def parse_tags(self) -> Dict[str, str]:
         json_tags = os.getenv('default_tags_json')
         if not json_tags:
             raise ValueError("Missing default_tags_json environment variable")
@@ -107,7 +107,7 @@ class TerraformVMGenerator:
     # --------------------------
     # OS template
     # --------------------------
-    def resolve_os_template(self, name: str) -> Dict[str, str]:
+  def resolve_os_template(self, name: str) -> Dict[str, str]:
         name = name.strip().lower()
         if name not in self.os_templates:
             print(f"[WARN] Unknown OS template '{name}', defaulting to windows-2019")
@@ -117,7 +117,7 @@ class TerraformVMGenerator:
     # --------------------------
     # SAS Token Generator
     # --------------------------
-    def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
+  def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
         """Generate a read-only SAS URL for the blob."""
         if not all([account, container, blob, key]):
             print("[WARN] SAS generation skipped due to missing info")
