@@ -146,40 +146,46 @@ class TerraformVMGenerator:
     # --------------------------
     # Main Generator
     # --------------------------
-    def generate_terraform(self):
-        os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
-        vm_outputs = []
 
-        with open(self.output_tf_file, "w") as tf_file:
-            self._write_provider_block(tf_file)
-            self._collect_resource_groups()
-            self._generate_resource_groups(tf_file)
+  def generate_terraform(self):
+    os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
+    vm_outputs = []
 
-            try:
-                with open(self.csv_file_path, newline='') as csvfile:
-                    reader = csv.DictReader(csvfile)
-                    for row in reader:
-                        if not row.get("vm_name", "").strip():
-                            continue
-                        vm_name = row["vm_name"].strip()
-                        vm_outputs.append(vm_name)
-                        self._generate_vm_resources(tf_file, row)
-            except FileNotFoundError:
-                print(f"[ERROR] CSV file not found: {self.csv_file_path}")
-                sys.exit(1)
+    # Always force overwrite main.tf file
+    try:
+      with open(self.output_tf_file, "w") as tf_file:
+        self._write_provider_block(tf_file)
+        self._collect_resource_groups()
+        self._generate_resource_groups(tf_file)
 
-            self._generate_outputs(tf_file, vm_outputs)
+        try:
+          with open(self.csv_file_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+              if not row.get("vm_name", "").strip():
+                continue
+              vm_name = row["vm_name"].strip()
+              vm_outputs.append(vm_name)
+              self._generate_vm_resources(tf_file, row)
+        except FileNotFoundError:
+          print(f"[ERROR] CSV file not found: {self.csv_file_path}")
+          sys.exit(1)
 
-        # Verification: main.tf exists and contains SAS token
-        if not os.path.exists(self.output_tf_file):
-            print(f"[ERROR] Terraform file not generated: {self.output_tf_file}")
-            sys.exit(2)
-        with open(self.output_tf_file, "r") as tf_file:
-            content = tf_file.read()
-            if "blob.core.windows.net" not in content or "sv=" not in content:
-                print(f"[ERROR] SAS token not found in generated Terraform file: {self.output_tf_file}")
-                sys.exit(3)
-        print(f"[OK] Terraform configuration generated: {self.output_tf_file} (SAS token verified)")
+        self._generate_outputs(tf_file, vm_outputs)
+    except Exception as e:
+      print(f"[ERROR] Failed to write Terraform file: {self.output_tf_file} - {e}")
+      sys.exit(2)
+
+    # Verification: main.tf exists and contains SAS token
+    if not os.path.exists(self.output_tf_file):
+      print(f"[ERROR] Terraform file not generated: {self.output_tf_file}")
+      sys.exit(2)
+    with open(self.output_tf_file, "r") as tf_file:
+      content = tf_file.read()
+      if "blob.core.windows.net" not in content or "sv=" not in content:
+        print(f"[ERROR] SAS token not found in generated Terraform file: {self.output_tf_file}")
+        sys.exit(3)
+    print(f"[OK] Terraform configuration generated: {self.output_tf_file} (SAS token verified)")
 
     # --------------------------
     # Provider Block
