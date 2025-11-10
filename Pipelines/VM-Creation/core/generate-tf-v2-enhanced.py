@@ -18,65 +18,65 @@ import hmac, hashlib, base64
 
 
 class TerraformVMGenerator:
-  def __init__(self):
-    """Initialize generator with environment variables"""
-    self.environment = os.getenv('ENVIRONMENT', 'DEV')
-    self.project_name = os.getenv('PROJECT_NAME', 'BaaS-Platform')
+    def __init__(self):
+        """Initialize generator with environment variables"""
+        self.environment = os.getenv('ENVIRONMENT', 'DEV')
+        self.project_name = os.getenv('PROJECT_NAME', 'BaaS-Platform')
 
-    # Environment configuration
-    self.config = {
-      'subscription_id': os.getenv('SUBSCRIPTION_ID'),
-      'location': os.getenv('LOCATION', 'swedencentral'),
-      'vnet_name': os.getenv('VNET_NAME'),
-      'vnet_rg': os.getenv('VNET_RG'),
-      'subnet_rg': os.getenv('SUBNET_RG'),
-      'keyvault_name': os.getenv('KEYVAULT_NAME'),
-      'keyvault_rg': os.getenv('KEYVAULT_RG'),
-      'dcr_name': os.getenv('DCR_NAME'),
-      'dcr_rg': os.getenv('DCR_RG'),
-      'diagnostics_storage': os.getenv('DIAGNOSTICS_STORAGE'),
-      'diagnostics_storage_rg': os.getenv('DIAGNOSTICS_STORAGE_RG'),
-      'script_storage_account': os.getenv('SCRIPT_STORAGE_ACCOUNT'),
-      'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
-      'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
-      'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
-      'script_storage_key': os.getenv('SCRIPT_STORAGE_KEY'),
-      'enable_custom_script': True,  # Always enabled, hardcoded
-      'shutdown_enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
-      'shutdown_time': os.getenv('shutdown_time', '2000'),
-      'shutdown_timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
-    }
+        # Environment configuration
+        self.config = {
+            'subscription_id': os.getenv('SUBSCRIPTION_ID'),
+            'location': os.getenv('LOCATION', 'swedencentral'),
+            'vnet_name': os.getenv('VNET_NAME'),
+            'vnet_rg': os.getenv('VNET_RG'),
+            'subnet_rg': os.getenv('SUBNET_RG'),
+            'keyvault_name': os.getenv('KEYVAULT_NAME'),
+            'keyvault_rg': os.getenv('KEYVAULT_RG'),
+            'dcr_name': os.getenv('DCR_NAME'),
+            'dcr_rg': os.getenv('DCR_RG'),
+            'diagnostics_storage': os.getenv('DIAGNOSTICS_STORAGE'),
+            'diagnostics_storage_rg': os.getenv('DIAGNOSTICS_STORAGE_RG'),
+            'script_storage_account': os.getenv('SCRIPT_STORAGE_ACCOUNT'),
+            'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
+            'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
+            'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
+            'script_storage_key': os.getenv('SCRIPT_STORAGE_KEY'),
+            'enable_custom_script': True,  # Always enabled, hardcoded
+            'shutdown_enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
+            'shutdown_time': os.getenv('shutdown_time', '2000'),
+            'shutdown_timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
+        }
 
-    # OS Templates
-    self.os_templates = {
-      "windows-2019": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2019-Datacenter", "version": "latest"},
-      "windows-2022": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2022-Datacenter", "version": "latest"},
-      "ubuntu-22.04": {"os_type": "linux", "publisher": "Canonical", "offer": "0001-com-ubuntu-server-jammy", "sku": "22_04-lts-gen2", "version": "latest"},
-      "rhel-8": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "8-LVM", "version": "latest"},
-      "rhel-9": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "9_4", "version": "latest"}
-    }
+        # OS Templates
+        self.os_templates = {
+            "windows-2019": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2019-Datacenter", "version": "latest"},
+            "windows-2022": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2022-Datacenter", "version": "latest"},
+            "ubuntu-22.04": {"os_type": "linux", "publisher": "Canonical", "offer": "0001-com-ubuntu-server-jammy", "sku": "22_04-lts-gen2", "version": "latest"},
+            "rhel-8": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "8-LVM", "version": "latest"},
+            "rhel-9": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "9_4", "version": "latest"}
+        }
 
-    # Disk standards
-    self.storage_standards = {
-      'os_disk_type': 'StandardSSD_LRS',
-      'data_disk_type': 'StandardSSD_LRS',
-      'disk_caching': 'ReadWrite',
-      'data_disk_caching': 'None'
-    }
+        # Disk standards
+        self.storage_standards = {
+            'os_disk_type': 'StandardSSD_LRS',
+            'data_disk_type': 'StandardSSD_LRS',
+            'disk_caching': 'ReadWrite',
+            'data_disk_caching': 'None'
+        }
 
-    # Auto shutdown
-    self.shutdown_config = {
-      'enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
-      'time': os.getenv('shutdown_time', '2000'),
-      'timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
-    }
+        # Auto shutdown
+        self.shutdown_config = {
+            'enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
+            'time': os.getenv('shutdown_time', '2000'),
+            'timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
+        }
 
-    # Paths
-    self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
-    self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
-    self.resource_groups_to_create = set()
+        # Paths
+        self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
+        self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
+        self.resource_groups_to_create = set()
 
-    self.validate_config()
+        self.validate_config()
 
     # --------------------------
     # Validation
@@ -88,7 +88,7 @@ class TerraformVMGenerator:
             print(f"[ERROR] Missing required environment variables: {', '.join(missing)}")
             sys.exit(1)
         print(f"[OK] Configuration validated for {self.environment}")
-    print("[INFO] Custom Script Extensions: ENABLED for Windows & Linux (hardcoded)")
+        print("[INFO] Custom Script Extensions: ENABLED for Windows & Linux (hardcoded)")
 
     # --------------------------
     # Tags
