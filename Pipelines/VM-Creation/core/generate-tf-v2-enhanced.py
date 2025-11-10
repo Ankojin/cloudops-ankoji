@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-Enhanced VM Creation Terraform Generator v2
+Enhanced VM Creation Terraform Generator v2 (fixed)
 Handles multiple subnets, resource groups, and standardized configurations
 Supports DEV/SIT environments with flexible CSV structure
 """
 
 import base64
+from datetime import datetime, timedelta
+from azure.storage.blob import generate_blob_sas, BlobSasPermissions
 import csv
 import json
 import os
+import re
 import sys
 from typing import Dict, Any, List
 
@@ -17,7 +20,7 @@ class TerraformVMGenerator:
         """Initialize generator with environment variables"""
         self.environment = os.getenv('ENVIRONMENT', 'DEV')
         self.project_name = os.getenv('PROJECT_NAME', 'BaaS-Platform')
-        
+
         # Environment-specific configuration from variable groups
         self.config = {
             'subscription_id': os.getenv('SUBSCRIPTION_ID'),
@@ -36,13 +39,13 @@ class TerraformVMGenerator:
             'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
             'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS')
         }
-        
+
         # Predefined OS Templates (Corporate Standards)
         self.os_templates = {
             # Windows Templates
             "windows-2019": {
                 "os_type": "windows",
-                "publisher": "MicrosoftWindowsServer", 
+                "publisher": "MicrosoftWindowsServer",
                 "offer": "WindowsServer",
                 "sku": "2019-Datacenter",
                 "version": "latest"
@@ -50,7 +53,7 @@ class TerraformVMGenerator:
             "windows-2022": {
                 "os_type": "windows",
                 "publisher": "MicrosoftWindowsServer",
-                "offer": "WindowsServer", 
+                "offer": "WindowsServer",
                 "sku": "2022-Datacenter",
                 "version": "latest"
             },
@@ -70,7 +73,7 @@ class TerraformVMGenerator:
                 "version": "latest"
             },
             "ubuntu-22.04": {
-                "os_type": "linux", 
+                "os_type": "linux",
                 "publisher": "Canonical",
                 "offer": "0001-com-ubuntu-server-jammy",
                 "sku": "22_04-lts-gen2",
@@ -78,16 +81,16 @@ class TerraformVMGenerator:
             },
             "ubuntu-18.04": {
                 "os_type": "linux",
-                "publisher": "Canonical", 
+                "publisher": "Canonical",
                 "offer": "UbuntuServer",
                 "sku": "18.04-LTS",
                 "version": "latest"
             },
-            # Red Hat Enterprise Linux Templates
+            # RHEL, CentOS, SLES...
             "rhel-8": {
                 "os_type": "linux",
                 "publisher": "RedHat",
-                "offer": "RHEL", 
+                "offer": "RHEL",
                 "sku": "8-LVM",
                 "version": "latest"
             },
@@ -98,14 +101,6 @@ class TerraformVMGenerator:
                 "sku": "9_4",
                 "version": "latest"
             },
-            "rhel-7": {
-                "os_type": "linux",
-                "publisher": "RedHat",
-                "offer": "RHEL",
-                "sku": "7-LVM",
-                "version": "latest"
-            },
-            # CentOS Templates
             "centos-7": {
                 "os_type": "linux",
                 "publisher": "OpenLogic",
@@ -113,7 +108,6 @@ class TerraformVMGenerator:
                 "sku": "7_9-gen2",
                 "version": "latest"
             },
-            # SUSE Linux Templates
             "sles-15": {
                 "os_type": "linux",
                 "publisher": "SUSE",
@@ -122,136 +116,151 @@ class TerraformVMGenerator:
                 "version": "latest"
             }
         }
-        
+
         # Hardcoded standards (enforced consistency)
         self.storage_standards = {
-            'os_disk_type': 'StandardSSD_LRS',        # Hardcoded for cost optimization
-            'data_disk_type': 'StandardSSD_LRS',      # Hardcoded for consistency
-            'disk_caching': 'ReadWrite',              # Hardcoded OS disk caching
-            'data_disk_caching': 'None'               # Hardcoded data disk caching
+            'os_disk_type': 'StandardSSD_LRS',
+            'data_disk_type': 'StandardSSD_LRS',
+            'disk_caching': 'ReadWrite',
+            'data_disk_caching': 'None'
         }
-        
+
         # Auto shutdown (hardcoded)
         self.shutdown_config = {
             'enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
             'time': os.getenv('shutdown_time', '2000'),
             'timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
         }
-        
-        # Paths - relative to pipeline working directory ($(Build.SourcesDirectory)/Pipelines/VM-Creation)
+
+        # Paths - relative to pipeline working directory
         self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
         self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
-        self.cloud_init_file = "./core/Deployment-Cloud-init-improved.yaml"
-        
+
         # Track resource groups to create
         self.resource_groups_to_create = set()
+
+        # Enable custom scripts by default
+        self.enable_custom_scripts = True  # ✅ ENABLED now by default
+        self.sas_expiry_hours = int(os.getenv('SAS_EXPIRY_HOURS', '6'))
+
+    # === NEW FUNCTION ===
+    def _generate_sas_url(self, os_type: str) -> str:
+        """Generate a time-bound SAS URL for the OS-specific setup script"""
+        account_name = self.config['script_storage_account']
+        account_key = os.getenv('SCRIPT_STORAGE_KEY')
+        container_name = self.config['script_storage_container']
         
+        if not account_key:
+            print("[ERROR] SCRIPT_STORAGE_KEY environment variable is missing!")
+            sys.exit(1)
+
+        # Choose blob depending on OS type
+        blob_name = (
+            self.config['script_blob_name_windows']
+            if os_type.lower() == 'windows'
+            else self.config['script_blob_name_linux']
+        )
+
+        if not blob_name:
+            print(f"[ERROR] Missing blob name for {os_type} script in configuration.")
+            sys.exit(1)
+
+        expiry_time = datetime.utcnow() + timedelta(hours=self.sas_expiry_hours)
+
+        sas_token = generate_blob_sas(
+            account_name=account_name,
+            container_name=container_name,
+            blob_name=blob_name,
+            account_key=account_key,
+            permission=BlobSasPermissions(read=True),
+            expiry=expiry_time
+        )
+
+        sas_url = f"https://{account_name}.blob.core.windows.net/{container_name}/{blob_name}?{sas_token}"
+
+        # Mask for output
+        masked_token = sas_token[:40] + "...(masked)"
+        print(f"[SAS] Generated {os_type} SAS URL (valid {self.sas_expiry_hours}h):")
+        print(f"       https://{account_name}.blob.core.windows.net/{container_name}/{blob_name}?sv=...&sig={masked_token}")
+        return sas_url
+
         # Validate required environment variables
         self.validate_config()
-    
+
     def validate_config(self):
         """Validate required environment variables are present"""
         required_vars = ['subscription_id', 'vnet_name', 'keyvault_name', 'dcr_name']
         missing_vars = [var for var in required_vars if not self.config.get(var)]
-        
         if missing_vars:
             print(f"[ERROR] Missing required environment variables: {', '.join(missing_vars)}")
             sys.exit(1)
-            
+
         print(f"[OK] Configuration validated for {self.environment} environment")
         print(f"[INFO] Available OS templates: {', '.join(self.os_templates.keys())}")
-    
-    def read_and_encode_cloud_init_yaml(self) -> str:
-        """Read cloud-init file - return base64 encoded content for Terraform custom_data"""
-        try:
-            with open(self.cloud_init_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-                # For Terraform custom_data, we need base64 encoded content
-                encoded = base64.b64encode(content.encode('utf-8')).decode('ascii')
-                print(f"[DEBUG] Cloud-init file size: {len(content)} chars, encoded: {len(encoded)} chars")
-                return encoded
-        except FileNotFoundError:
-            print(f"[WARNING] Cloud-init file {self.cloud_init_file} not found.")
-            return ""
-    
+
     def parse_tags(self, tags_str: str = None) -> Dict[str, str]:
-        """Parse mandatory tags from JSON format only"""
-        
-        # Define mandatory tags with their required keys
+        """Parse mandatory tags from JSON format only (environment variable default_tags_json)"""
         mandatory_tag_keys = [
-            "Company", "Department", "ProjectName", "ApplicationName", 
-            "StartDate", "EndDate", "Region", "ApproverName", 
-            "RequesterName", "BusinessOwner", "TechnicalOwner", 
+            "Company", "Department", "ProjectName", "ApplicationName",
+            "StartDate", "EndDate", "Region", "ApproverName",
+            "RequesterName", "BusinessOwner", "TechnicalOwner",
             "CostCenter", "ServiceClass", "ManagedBy"
         ]
-        
+
         tags = {}
-        
-        # Get tags from JSON format (mandatory)
         json_tags = os.getenv('default_tags_json')
         if not json_tags or json_tags.strip() == '{}' or json_tags.strip() == '':
             print("[ERROR] Mandatory tags are required!")
-            print("[REQUIRED] Required tags JSON format:")
-            print('{"Company": "BAB", "Department": "Information Technology", "ProjectName": "YOUR_PROJECT", "ApplicationName": "YOUR_APP", "StartDate": "2025-11-08", "EndDate": "2025-11-08", "Region": "Sweden Central", "ApproverName": "YOUR_APPROVER", "RequesterName": "CloudOps Team", "BusinessOwner": "YOUR_OWNER", "TechnicalOwner": "YOUR_TECH_OWNER", "CostCenter": "YOUR_COST_CENTER", "ServiceClass": "YOUR_SERVICE_CLASS", "ManagedBy": "CloudOps Team"}')
+            print("[REQUIRED] Provide default_tags_json environment variable with required tags.")
             raise ValueError("Mandatory tags JSON is required but not provided")
-        
+
         try:
             parsed_tags = json.loads(json_tags)
-            if isinstance(parsed_tags, dict):
-                tags.update(parsed_tags)
-                print(f"[OK] Loaded {len(tags)} tags from JSON format")
-                
-                # Validate all mandatory tags are present
-                missing_tags = [key for key in mandatory_tag_keys if key not in tags]
-                if missing_tags:
-                    print(f"[ERROR] Missing mandatory tags: {', '.join(missing_tags)}")
-                    print("[REQUIRED] Required tags:")
-                    for key in mandatory_tag_keys:
-                        print(f"  - {key}")
-                    raise ValueError(f"Missing mandatory tags: {', '.join(missing_tags)}")
-                
-                # Validate Company is BAB
-                if tags.get('Company', '').upper() != 'BAB':
-                    print("[ERROR] Company must be 'BAB'")
-                    raise ValueError("Company tag must be 'BAB'")
-                
-                print("[OK] All mandatory tags validated successfully")
-            else:
+            if not isinstance(parsed_tags, dict):
                 raise ValueError("Tags must be a JSON object")
-                
+            tags.update(parsed_tags)
+
+            missing_tags = [key for key in mandatory_tag_keys if key not in tags]
+            if missing_tags:
+                print(f"[ERROR] Missing mandatory tags: {', '.join(missing_tags)}")
+                raise ValueError(f"Missing mandatory tags: {', '.join(missing_tags)}")
+
+            if tags.get('Company', '').upper() != 'BAB':
+                print("[ERROR] Company must be 'BAB'")
+                raise ValueError("Company tag must be 'BAB'")
+
+            print(f"[OK] Loaded {len(tags)} tags from JSON format")
+
         except json.JSONDecodeError as e:
             print(f"[ERROR] Invalid JSON format in tags: {e}")
-            print("[EXPECTED] Expected JSON format:")
-            print('{"Company": "BAB", "Department": "Information Technology", ...}')
-            raise ValueError(f"Invalid JSON format: {e}")
-        
-        # NOTE: CSV tags are ignored - tags come ONLY from mandatory GUI JSON input
-        if tags_str and tags_str.strip():
-            print("[INFO] Ignoring CSV tags - using mandatory GUI JSON tags only")
-        
-        # Add auto-generated tags (these override everything)
+            raise
+
+        # Add auto-generated tags
         from datetime import datetime
         tags['CreatedBy'] = 'Terraform'
         tags['CreationDate'] = datetime.now().strftime('%Y-%m-%d')
         tags['Environment'] = self.environment
         tags['Project'] = self.project_name
-        
-        print(f"[TAGS] Final tag count: {len(tags)} (including auto-generated)")
+
         return tags
-    
+
+    def _format_tags(self, tags: Dict[str, str]) -> str:
+        """Format Python dict tags to Terraform HCL map text"""
+        items = []
+        for k, v in tags.items():
+            # Escape double quotes in values
+            safe_v = str(v).replace('"', '\\"')
+            items.append(f'    "{k}" = "{safe_v}"')
+        return ",\n".join(items)
+
     def resolve_os_template(self, os_template: str) -> Dict[str, str]:
         """Resolve OS template to detailed OS configuration"""
         template = os_template.strip().lower()
-        
         if template not in self.os_templates:
-            print(f"[WARNING] Unknown OS template: {os_template}")
-            print(f"[INFO] Available templates: {', '.join(self.os_templates.keys())}")
-            print(f"[INFO] Defaulting to windows-2019")
+            print(f"[WARNING] Unknown OS template: {os_template}. Defaulting to windows-2019")
             template = "windows-2019"
-        
         os_config = self.os_templates[template]
         print(f"[INFO] Using OS template '{template}': {os_config['publisher']} {os_config['offer']} {os_config['sku']}")
-        
         return {
             'os_type': os_config['os_type'],
             'publisher': os_config['publisher'],
@@ -259,144 +268,121 @@ class TerraformVMGenerator:
             'sku': os_config['sku'],
             'version': os_config['version']
         }
-    
+
+    def _sanitize_resource_name(self, name: str) -> str:
+        """Sanitize a string so it is safe as a Terraform resource identifier"""
+        # Terraform resource names: letters, digits, underscores, dashes are allowed in names, but identifiers can't contain dashes
+        # We'll convert dashes to underscores and remove illegal chars
+        return re.sub(r'[^0-9A-Za-z_]', '_', name.replace('-', '_'))
+
     def generate_terraform(self):
         """Generate Terraform configuration"""
-        # Create output directory
         os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
-        
-        # Get absolute paths for debugging
+
         abs_output_path = os.path.abspath(self.output_tf_file)
         abs_working_dir = os.path.abspath(".")
-        
         print(f"[DEBUG] Current working directory: {abs_working_dir}")
-        print(f"[DEBUG] Relative output path: {self.output_tf_file}")
-        print(f"[DEBUG] Absolute output path: {abs_output_path}")
-        print(f"[DEBUG] Output directory created: {os.path.dirname(abs_output_path)}")
-        
-        cloud_init_content = self.read_and_encode_cloud_init_yaml()
-        vm_outputs = []  # Track VMs for outputs
-        
+        print(f"[DEBUG] Output path: {abs_output_path}")
+
+        vm_outputs: List[str] = []
+
         with open(self.output_tf_file, "w") as tf_file:
             self._write_provider_block(tf_file)
-            
+
             # First pass: collect resource groups to create
             self._collect_resource_groups()
-            
+
             # Generate resource group resources
             self._generate_resource_groups(tf_file)
-            
+
             # Process CSV file for VMs
             try:
                 with open(self.csv_file_path, newline='') as csvfile:
                     reader = csv.DictReader(csvfile)
-                    for row_num, row in enumerate(reader, start=2):  # Start at 2 since line 1 is header
-                        # Skip empty rows
-                        if not row.get("vm_name", "").strip():
-                            print(f"Skipping empty row {row_num}")
+                    for row_num, row in enumerate(reader, start=2):  # start=2 because header is line 1
+                        vm_name_raw = (row.get("vm_name") or "").strip()
+                        if not vm_name_raw:
+                            print(f"[DEBUG] Skipping empty row {row_num}")
                             continue
-                        
-                        print(f"Processing row {row_num}: {dict(row)}")
-                        vm_name = row["vm_name"].strip()
+
+                        # sanitize for Terraform identifiers
+                        vm_name = self._sanitize_resource_name(vm_name_raw)
+                        print(f"[INFO] Processing row {row_num}: vm_name='{vm_name_raw}' -> identifier='{vm_name}'")
                         vm_outputs.append(vm_name)
-                        self._generate_vm_resources(tf_file, row, cloud_init_content)
+                        self._generate_vm_resources(tf_file, row, vm_name)
             except FileNotFoundError:
                 print(f"[ERROR] CSV file not found: {self.csv_file_path}")
                 sys.exit(1)
-            
+
             # Generate outputs
             self._generate_outputs(tf_file, vm_outputs)
-        
+
         print(f"[OK] Terraform configuration generated: {self.output_tf_file}")
-        print(f"[OK] Absolute path: {os.path.abspath(self.output_tf_file)}")
         print(f"[INFO] File size: {os.path.getsize(self.output_tf_file)} bytes")
         print(f"[INFO] Resource groups to create: {len(self.resource_groups_to_create)}")
         print(f"[INFO] VMs to deploy: {len(vm_outputs)}")
-    
+
     def _generate_outputs(self, tf_file, vm_list: List[str]):
         """Generate Terraform outputs for VM information"""
-        tf_file.write(f'''
-# ==== Outputs ====
-
-output "vm_private_ips" {{
-  description = "Private IP addresses of all VMs"
-  value = {{
-''')
-        
+        tf_file.write('\n# ==== Outputs ====\n\n')
+        tf_file.write('output "vm_private_ips" {\n  description = "Private IP addresses of all VMs"\n  value = {\n')
         for vm_name in vm_list:
             tf_file.write(f'    "{vm_name}" = azurerm_network_interface.{vm_name}_nic.private_ip_address\n')
-        
-        tf_file.write('''  }
-}
+        tf_file.write('  }\n}\n\n')
 
-output "vm_resource_groups" {
-  description = "Resource groups containing the VMs"
-  value = {
-''')
-        
+        tf_file.write('output "vm_resource_groups" {\n  description = "Resource groups containing the VMs"\n  value = {\n')
         for vm_name in vm_list:
             tf_file.write(f'    "{vm_name}" = azurerm_network_interface.{vm_name}_nic.resource_group_name\n')
-        
-        tf_file.write('''  }
-}
+        tf_file.write('  }\n}\n\n')
 
-output "deployment_summary" {
-  description = "Deployment summary information"
-  value = {
-    environment     = var.environment
-    vm_count       = length([''')
-        
-        vm_names = '", "'.join(vm_list)
-        tf_file.write(f'"{vm_names}"')
-        
-        tf_file.write('''])
-    project_name   = "''' + self.project_name + '''"
-    deployment_time = timestamp()
-  }
-}
-''')
-        
+        tf_file.write('output "deployment_summary" {\n  description = "Deployment summary information"\n  value = {\n')
+        tf_file.write('    environment     = var.environment\n')
+        # vm_count and names
+        tf_file.write(f'    vm_count       = {len(vm_list)}\n')
+        names_list = ', '.join([f'"{n}"' for n in vm_list])
+        tf_file.write(f'    vm_names       = [{names_list}]\n')
+        tf_file.write(f'    project_name   = "{self.project_name}"\n')
+        tf_file.write('    deployment_time = timestamp()\n')
+        tf_file.write('  }\n}\n\n')
+
         print(f"[INFO] Generated outputs for {len(vm_list)} VMs")
-    
+
     def _collect_resource_groups(self):
         """First pass to collect all resource groups that need to be created"""
         try:
             with open(self.csv_file_path, newline='') as csvfile:
                 reader = csv.DictReader(csvfile)
                 for row in reader:
-                    if row.get("create_rg", "").lower() == "true":
-                        rg_name = row.get("resource_group", "").strip()
+                    if (row.get("create_rg") or "").strip().lower() == "true":
+                        rg_name = (row.get("resource_group") or "").strip()
                         if rg_name:
                             self.resource_groups_to_create.add(rg_name)
         except FileNotFoundError:
+            # upstream will handle missing CSV; here we just skip
             pass
-    
+
     def _generate_resource_groups(self, tf_file):
         """Generate resource group resources"""
         if not self.resource_groups_to_create:
             return
-            
         tf_file.write("\n# ==== Resource Groups ====\n")
-        
         for rg_name in sorted(self.resource_groups_to_create):
-            # Parse default tags for resource group (no CSV tags)
+            identifier = self._sanitize_resource_name(rg_name) + "_rg"
             tags = self.parse_tags()
-            tags_str = ",\n    ".join([f'"{k}" = "{v}"' for k, v in tags.items()])
-            
+            tags_str = self._format_tags(tags)
             tf_file.write(f'''
-resource "azurerm_resource_group" "{rg_name.replace('-', '_')}_rg" {{
+resource "azurerm_resource_group" "{identifier}" {{
   name     = "{rg_name}"
   location = var.location
 
   tags = {{
-    {tags_str}
+{tags_str}
   }}
 }}
 ''')
-    
+
     def _write_provider_block(self, tf_file):
         """Write provider and variable blocks - using local state on agent server"""
-        
         tf_file.write(f'''
 terraform {{
   required_version = ">= 1.0"
@@ -406,9 +392,6 @@ terraform {{
       version = "~> 3.0"
     }}
   }}
-  
-  # Local backend - state stored on agent server
-  # Path: C:\\TerraformState\\Project\\{self.project_name}\\{self.environment}\\terraform.tfstate
 }}
 
 provider "azurerm" {{
@@ -441,7 +424,6 @@ variable "project_name" {{
   default     = "{self.project_name}"
 }}
 
-# Common data sources
 data "azurerm_virtual_network" "main_vnet" {{
   name                = "{self.config['vnet_name']}"
   resource_group_name = "{self.config['vnet_rg']}"
@@ -457,111 +439,84 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
   resource_group_name = "{self.config['dcr_rg']}"
 }}
 ''')
-        
-        print(f"[CONFIG] Local backend configured for: C:\\TerraformState\\Project\\{self.project_name}\\{self.environment}\\")
+        print(f"[CONFIG] Provider and datasources written. Local backend path: C:\\TerraformState\\Project\\{self.project_name}\\{self.environment}\\")
 
-    def _generate_vm_resources(self, tf_file, row: Dict[str, str], cloud_init_content: str):
+    def _generate_vm_resources(self, tf_file, row: Dict[str, str], vm_name: str):
         """Generate Terraform resources for a single VM"""
-        # Extract VM configuration from CSV
-        vm_name = row["vm_name"].strip()
-        resource_group = row["resource_group"].strip()
-        vm_role = row["vm_role"].strip()
-        subnet_name = row["subnet_name"].strip()
-        static_ip = row["static_ip"].strip()
-        vm_size = row["vm_size"].strip()  # Read directly from CSV
-        os_template = row.get("os_template", "windows-2019").strip()
-        
-        # Resolve OS template to detailed configuration
+        resource_group = (row.get("resource_group") or "").strip()
+        vm_role = (row.get("vm_role") or "").strip()
+        subnet_name = (row.get("subnet_name") or "").strip()
+        static_ip = (row.get("static_ip") or "").strip()
+        vm_size = (row.get("vm_size") or "").strip()
+        os_template = (row.get("os_template") or "windows-2019").strip()
+
         os_config = self.resolve_os_template(os_template)
         os_type = os_config['os_type']
-        
-        custom_tags = row.get("custom_tags", "").strip()  # Will be ignored
-        create_rg = row.get("create_rg", "false").lower() == "true"
-        
-        # Parse tags from environment variables (GUI input)
+
+        create_rg = (row.get("create_rg") or "false").strip().lower() == "true"
+
         tags = self.parse_tags()
-        
-        print(f"[INFO] Processing VM: {vm_name}")
-        print(f"[INFO] Using subnet: {subnet_name}")
-        print(f"[INFO] Static IP: {static_ip}")
-        print(f"[INFO] OS Template: {os_template}")
-        
-        # Create OS image object from resolved template
+        tags_str = self._format_tags(tags)
+
+        print(f"[INFO] Processing VM: {vm_name} - subnet: {subnet_name} - static_ip: {static_ip} - os_template: {os_template}")
+
         os_image = {
             'publisher': os_config['publisher'],
             'offer': os_config['offer'],
             'sku': os_config['sku'],
             'version': os_config['version']
         }
-        
-        # Validate VM size
+
         if not vm_size:
             print(f"[WARNING] No VM size specified for {vm_name}, using Standard_D4s_v5")
             vm_size = "Standard_D4s_v5"
-        
-        # Format tags for Terraform
-        tags_str = ",\n    ".join([f'"{k}" = "{v}"' for k, v in tags.items()])
-        
-        # Select appropriate script based on OS type
+
         if os_type.lower() == 'windows':
             script_blob_name = self.config['script_blob_name_windows']
             script_description = "Windows PowerShell setup script"
         else:
             script_blob_name = self.config['script_blob_name_linux']
             script_description = "Linux shell setup script"
-        
-        # Custom Script Extension Configuration
-        # Set to False to disable custom script extensions for all VMs
-        # Useful when having blob storage authentication issues or 409 conflicts
-        self.enable_custom_scripts = False  # DISABLED - Skip custom script extensions
-        
-        # Check if script storage is configured
-        script_storage_configured = all([
-            self.config['script_storage_account'],
-            self.config['script_storage_container'],
-            script_blob_name
-        ])
-        
-        # Final decision: Both configuration and storage must be ready
-        script_enabled = self.enable_custom_scripts and script_storage_configured
-        
-        if script_enabled:
-            # Generate SAS URL - TODO: Should be generated dynamically or from Key Vault
-            # For now, using direct blob URL (assumes public read or managed identity access)
-            sas_url = f"https://{self.config['script_storage_account']}.blob.core.windows.net/{self.config['script_storage_container']}/{script_blob_name}"
-            print(f"[INFO] Using {script_description}: {script_blob_name}")
-            print(f"[WARNING] Using direct blob URL. Consider implementing dynamic SAS token generation.")
+
+    # Generate SAS URL automatically if scripts enabled
+    sas_url = None
+    if self.enable_custom_scripts:
+      try:
+        sas_url = self._generate_sas_url(os_type)
+      except Exception as e:
+        print(f"[ERROR] SAS generation failed for {vm_name}: {e}")
+        sas_url = None
+    else:
+      print("[SKIP] Custom scripts globally disabled.")
+
+    # Replace old sas_url logic with automatic SAS from above
+    if sas_url:
+      print(f"[OK] Using SAS URL for {os_type} script (time-limited)")
+    else:
+      print(f"[WARN] No SAS URL generated for {vm_name}, skipping script extension.")
+
+        # Resource group reference expression for Terraform
+        if create_rg:
+            rg_identifier = self._sanitize_resource_name(resource_group) + "_rg"
+            rg_reference = f'azurerm_resource_group.{rg_identifier}.name'
         else:
-            print(f"[SKIP] Custom Script Extensions disabled globally")
-            if not self.enable_custom_scripts:
-                print(f"[INFO] Custom scripts disabled by configuration (enable_custom_scripts = False)")
-            if not script_storage_configured:
-                print(f"[INFO] Script storage not fully configured")
-                print(f"[INFO] Storage account: {'✓' if self.config['script_storage_account'] else '✗'}")
-                print(f"[INFO] Container: {'✓' if self.config['script_storage_container'] else '✗'}")
-                print(f"[INFO] Script blob: {'✓' if script_blob_name else '✗'}")
-            sas_url = None
-        
-        # Resource group reference
-        rg_reference = f"azurerm_resource_group.{resource_group.replace('-', '_')}_rg.name" if create_rg else f'"{resource_group}"'
-        
+            rg_reference = f'"{resource_group}"'
+
+        # Subnet data source
         tf_file.write(f'''
 # ==== {vm_name} Resources ====
 
-# Subnet data source
 data "azurerm_subnet" "{vm_name}_subnet" {{
   name                 = "{subnet_name}"
   virtual_network_name = data.azurerm_virtual_network.main_vnet.name
   resource_group_name  = "{self.config['vnet_rg']}"
 }}
 
-# Admin password from Key Vault
 data "azurerm_key_vault_secret" "{vm_name}_admin_password" {{
   name         = "azureadmin"
   key_vault_id = data.azurerm_key_vault.main_kv.id
 }}
 
-# Network Interface
 resource "azurerm_network_interface" "{vm_name}_nic" {{
   name                = "{vm_name}-nic"
   location            = var.location
@@ -575,37 +530,22 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
   }}
 
   tags = {{
-    {tags_str}
+{tags_str}
   }}
 }}
 ''')
 
         # Generate VM resource based on OS type
         if os_type == "linux":
-            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, cloud_init_content, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
+            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
         else:
             self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
-        
-        # DEBUG: Save decoded cloud-init for comparison with Azure Portal
-        if vm_name == next(iter([row["vm_name"].strip() for row in csv.DictReader(open(self.csv_file_path))]), None):
-            try:
-                decoded_content = base64.b64decode(cloud_init_content).decode('utf-8')
-                debug_file = f"./Project/{self.project_name}/debug-cloud-init.yaml"
-                os.makedirs(os.path.dirname(debug_file), exist_ok=True)
-                with open(debug_file, 'w', encoding='utf-8') as f:
-                    f.write(decoded_content)
-                print(f"[DEBUG] Saved decoded cloud-init to: {debug_file}")
-                print(f"[DEBUG] Compare this with what you used in Azure Portal GUI")
-            except Exception as e:
-                print(f"[DEBUG] Could not save debug file: {e}")
-        
-        # Generate additional disks
+
+        # Additional disks and shutdown
         self._generate_data_disks(tf_file, vm_name, row, os_type, rg_reference)
-        
-        # Generate auto shutdown
         self._generate_auto_shutdown(tf_file, vm_name, tags_str, os_type)
-    
-    def _generate_linux_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, cloud_init_content: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str, script_enabled: bool = True):
+
+    def _generate_linux_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str, script_enabled: bool = True):
         """Generate Linux VM resources"""
         tf_file.write(f'''
 # Linux Virtual Machine
@@ -618,7 +558,7 @@ resource "azurerm_linux_virtual_machine" "{vm_name}" {{
   network_interface_ids = [
     azurerm_network_interface.{vm_name}_nic.id
   ]
-  
+
   admin_username                  = "azureadmin"
   admin_password                  = data.azurerm_key_vault_secret.{vm_name}_admin_password.value
   disable_password_authentication = false
@@ -635,70 +575,60 @@ resource "azurerm_linux_virtual_machine" "{vm_name}" {{
     version   = "{os_image['version']}"
   }}
 
-  custom_data = "{cloud_init_content}"
-  
   boot_diagnostics {{
     storage_account_uri = "https://{self.config['diagnostics_storage']}.blob.core.windows.net/"
   }}
 
   tags = {{
-    {tags_str}
+{tags_str}
   }}
 }}
+''')
 
-# Azure Monitor Agent
+        # Extensions (Linux) - AMA + DCR association + optional script
+        tf_file.write(f'''
 resource "azurerm_virtual_machine_extension" "{vm_name}_ama" {{
   name                       = "AzureMonitorLinuxAgent"
   virtual_machine_id         = azurerm_linux_virtual_machine.{vm_name}.id
   publisher                  = "Microsoft.Azure.Monitor"
   type                       = "AzureMonitorLinuxAgent"
-  type_handler_version       = "1.33"
+  type_handler_version       = "1.30"
   automatic_upgrade_enabled  = true
 
   tags = {{
-    {tags_str}
+{tags_str}
   }}
 }}
 
-# Data Collection Rule Association
 resource "azurerm_monitor_data_collection_rule_association" "{vm_name}_dcr_assoc" {{
   name                    = "{self.config['dcr_name']}"
   target_resource_id      = azurerm_linux_virtual_machine.{vm_name}.id
   data_collection_rule_id = data.azurerm_monitor_data_collection_rule.main_dcr.id
 }}
+''')
 
-# Custom Script Extension (Conditional)''')
-        
         if script_enabled and sas_url:
             tf_file.write(f'''
 resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   name                 = "CustomScriptExtension"
   virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
-  publisher            = "Microsoft.Azure.Extensions"
-  type                 = "CustomScript"
-  type_handler_version = "2.0"
+  publisher            = "Microsoft.Compute"
+  type                 = "CustomScriptExtension"
+  type_handler_version = "1.9"
 
   settings = jsonencode({{
     fileUris = ["{sas_url}"]
-    commandToExecute = "sh {script_blob_name}"
+    commandToExecute = "bash {script_blob_name}"
   }})
 
   tags = {{
-    {tags_str}
+{tags_str}
   }}
 }}
 ''')
         else:
-            tf_file.write(f'''
-# Custom Script Extension DISABLED
-# Reason: Custom script extensions are disabled in configuration
-# To enable: Set enable_custom_scripts = True in Python script
-# Note: Also ensure blob storage authentication is configured
-''')
-        
-        tf_file.write('''
-''')  # Close the section
-    
+            tf_file.write('\n# Custom Script Extension DISABLED for Linux\n')
+
     def _generate_windows_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str, script_enabled: bool = True):
         """Generate Windows VM resources"""
         tf_file.write(f'''
@@ -728,17 +658,18 @@ resource "azurerm_windows_virtual_machine" "{vm_name}" {{
     sku       = "{os_image['sku']}"
     version   = "{os_image['version']}"
   }}
-  
+
   boot_diagnostics {{
     storage_account_uri = "https://{self.config['diagnostics_storage']}.blob.core.windows.net/"
   }}
 
   tags = {{
-    {tags_str}
+{tags_str}
   }}
 }}
+''')
 
-# Azure Monitor Agent
+        tf_file.write(f'''
 resource "azurerm_virtual_machine_extension" "{vm_name}_ama" {{
   name                       = "AzureMonitorWindowsAgent"
   virtual_machine_id         = azurerm_windows_virtual_machine.{vm_name}.id
@@ -748,19 +679,17 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_ama" {{
   automatic_upgrade_enabled  = true
 
   tags = {{
-    {tags_str}
+{tags_str}
   }}
 }}
 
-# Data Collection Rule Association
 resource "azurerm_monitor_data_collection_rule_association" "{vm_name}_dcr_assoc" {{
   name                    = "{self.config['dcr_name']}"
   target_resource_id      = azurerm_windows_virtual_machine.{vm_name}.id
   data_collection_rule_id = data.azurerm_monitor_data_collection_rule.main_dcr.id
 }}
+''')
 
-# Custom Script Extension (Conditional)''')
-        
         if script_enabled and sas_url:
             tf_file.write(f'''
 resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
@@ -776,32 +705,21 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   }})
 
   tags = {{
-    {tags_str}
+{tags_str}
   }}
 }}
 ''')
         else:
-            tf_file.write(f'''
-# Custom Script Extension DISABLED
-# Reason: Custom script extensions are disabled in configuration
-# To enable: Set enable_custom_scripts = True in Python script
-# Note: Also ensure blob storage authentication is configured
-''')
-        
-        tf_file.write('''
-''')  # Close the section
-    
+            tf_file.write('\n# Custom Script Extension DISABLED for Windows\n')
+
     def _generate_data_disks(self, tf_file, vm_name: str, row: Dict[str, str], os_type: str, rg_reference: str):
         """Generate additional data disks for VM"""
         vm_resource_type = "linux_virtual_machine" if os_type == "linux" else "windows_virtual_machine"
-        
-        for idx in range(1, 4):  # Support up to 3 additional disks (disk_1_size, disk_2_size, disk_3_size)
-            disk_size = row.get(f"disk_{idx}_size", "").strip()
-            
+        for idx in range(1, 4):
+            disk_size = (row.get(f"disk_{idx}_size") or "").strip()
             if disk_size and disk_size.isdigit():
                 disk_name = f"{vm_name}_DataDisk_{idx-1}"
                 lun = idx - 1
-                
                 tf_file.write(f'''
 # Data Disk {idx}
 resource "azurerm_managed_disk" "{disk_name}" {{
@@ -821,14 +739,12 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{vm_name}_disk_{idx}_at
   caching            = "{self.storage_standards['data_disk_caching']}"
 }}
 ''')
-    
+
     def _generate_auto_shutdown(self, tf_file, vm_name: str, tags_str: str, os_type: str):
         """Generate auto shutdown schedule (hardcoded configuration)"""
         if not self.shutdown_config['enabled']:
             return
-            
         vm_resource_type = "linux_virtual_machine" if os_type == "linux" else "windows_virtual_machine"
-        
         tf_file.write(f'''
 # Auto Shutdown Schedule (Hardcoded Configuration)
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
@@ -844,18 +760,15 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
   }}
 
   tags = {{
-    {tags_str}
+{tags_str}
   }}
 }}
 ''')
 
 def main():
-    """Main execution function"""
-    print("[START] Enhanced Terraform VM Configuration Generator v2")
-    
+    print("[START] Enhanced Terraform VM Configuration Generator v2 (fixed)")
     generator = TerraformVMGenerator()
     generator.generate_terraform()
-    
     print("[SUCCESS] Terraform configuration generation completed successfully")
 
 if __name__ == "__main__":
