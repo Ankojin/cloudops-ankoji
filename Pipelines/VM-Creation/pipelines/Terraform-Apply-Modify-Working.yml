@@ -158,11 +158,13 @@ steps:
       Set-ValidatedEnvVar "SCRIPT_STORAGE_ACCOUNT" "$(script_storage_account)" $true
       Set-ValidatedEnvVar "SCRIPT_STORAGE_CONTAINER" "$(script_storage_container)" $true
       Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_LINUX" "$(script_blob_name_linux)" $true
+      Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_WINDOWS" "$(script_blob_name_windows)" $true
+      Set-ValidatedEnvVar "SCRIPT_STORAGE_KEY" "$(script_storage_key)" $true
       
       # Optional auto shutdown configuration
-      Set-ValidatedEnvVar "shutdown_enabled" "$(shutdown_enabled)" $false
-      Set-ValidatedEnvVar "shutdown_time" "$(shutdown_time)" $false
-      Set-ValidatedEnvVar "shutdown_timezone" "$(shutdown_timezone)" $false
+      Set-ValidatedEnvVar "shutdown_enabled" "$(shutdown_enabled)" $true
+      Set-ValidatedEnvVar "shutdown_time" "$(shutdown_time)" $true
+      Set-ValidatedEnvVar "shutdown_timezone" "$(shutdown_timezone)" $true
       
       # Handle mandatory tags from GUI JSON input - different logic for apply vs modify
       $tagsInput = '${{ parameters.tags_json_override }}'
