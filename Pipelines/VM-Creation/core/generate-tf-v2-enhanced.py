@@ -252,6 +252,13 @@ resource "azurerm_resource_group" "{rg.replace('-', '_')}_rg" {{
         tags = self.parse_tags()
         tags_str = ",\n    ".join([f'"{k}" = "{v}"' for k, v in tags.items()])
         rg_ref = f'"{rg}"'
+        create_rg = row.get("create_rg", "false").lower() == "true"
+
+        # Build depends_on if resource group is being created
+        depends_on_str = ""
+        if create_rg:
+            depends_on_str = f'  depends_on = [azurerm_resource_group.{rg.replace("-", "_")}_rg]\n'
+            rg_ref = f'azurerm_resource_group.{rg.replace("-", "_")}_rg.name'
 
         tf_file.write(f'''
 # ==== {vm_name} ====
@@ -270,7 +277,7 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
   name                = "{vm_name}-nic"
   location            = var.location
   resource_group_name = {rg_ref}
-
+{depends_on_str}
   ip_configuration {{
     name                          = "internal"
     subnet_id                     = data.azurerm_subnet.{vm_name}_subnet.id
