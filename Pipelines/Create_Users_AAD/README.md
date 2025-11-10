@@ -450,6 +450,59 @@ ABIC_AMS_COMPLIANCE
 
 ---
 
+## 🤖 AI Operational Notes (ABIC Group Assignment)
+
+This pipeline leverages AI-driven automation and best practices for Azure AD user-group management. For the operation **Add Existing ABIC Users to ABIC Groups**:
+
+- **CSV Files Used:**
+  - `ABIC-Existing-Users.csv` (column: `UserPrincipalName`)
+  - `ABIC-Groups.csv` (column: `GroupName`)
+- **Automation Logic:**
+  - Every user in the users CSV is assigned to every group in the groups CSV (cartesian product).
+  - Membership is checked before assignment; existing memberships are skipped.
+  - All actions are logged with success, warning, and error indicators.
+- **AI-Driven Features:**
+  - Automated validation of CSV structure and Azure AD existence.
+  - Intelligent retry logic for transient errors.
+  - Summary reporting of total assignments, successes, skips, and failures.
+- **How to Use:**
+  1. Update the CSV files as needed.
+  2. Select the operation in the pipeline UI and confirm.
+  3. Run the pipeline and review logs/artifacts for results.
+- **Best Practice:**
+  - For large datasets, consider mapping users to specific groups to avoid unnecessary assignments.
+  - Ensure service principal has `Group.ReadWrite.All` permissions in Azure AD.
+
+---
+
+## 👥 Human Notes: ABIC Group Assignment
+
+This pipeline operation is designed for bulk assignment of existing ABIC users to one or more Azure AD groups. It’s useful for onboarding, role changes, or updating access for multiple users at once.
+
+### What You Need
+- **ABIC-Existing-Users.csv**: List of users (UserPrincipalName column)
+- **ABIC-Groups.csv**: List of groups (GroupName column)
+
+### How It Works
+- Every user in the CSV is added to every group listed.
+- The script checks if the user is already a member before adding.
+- Successes, skips (already members), and errors are logged for review.
+
+### How to Run
+1. Update the CSV files with the users and groups you want to process.
+2. In the pipeline UI, select "Add Existing ABIC Users to ABIC Groups" and confirm.
+3. Run the pipeline and check the logs/artifacts for results.
+
+### Tips
+- Make sure all users and groups exist in Azure AD before running.
+- For large numbers, consider mapping users to specific groups to avoid unnecessary assignments.
+- The service principal must have Group.ReadWrite.All permissions.
+- If you see errors about missing users or groups, double-check the CSV spelling and Azure AD objects.
+
+---
+_Last updated: November 10, 2025_
+_Status: Ready for use by BAB CloudOps team_
+
 ## 🔧 Troubleshooting
 
 ### Common Issues & Solutions

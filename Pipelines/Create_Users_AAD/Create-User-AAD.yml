@@ -14,7 +14,7 @@ variables:
 - name: avdUsersCsvPath
   value: 'Pipelines/Create_Users_AAD/AVD-users.csv'
 - name: adminStudioUsersCsvPath
-  value: 'Pipelines/Create_Users_AAD/Admin-Studio-Users.csv'
+  value: 'Pipelines/Create_Users_AAD/Admin-studio-users.csv'
 - name: adminStudioGroupsCsvPath
   value: 'Pipelines/Create_Users_AAD/Admin-Studio-Groups.csv'
 - name: abicNewUsersCsvPath
@@ -186,14 +186,16 @@ stages:
             "Add Existing ABIC Users to ABIC Groups" {
               Write-Host "Operation Details:" -ForegroundColor Cyan
               Write-Host "  Type: Existing ABIC User-Group Assignment" -ForegroundColor White
-              Write-Host "  Users CSV: $(abicExistingUsersCsvPath)" -ForegroundColor White
-              Write-Host "  Groups CSV: $(abicGroupsCsvPath)" -ForegroundColor White
+              Write-Host "  Users CSV: ABIC-Existing-Users.csv ($(abicExistingUsersCsvPath))" -ForegroundColor White
+              Write-Host "  Groups CSV: ABIC-Groups.csv ($(abicGroupsCsvPath))" -ForegroundColor White
               Write-Host "  Confirmation: ${{ parameters.confirmExistingABICOperation }}" -ForegroundColor White
               Write-Host ""
               Write-Host "CSV Requirements:" -ForegroundColor Yellow
-              Write-Host "  - Users CSV: UserPrincipalName" -ForegroundColor Gray
-              Write-Host "  - Groups CSV: GroupName" -ForegroundColor Gray
+              Write-Host "  - ABIC-Existing-Users.csv: UserPrincipalName column" -ForegroundColor Gray
+              Write-Host "  - ABIC-Groups.csv: GroupName column" -ForegroundColor Gray
               Write-Host "  - Users and Groups must exist in Azure AD" -ForegroundColor Gray
+              Write-Host ""
+              Write-Host "Note: This assigns ALL users to ALL groups (cartesian product)" -ForegroundColor Yellow
             }
           }
           
@@ -364,8 +366,8 @@ stages:
               $groupsCsvPath = "$(Build.SourcesDirectory)/$(abicGroupsCsvPath)"
               $expectedUserColumns = "UserPrincipalName"
               $expectedGroupColumns = "GroupName"
-              Write-Host "Existing ABIC Users CSV: $usersCsvPath" -ForegroundColor Yellow
-              Write-Host "ABIC Groups CSV: $groupsCsvPath" -ForegroundColor Yellow
+              Write-Host "📄 ABIC-Existing-Users.csv: $usersCsvPath" -ForegroundColor Yellow
+              Write-Host "📄 ABIC-Groups.csv: $groupsCsvPath" -ForegroundColor Yellow
             }
           }
           

@@ -1,3 +1,35 @@
+<#
+.SYNOPSIS
+    Azure AD User Management Script for BAB CloudOps
+
+.DESCRIPTION
+    This script supports multiple Azure AD operations including service account creation,
+    AVD user provisioning, Admin Studio user management, and ABIC user operations.
+
+.OPERATION TYPES
+    1. Create Service Account - GUI input based service account creation
+    2. Create Normal AVD Users - CSV-driven AVD user creation
+    3. Add Existing Admin Studio Users to Admin Studio Groups - Group assignment from CSV
+    4. Create New ABIC Users and Add to ABIC Groups - Full ABIC user lifecycle
+    5. Add Existing ABIC Users to ABIC Groups - Existing user group assignment
+
+.CSV FILE MAPPINGS
+    "Add Existing ABIC Users to ABIC Groups" operation uses:
+    - Users CSV: ABIC-Existing-Users.csv (UserPrincipalName column)
+    - Groups CSV: ABIC-Groups.csv (GroupName column)
+    
+    Current operation will assign:
+    - 1 user (Kurweg-A@albtests.com)
+    - To 68 ABIC groups
+    - Total: 68 group assignments
+
+.NOTES
+    File: Create-User-AAD.ps1
+    Author: BAB CloudOps Team
+    Version: 2.0
+    Updated: November 2025
+#>
+
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -871,6 +903,134 @@ try {
             if ($failCount -gt 0) {
                 throw "Some Admin Studio operations failed. Check logs for details."
             }
+        }
+        
+        "Add Existing ABIC Users to ABIC Groups" {
+            Write-Log "========================================" "INFO"
+            Write-Log "Executing: Add Existing ABIC Users to ABIC Groups" "INFO"
+            Write-Log "========================================" "INFO"
+            Write-Log "Users CSV: $UsersCsvFilePath" "INFO"
+            Write-Log "Groups CSV: $GroupsCsvFilePath" "INFO"
+            Write-Log "" "INFO"
+            
+            # Load ABIC-Existing-Users.csv
+            Write-Log "Loading existing ABIC users from ABIC-Existing-Users.csv..." "INFO"
+            $abicUsers = Import-Csv -Path $UsersCsvFilePath -ErrorAction Stop
+            Write-Log "✓ Loaded $($abicUsers.Count) existing ABIC users from CSV" "SUCCESS"
+            
+            # Load ABIC-Groups.csv
+            Write-Log "Loading ABIC groups from ABIC-Groups.csv..." "INFO"
+            $abicGroups = Import-Csv -Path $GroupsCsvFilePath -ErrorAction Stop
+            Write-Log "✓ Loaded $($abicGroups.Count) ABIC groups from CSV" "SUCCESS"
+            Write-Log "" "INFO"
+            
+            # Validate CSV columns for users (ABIC-Existing-Users.csv)
+            Write-Log "Validating ABIC-Existing-Users.csv structure..." "INFO"
+            $requiredUserColumns = @('UserPrincipalName')
+            $csvUserColumns = $abicUsers[0].PSObject.Properties.Name
+            $missingUserColumns = $requiredUserColumns | Where-Object { $_ -notin $csvUserColumns }
+            
+            if ($missingUserColumns) {
+                throw "Missing required columns in ABIC-Existing-Users.csv: $($missingUserColumns -join ', '). Expected: $($requiredUserColumns -join ', ')"
+            }
+            Write-Log "✓ ABIC-Existing-Users.csv structure validated" "SUCCESS"
+            
+            # Validate CSV columns for groups (ABIC-Groups.csv)
+            Write-Log "Validating ABIC-Groups.csv structure..." "INFO"
+            $requiredGroupColumns = @('GroupName')
+            $csvGroupColumns = $abicGroups[0].PSObject.Properties.Name
+            $missingGroupColumns = $requiredGroupColumns | Where-Object { $_ -notin $csvGroupColumns }
+            
+            if ($missingGroupColumns) {
+                throw "Missing required columns in ABIC-Groups.csv: $($missingGroupColumns -join ', '). Expected: $($requiredGroupColumns -join ', ')"
+            }
+            Write-Log "✓ ABIC-Groups.csv structure validated" "SUCCESS"
+            Write-Log "" "INFO"
+            
+            # Display operation summary
+            $totalOperations = $abicUsers.Count * $abicGroups.Count
+            Write-Log "========================================" "INFO"
+            Write-Log "OPERATION SUMMARY" "INFO"
+            Write-Log "Users to process: $($abicUsers.Count)" "INFO"
+            Write-Log "Groups to assign: $($abicGroups.Count)" "INFO"
+            Write-Log "Total assignments: $totalOperations" "INFO"
+            Write-Log "========================================" "INFO"
+            Write-Log "" "INFO"
+            
+            $successCount = 0
+            $failCount = 0
+            $skipCount = 0
+            
+            # Add each existing user to each ABIC group
+            Write-Log "Starting user-to-group assignments..." "INFO"
+            foreach ($userEntry in $abicUsers) {
+                Write-Log "----------------------------------------" "INFO"
+                Write-Log "Processing user: $($userEntry.UserPrincipalName)" "INFO"
+                
+                foreach ($groupEntry in $abicGroups) {
+                    try {
+                        Write-Log "  → Assigning to group: $($groupEntry.GroupName)" "INFO"
+                        
+                        # Get existing ABIC user
+                        $user = Invoke-WithRetry -OperationName "Get existing ABIC user" -ScriptBlock {
+                            Get-MgUser -Filter "userPrincipalName eq '$($userEntry.UserPrincipalName)'" -ErrorAction Stop
+                        }
+                        
+                        if (-not $user) {
+                            Write-Log "  ✗ ABIC user not found in Azure AD: $($userEntry.UserPrincipalName)" "ERROR"
+                            $failCount++
+                            continue
+                        }
+                        
+                        # Get ABIC group
+                        $group = Invoke-WithRetry -OperationName "Get ABIC group" -ScriptBlock {
+                            Get-MgGroup -Filter "displayName eq '$($groupEntry.GroupName)'" -ErrorAction Stop
+                        }
+                        
+                        if (-not $group) {
+                            Write-Log "  ✗ ABIC group not found in Azure AD: $($groupEntry.GroupName)" "ERROR"
+                            $failCount++
+                            continue
+                        }
+                        
+                        # Check if user is already a member
+                        $members = Get-MgGroupMember -GroupId $group.Id
+                        $isMember = $members | Where-Object { $_.Id -eq $user.Id }
+                        
+                        if (-not $isMember) {
+                            Invoke-WithRetry -OperationName "Add user to ABIC group" -ScriptBlock {
+                                New-MgGroupMember -GroupId $group.Id -DirectoryObjectId $user.Id -ErrorAction Stop
+                            }
+                            Write-Log "  ✓ User added to ABIC group successfully" "SUCCESS"
+                            $successCount++
+                        } else {
+                            Write-Log "  ⚠ User already member of ABIC group" "WARN"
+                            $skipCount++
+                        }
+                        
+                    } catch {
+                        Write-Log "  ✗ Error processing assignment: $($_.Exception.Message)" "ERROR"
+                        Write-Log "  Stack trace: $($_.ScriptStackTrace)" "DEBUG"
+                        $failCount++
+                    }
+                }
+            }
+            
+            Write-Log "" "INFO"
+            Write-Log "========================================" "INFO"
+            Write-Log "EXISTING ABIC USERS ASSIGNMENT SUMMARY" "INFO"
+            Write-Log "========================================" "INFO"
+            Write-Log "Total assignments attempted: $totalOperations" "INFO"
+            Write-Log "✓ Successful assignments: $successCount" "SUCCESS"
+            Write-Log "⚠ Skipped (already members): $skipCount" "WARN"
+            Write-Log "✗ Failed assignments: $failCount" $(if ($failCount -eq 0) { "SUCCESS" } else { "ERROR" })
+            Write-Log "========================================" "INFO"
+            
+            if ($failCount -gt 0) {
+                throw "Some existing ABIC operations failed. Check logs for details."
+            }
+            
+            Write-Log "All ABIC user assignments completed successfully!" "SUCCESS"
         }
         
         "Create New ABIC Users and Add to ABIC Groups" {
