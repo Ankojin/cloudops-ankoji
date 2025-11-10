@@ -911,7 +911,7 @@ try {
             Write-Log "========================================" "INFO"
             Write-Log "Users CSV: $UsersCsvFilePath" "INFO"
             Write-Log "Groups CSV: $GroupsCsvFilePath" "INFO"
-            Write-Log "" "INFO"
+            Write-Log "Starting operation..." "INFO"
             
             # Load ABIC-Existing-Users.csv
             Write-Log "Loading existing ABIC users from ABIC-Existing-Users.csv..." "INFO"
@@ -945,7 +945,7 @@ try {
                 throw "Missing required columns in ABIC-Groups.csv: $($missingGroupColumns -join ', '). Expected: $($requiredGroupColumns -join ', ')"
             }
             Write-Log "✓ ABIC-Groups.csv structure validated" "SUCCESS"
-            Write-Log "" "INFO"
+            Write-Log "Validation complete." "INFO"
             
             # Display operation summary
             $totalOperations = $abicUsers.Count * $abicGroups.Count
@@ -955,7 +955,7 @@ try {
             Write-Log "Groups to assign: $($abicGroups.Count)" "INFO"
             Write-Log "Total assignments: $totalOperations" "INFO"
             Write-Log "========================================" "INFO"
-            Write-Log "" "INFO"
+            Write-Log "Beginning assignments." "INFO"
             
             $successCount = 0
             $failCount = 0
@@ -1016,7 +1016,7 @@ try {
                 }
             }
             
-            Write-Log "" "INFO"
+            Write-Log "Assignment summary complete." "INFO"
             Write-Log "========================================" "INFO"
             Write-Log "EXISTING ABIC USERS ASSIGNMENT SUMMARY" "INFO"
             Write-Log "========================================" "INFO"
