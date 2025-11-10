@@ -281,99 +281,97 @@ class TerraformVMGenerator:
 
         abs_output_path = os.path.abspath(self.output_tf_file)
         abs_working_dir = os.path.abspath(".")
-        print(f"[DEBUG] Current working directory: {abs_working_dir}")
-        print(f"[DEBUG] Output path: {abs_output_path}")
+  def _generate_vm_resources(self, tf_file, row: Dict[str, str], vm_name: str):
+    def _generate_vm_resources(self, tf_file, row: Dict[str, str], vm_name: str):
+        """Generate Terraform resources for a single VM"""
+        resource_group = (row.get("resource_group") or "").strip()
+        vm_role = (row.get("vm_role") or "").strip()
+        subnet_name = (row.get("subnet_name") or "").strip()
+        static_ip = (row.get("static_ip") or "").strip()
+    vm_size = (row.get("vm_size") or "").strip()
+    os_template = (row.get("os_template") or "windows-2019").strip()
 
-        vm_outputs: List[str] = []
+    os_config = self.resolve_os_template(os_template)
+    os_type = os_config['os_type']
 
-        with open(self.output_tf_file, "w") as tf_file:
-            self._write_provider_block(tf_file)
+    create_rg = (row.get("create_rg") or "false").strip().lower() == "true"
 
-            # First pass: collect resource groups to create
-            self._collect_resource_groups()
+    tags = self.parse_tags()
+    tags_str = self._format_tags(tags)
 
-            # Generate resource group resources
-            self._generate_resource_groups(tf_file)
+    print(f"[INFO] Processing VM: {vm_name} - subnet: {subnet_name} - static_ip: {static_ip} - os_template: {os_template}")
 
-            # Process CSV file for VMs
-            try:
-                with open(self.csv_file_path, newline='') as csvfile:
-                    reader = csv.DictReader(csvfile)
-                    for row_num, row in enumerate(reader, start=2):  # start=2 because header is line 1
-                        vm_name_raw = (row.get("vm_name") or "").strip()
-                        if not vm_name_raw:
-                            print(f"[DEBUG] Skipping empty row {row_num}")
-                            continue
+    os_image = {
+      'publisher': os_config['publisher'],
+      'offer': os_config['offer'],
+      'sku': os_config['sku'],
+      'version': os_config['version']
+    }
 
-                        # sanitize for Terraform identifiers
-                        vm_name = self._sanitize_resource_name(vm_name_raw)
-                        print(f"[INFO] Processing row {row_num}: vm_name='{vm_name_raw}' -> identifier='{vm_name}'")
-                        vm_outputs.append(vm_name)
-                        self._generate_vm_resources(tf_file, row, vm_name)
-            except FileNotFoundError:
-                print(f"[ERROR] CSV file not found: {self.csv_file_path}")
-                sys.exit(1)
+    if not vm_size:
+      print(f"[WARNING] No VM size specified for {vm_name}, using Standard_D4s_v5")
+      vm_size = "Standard_D4s_v5"
 
-            # Generate outputs
-            self._generate_outputs(tf_file, vm_outputs)
+    if os_type.lower() == 'windows':
+      script_blob_name = self.config['script_blob_name_windows']
+      script_description = "Windows PowerShell setup script"
+    else:
+      script_blob_name = self.config['script_blob_name_linux']
+      script_description = "Linux shell setup script"
 
-        print(f"[OK] Terraform configuration generated: {self.output_tf_file}")
-        print(f"[INFO] File size: {os.path.getsize(self.output_tf_file)} bytes")
-        print(f"[INFO] Resource groups to create: {len(self.resource_groups_to_create)}")
-        print(f"[INFO] VMs to deploy: {len(vm_outputs)}")
+    # Enable script extension by default (can be customized per row if needed)
+    script_enabled = True
 
-    def _generate_outputs(self, tf_file, vm_list: List[str]):
-        """Generate Terraform outputs for VM information"""
-        tf_file.write('\n# ==== Outputs ====\n\n')
-        tf_file.write('output "vm_private_ips" {\n  description = "Private IP addresses of all VMs"\n  value = {\n')
-        for vm_name in vm_list:
-            tf_file.write(f'    "{vm_name}" = azurerm_network_interface.{vm_name}_nic.private_ip_address\n')
-        tf_file.write('  }\n}\n\n')
+    # Generate SAS URL automatically if scripts enabled
+    sas_url = None
+    if self.enable_custom_scripts:
+      try:
+        sas_url = self._generate_sas_url(os_type)
+      except Exception as e:
+        print(f"[ERROR] SAS generation failed for {vm_name}: {e}")
+        sas_url = None
+    else:
+      print("[SKIP] Custom scripts globally disabled.")
 
-        tf_file.write('output "vm_resource_groups" {\n  description = "Resource groups containing the VMs"\n  value = {\n')
-        for vm_name in vm_list:
-            tf_file.write(f'    "{vm_name}" = azurerm_network_interface.{vm_name}_nic.resource_group_name\n')
-        tf_file.write('  }\n}\n\n')
+    # Replace old sas_url logic with automatic SAS from above
+    if sas_url:
+      print(f"[OK] Using SAS URL for {os_type} script (time-limited)")
+    else:
+      print(f"[WARN] No SAS URL generated for {vm_name}, skipping script extension.")
 
-        tf_file.write('output "deployment_summary" {\n  description = "Deployment summary information"\n  value = {\n')
-        tf_file.write('    environment     = var.environment\n')
-        # vm_count and names
-        tf_file.write(f'    vm_count       = {len(vm_list)}\n')
-        names_list = ', '.join([f'"{n}"' for n in vm_list])
-        tf_file.write(f'    vm_names       = [{names_list}]\n')
-        tf_file.write(f'    project_name   = "{self.project_name}"\n')
-        tf_file.write('    deployment_time = timestamp()\n')
-        tf_file.write('  }\n}\n\n')
+    # Resource group reference expression for Terraform
+    if create_rg:
+      rg_identifier = self._sanitize_resource_name(resource_group) + "_rg"
+      rg_reference = f'azurerm_resource_group.{rg_identifier}.name'
+    else:
+      rg_reference = f'"{resource_group}"'
 
-        print(f"[INFO] Generated outputs for {len(vm_list)} VMs")
+    # Subnet data source
+    tf_file.write(f'''
+# ==== {vm_name} Resources ====
 
-    def _collect_resource_groups(self):
-        """First pass to collect all resource groups that need to be created"""
-        try:
-            with open(self.csv_file_path, newline='') as csvfile:
-                reader = csv.DictReader(csvfile)
-                for row in reader:
-                    if (row.get("create_rg") or "").strip().lower() == "true":
-                        rg_name = (row.get("resource_group") or "").strip()
-                        if rg_name:
-                            self.resource_groups_to_create.add(rg_name)
-        except FileNotFoundError:
-            # upstream will handle missing CSV; here we just skip
-            pass
+    azurerm = {{
+  name                 = "{subnet_name}"
+  virtual_network_name = data.azurerm_virtual_network.main_vnet.name
+  resource_group_name  = "{self.config['vnet_rg']}"
+}}
 
-    def _generate_resource_groups(self, tf_file):
-        """Generate resource group resources"""
-        if not self.resource_groups_to_create:
-            return
-        tf_file.write("\n# ==== Resource Groups ====\n")
-        for rg_name in sorted(self.resource_groups_to_create):
-            identifier = self._sanitize_resource_name(rg_name) + "_rg"
-            tags = self.parse_tags()
-            tags_str = self._format_tags(tags)
-            tf_file.write(f'''
-resource "azurerm_resource_group" "{identifier}" {{
-  name     = "{rg_name}"
-  location = var.location
+      source  = "hashicorp/azurerm"
+  name         = "azureadmin"
+  key_vault_id = data.azurerm_key_vault.main_kv.id
+}}
+
+      version = "~> 3.0"
+  name                = "{vm_name}-nic"
+  location            = var.location
+  resource_group_name = {rg_reference}
+
+  ip_configuration {{
+  name                          = "internal"
+  subnet_id                     = data.azurerm_subnet.{vm_name}_subnet.id
+  private_ip_address_allocation = "Static"
+  private_ip_address            = "{static_ip}"
+  }}
 
   tags = {{
 {tags_str}
@@ -381,15 +379,15 @@ resource "azurerm_resource_group" "{identifier}" {{
 }}
 ''')
 
-    def _write_provider_block(self, tf_file):
-        """Write provider and variable blocks - using local state on agent server"""
-        tf_file.write(f'''
-terraform {{
-  required_version = ">= 1.0"
-  required_providers {{
-    azurerm = {{
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+    # Generate VM resource based on OS type
+    if os_type == "linux":
+      self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
+    else:
+      self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
+
+    # Additional disks and shutdown
+    self._generate_data_disks(tf_file, vm_name, row, os_type, rg_reference)
+    self._generate_auto_shutdown(tf_file, vm_name, tags_str, os_type)
     }}
   }}
 }}
@@ -441,42 +439,47 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
 ''')
         print(f"[CONFIG] Provider and datasources written. Local backend path: C:\\TerraformState\\Project\\{self.project_name}\\{self.environment}\\")
 
-    def _generate_vm_resources(self, tf_file, row: Dict[str, str], vm_name: str):
-        """Generate Terraform resources for a single VM"""
-        resource_group = (row.get("resource_group") or "").strip()
-        vm_role = (row.get("vm_role") or "").strip()
-        subnet_name = (row.get("subnet_name") or "").strip()
-        static_ip = (row.get("static_ip") or "").strip()
-        vm_size = (row.get("vm_size") or "").strip()
-        os_template = (row.get("os_template") or "windows-2019").strip()
+data "azurerm_subnet" "{vm_name}_subnet" {{
+data "azurerm_key_vault_secret" "{vm_name}_admin_password" {{
+  def _generate_vm_resources(self, tf_file, row: Dict[str, str], vm_name: str):
+    """Generate Terraform resources for a single VM"""
+    resource_group = (row.get("resource_group") or "").strip()
+    vm_role = (row.get("vm_role") or "").strip()
+    subnet_name = (row.get("subnet_name") or "").strip()
+    static_ip = (row.get("static_ip") or "").strip()
+    vm_size = (row.get("vm_size") or "").strip()
+    os_template = (row.get("os_template") or "windows-2019").strip()
 
-        os_config = self.resolve_os_template(os_template)
-        os_type = os_config['os_type']
+    os_config = self.resolve_os_template(os_template)
+    os_type = os_config['os_type']
 
-        create_rg = (row.get("create_rg") or "false").strip().lower() == "true"
+    create_rg = (row.get("create_rg") or "false").strip().lower() == "true"
 
-        tags = self.parse_tags()
-        tags_str = self._format_tags(tags)
+    tags = self.parse_tags()
+    tags_str = self._format_tags(tags)
 
-        print(f"[INFO] Processing VM: {vm_name} - subnet: {subnet_name} - static_ip: {static_ip} - os_template: {os_template}")
+    print(f"[INFO] Processing VM: {vm_name} - subnet: {subnet_name} - static_ip: {static_ip} - os_template: {os_template}")
 
-        os_image = {
-            'publisher': os_config['publisher'],
-            'offer': os_config['offer'],
-            'sku': os_config['sku'],
-            'version': os_config['version']
-        }
+    os_image = {
+      'publisher': os_config['publisher'],
+      'offer': os_config['offer'],
+      'sku': os_config['sku'],
+      'version': os_config['version']
+    }
 
-        if not vm_size:
-            print(f"[WARNING] No VM size specified for {vm_name}, using Standard_D4s_v5")
-            vm_size = "Standard_D4s_v5"
+    if not vm_size:
+      print(f"[WARNING] No VM size specified for {vm_name}, using Standard_D4s_v5")
+      vm_size = "Standard_D4s_v5"
 
-        if os_type.lower() == 'windows':
-            script_blob_name = self.config['script_blob_name_windows']
-            script_description = "Windows PowerShell setup script"
-        else:
-            script_blob_name = self.config['script_blob_name_linux']
-            script_description = "Linux shell setup script"
+    if os_type.lower() == 'windows':
+      script_blob_name = self.config['script_blob_name_windows']
+      script_description = "Windows PowerShell setup script"
+    else:
+      script_blob_name = self.config['script_blob_name_linux']
+      script_description = "Linux shell setup script"
+
+    # Enable script extension by default (can be customized per row if needed)
+    script_enabled = True
 
     # Generate SAS URL automatically if scripts enabled
     sas_url = None
@@ -495,15 +498,15 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
     else:
       print(f"[WARN] No SAS URL generated for {vm_name}, skipping script extension.")
 
-        # Resource group reference expression for Terraform
-        if create_rg:
-            rg_identifier = self._sanitize_resource_name(resource_group) + "_rg"
-            rg_reference = f'azurerm_resource_group.{rg_identifier}.name'
-        else:
-            rg_reference = f'"{resource_group}"'
+    # Resource group reference expression for Terraform
+    if create_rg:
+      rg_identifier = self._sanitize_resource_name(resource_group) + "_rg"
+      rg_reference = f'azurerm_resource_group.{rg_identifier}.name'
+    else:
+      rg_reference = f'"{resource_group}"'
 
-        # Subnet data source
-        tf_file.write(f'''
+    # Subnet data source
+    tf_file.write(f'''
 # ==== {vm_name} Resources ====
 
 data "azurerm_subnet" "{vm_name}_subnet" {{
@@ -523,10 +526,10 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
   resource_group_name = {rg_reference}
 
   ip_configuration {{
-    name                          = "internal"
-    subnet_id                     = data.azurerm_subnet.{vm_name}_subnet.id
-    private_ip_address_allocation = "Static"
-    private_ip_address            = "{static_ip}"
+  name                          = "internal"
+  subnet_id                     = data.azurerm_subnet.{vm_name}_subnet.id
+  private_ip_address_allocation = "Static"
+  private_ip_address            = "{static_ip}"
   }}
 
   tags = {{
@@ -535,15 +538,15 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 }}
 ''')
 
-        # Generate VM resource based on OS type
-        if os_type == "linux":
-            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
-        else:
-            self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
+    # Generate VM resource based on OS type
+    if os_type == "linux":
+      self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
+    else:
+      self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, sas_url, os_image, rg_reference, script_blob_name, script_enabled)
 
-        # Additional disks and shutdown
-        self._generate_data_disks(tf_file, vm_name, row, os_type, rg_reference)
-        self._generate_auto_shutdown(tf_file, vm_name, tags_str, os_type)
+    # Additional disks and shutdown
+    self._generate_data_disks(tf_file, vm_name, row, os_type, rg_reference)
+    self._generate_auto_shutdown(tf_file, vm_name, tags_str, os_type)
 
     def _generate_linux_vm(self, tf_file, vm_name: str, vm_size: str, tags_str: str, sas_url: str, os_image: Dict, rg_reference: str, script_blob_name: str, script_enabled: bool = True):
         """Generate Linux VM resources"""
