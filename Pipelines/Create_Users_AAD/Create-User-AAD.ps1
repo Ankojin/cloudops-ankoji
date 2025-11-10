@@ -922,7 +922,7 @@ try {
             Write-Log "Loading ABIC groups from ABIC-Groups.csv..." "INFO"
             $abicGroups = Import-Csv -Path $GroupsCsvFilePath -ErrorAction Stop
             Write-Log "✓ Loaded $($abicGroups.Count) ABIC groups from CSV" "SUCCESS"
-            Write-Log "" "INFO"
+            Write-Log "No additional details after loading ABIC groups." "INFO"
             
             # Validate CSV columns for users (ABIC-Existing-Users.csv)
             Write-Log "Validating ABIC-Existing-Users.csv structure..." "INFO"
