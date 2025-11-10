@@ -18,77 +18,77 @@ import hmac, hashlib, base64
 
 
 class TerraformVMGenerator:
-    def __init__(self):
-        """Initialize generator with environment variables"""
-        self.environment = os.getenv('ENVIRONMENT', 'DEV')
-        self.project_name = os.getenv('PROJECT_NAME', 'BaaS-Platform')
+  def __init__(self):
+    """Initialize generator with environment variables"""
+    self.environment = os.getenv('ENVIRONMENT', 'DEV')
+    self.project_name = os.getenv('PROJECT_NAME', 'BaaS-Platform')
 
-        # Environment configuration
-        self.config = {
-            'subscription_id': os.getenv('SUBSCRIPTION_ID'),
-            'location': os.getenv('LOCATION', 'swedencentral'),
-            'vnet_name': os.getenv('VNET_NAME'),
-            'vnet_rg': os.getenv('VNET_RG'),
-            'subnet_rg': os.getenv('SUBNET_RG'),
-            'keyvault_name': os.getenv('KEYVAULT_NAME'),
-            'keyvault_rg': os.getenv('KEYVAULT_RG'),
-            'dcr_name': os.getenv('DCR_NAME'),
-            'dcr_rg': os.getenv('DCR_RG'),
-            'diagnostics_storage': os.getenv('DIAGNOSTICS_STORAGE'),
-            'diagnostics_storage_rg': os.getenv('DIAGNOSTICS_STORAGE_RG'),
-            'script_storage_account': os.getenv('SCRIPT_STORAGE_ACCOUNT'),
-            'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
-            'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
-            'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
-            'script_storage_key': os.getenv('SCRIPT_STORAGE_KEY'),
-            'enable_custom_script': True,  # Always enabled, hardcoded
-            'shutdown_enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
-            'shutdown_time': os.getenv('shutdown_time', '2000'),
-            'shutdown_timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
-        }
+    # Environment configuration
+    self.config = {
+      'subscription_id': os.getenv('SUBSCRIPTION_ID'),
+      'location': os.getenv('LOCATION', 'swedencentral'),
+      'vnet_name': os.getenv('VNET_NAME'),
+      'vnet_rg': os.getenv('VNET_RG'),
+      'subnet_rg': os.getenv('SUBNET_RG'),
+      'keyvault_name': os.getenv('KEYVAULT_NAME'),
+      'keyvault_rg': os.getenv('KEYVAULT_RG'),
+      'dcr_name': os.getenv('DCR_NAME'),
+      'dcr_rg': os.getenv('DCR_RG'),
+      'diagnostics_storage': os.getenv('DIAGNOSTICS_STORAGE'),
+      'diagnostics_storage_rg': os.getenv('DIAGNOSTICS_STORAGE_RG'),
+      'script_storage_account': os.getenv('SCRIPT_STORAGE_ACCOUNT'),
+      'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
+      'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
+      'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
+      'script_storage_key': os.getenv('SCRIPT_STORAGE_KEY'),
+      'enable_custom_script': True,  # Always enabled, hardcoded
+      'shutdown_enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
+      'shutdown_time': os.getenv('shutdown_time', '2000'),
+      'shutdown_timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
+    }
 
-        # OS Templates
-        self.os_templates = {
-            "windows-2019": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2019-Datacenter", "version": "latest"},
-            "windows-2022": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2022-Datacenter", "version": "latest"},
-            "ubuntu-22.04": {"os_type": "linux", "publisher": "Canonical", "offer": "0001-com-ubuntu-server-jammy", "sku": "22_04-lts-gen2", "version": "latest"},
-            "rhel-8": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "8-LVM", "version": "latest"},
-            "rhel-9": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "9_4", "version": "latest"}
-        }
+    # OS Templates
+    self.os_templates = {
+      "windows-2019": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2019-Datacenter", "version": "latest"},
+      "windows-2022": {"os_type": "windows", "publisher": "MicrosoftWindowsServer", "offer": "WindowsServer", "sku": "2022-Datacenter", "version": "latest"},
+      "ubuntu-22.04": {"os_type": "linux", "publisher": "Canonical", "offer": "0001-com-ubuntu-server-jammy", "sku": "22_04-lts-gen2", "version": "latest"},
+      "rhel-8": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "8-LVM", "version": "latest"},
+      "rhel-9": {"os_type": "linux", "publisher": "RedHat", "offer": "RHEL", "sku": "9_4", "version": "latest"}
+    }
 
-        # Disk standards
-        self.storage_standards = {
-            'os_disk_type': 'StandardSSD_LRS',
-            'data_disk_type': 'StandardSSD_LRS',
-            'disk_caching': 'ReadWrite',
-            'data_disk_caching': 'None'
-        }
+    # Disk standards
+    self.storage_standards = {
+      'os_disk_type': 'StandardSSD_LRS',
+      'data_disk_type': 'StandardSSD_LRS',
+      'disk_caching': 'ReadWrite',
+      'data_disk_caching': 'None'
+    }
 
-        # Auto shutdown
-        self.shutdown_config = {
-            'enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
-            'time': os.getenv('shutdown_time', '2000'),
-            'timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
-        }
+    # Auto shutdown
+    self.shutdown_config = {
+      'enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
+      'time': os.getenv('shutdown_time', '2000'),
+      'timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
+    }
 
-        # Paths
-        self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
-        self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
-        self.resource_groups_to_create = set()
+    # Paths
+    self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
+    self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
+    self.resource_groups_to_create = set()
 
-        self.validate_config()
+    self.validate_config()
 
-    # --------------------------
-    # Validation
-    # --------------------------
-    def validate_config(self):
-        required = ['subscription_id', 'vnet_name', 'keyvault_name', 'dcr_name']
-        missing = [x for x in required if not self.config.get(x)]
-        if missing:
-            print(f"[ERROR] Missing required environment variables: {', '.join(missing)}")
-            sys.exit(1)
-        print(f"[OK] Configuration validated for {self.environment}")
-        print("[INFO] Custom Script Extensions: ENABLED for Windows & Linux (hardcoded)")
+  # --------------------------
+  # Validation
+  # --------------------------
+  def validate_config(self):
+    required = ['subscription_id', 'vnet_name', 'keyvault_name', 'dcr_name']
+    missing = [x for x in required if not self.config.get(x)]
+    if missing:
+      print(f"[ERROR] Missing required environment variables: {', '.join(missing)}")
+      sys.exit(1)
+    print(f"[OK] Configuration validated for {self.environment}")
+    print("[INFO] Custom Script Extensions: ENABLED for Windows & Linux (hardcoded)")
 
     # --------------------------
     # Tags
@@ -144,30 +144,40 @@ class TerraformVMGenerator:
     # --------------------------
     # Main Generator
     # --------------------------
-    def generate_terraform(self):
-        os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
-        vm_outputs = []
+  def generate_terraform(self):
+    os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
+    vm_outputs = []
 
-        with open(self.output_tf_file, "w") as tf_file:
-            self._write_provider_block(tf_file)
-            self._collect_resource_groups()
-            self._generate_resource_groups(tf_file)
+    with open(self.output_tf_file, "w") as tf_file:
+      self._write_provider_block(tf_file)
+      self._collect_resource_groups()
+      self._generate_resource_groups(tf_file)
 
-            try:
-                with open(self.csv_file_path, newline='') as csvfile:
-                    reader = csv.DictReader(csvfile)
-                    for row in reader:
-                        if not row.get("vm_name", "").strip():
-                            continue
-                        vm_name = row["vm_name"].strip()
-                        vm_outputs.append(vm_name)
-                        self._generate_vm_resources(tf_file, row)
-            except FileNotFoundError:
-                print(f"[ERROR] CSV file not found: {self.csv_file_path}")
-                sys.exit(1)
+      try:
+        with open(self.csv_file_path, newline='') as csvfile:
+          reader = csv.DictReader(csvfile)
+          for row in reader:
+            if not row.get("vm_name", "").strip():
+              continue
+            vm_name = row["vm_name"].strip()
+            vm_outputs.append(vm_name)
+            self._generate_vm_resources(tf_file, row)
+      except FileNotFoundError:
+        print(f"[ERROR] CSV file not found: {self.csv_file_path}")
+        sys.exit(1)
 
-            self._generate_outputs(tf_file, vm_outputs)
-        print(f"[OK] Terraform configuration generated: {self.output_tf_file}")
+      self._generate_outputs(tf_file, vm_outputs)
+
+    # Verification: main.tf exists and contains SAS token
+    if not os.path.exists(self.output_tf_file):
+      print(f"[ERROR] Terraform file not generated: {self.output_tf_file}")
+      sys.exit(2)
+    with open(self.output_tf_file, "r") as tf_file:
+      content = tf_file.read()
+      if "blob.core.windows.net" not in content or "sv=" not in content:
+        print(f"[ERROR] SAS token not found in generated Terraform file: {self.output_tf_file}")
+        sys.exit(3)
+    print(f"[OK] Terraform configuration generated: {self.output_tf_file} (SAS token verified)")
 
     def _write_provider_block(self, tf_file):
         tf_file.write(f'''
