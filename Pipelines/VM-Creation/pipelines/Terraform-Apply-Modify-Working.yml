@@ -158,6 +158,8 @@ steps:
       Set-ValidatedEnvVar "SCRIPT_STORAGE_ACCOUNT" "$(script_storage_account)" $true
       Set-ValidatedEnvVar "SCRIPT_STORAGE_CONTAINER" "$(script_storage_container)" $true
       Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_LINUX" "$(script_blob_name_linux)" $true
+      Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_WINDOWS" "$(script_blob_name_windows)" $true
+      Set-ValidatedEnvVar "SCRIPT_STORAGE_KEY" "$(script_storage_key)" $true
       
       # Optional auto shutdown configuration
       Set-ValidatedEnvVar "shutdown_enabled" "$(shutdown_enabled)" $false

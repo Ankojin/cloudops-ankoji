@@ -1,6 +1,6 @@
 [
   {
-    "SubscriptionId": "d88f0b5b-6660-4607-8c6a-395820400912",
+    "SubscriptionId": "D88F0B5B-6660-4607-8C6A-395820400912",
     "PolicyType": "Standalone",
     "PolicyName": "bab-core-default-waf-policy",
     "ResourceGroupName": "bab-core-appgw-weeu-rg-01",
@@ -12,14 +12,14 @@
     "MaxRequestBodySizeInKb": 2000,
     "FileUploadLimitInMb": 100,
     "ManagedRuleSetType": "OWASP_3.2; Microsoft_BotManagerRuleSet_1.1",
-    "CustomRulesCount": 4,
+    "CustomRulesCount": 5,
     "ExclusionCount": 0,
     "ResourceId": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-appgw-weeu-rg-01/providers/Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies/bab-core-default-waf-policy",
     "Tags": "",
-    "ExportTimestamp": "2025-11-05 12:10:36"
+    "ExportTimestamp": "2025-11-10 17:26:04"
   },
   {
-    "SubscriptionId": "d88f0b5b-6660-4607-8c6a-395820400912",
+    "SubscriptionId": "D88F0B5B-6660-4607-8C6A-395820400912",
     "PolicyType": "ApplicationGateway",
     "PolicyName": "bab-core-default-waf-policy",
     "ResourceGroupName": "bab-core-appgw-weeu-rg-01",
@@ -37,6 +37,6 @@
     "FirewallPolicyId": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-appgw-weeu-rg-01/providers/Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies/bab-core-default-waf-policy",
     "ResourceId": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-appgw-weeu-rg-01/providers/Microsoft.Network/applicationGateways/bab-core-shared-appgw-weeu-01",
     "Tags": "",
-    "ExportTimestamp": "2025-11-05 12:10:37"
+    "ExportTimestamp": "2025-11-10 17:26:04"
   }
 ]

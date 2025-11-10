@@ -42,7 +42,7 @@
               "Selector": "Host"
             }
           ],
-          "OperatorProperty": "Contains",
+          "OperatorProperty": "Equal",
           "NegationConditon": false,
           "MatchValues": [
             "rmbdev.albtests.com",
@@ -102,7 +102,7 @@
               "Selector": "Host"
             }
           ],
-          "OperatorProperty": "Contains",
+          "OperatorProperty": "Equal",
           "NegationConditon": true,
           "MatchValues": [
             "bab-uat-ai.albtests.com"
@@ -129,7 +129,7 @@
             }
           ],
           "OperatorProperty": "GeoMatch",
-          "NegationConditon": false,
+          "NegationConditon": true,
           "MatchValues": [
             "SA"
           ],
@@ -142,8 +142,8 @@
               "Selector": "Host"
             }
           ],
-          "OperatorProperty": "Contains",
-          "NegationConditon": true,
+          "OperatorProperty": "Equal",
+          "NegationConditon": false,
           "MatchValues": [
             "hrmobile.albtests.com"
           ],
@@ -202,7 +202,7 @@
               "Selector": "Host"
             }
           ],
-          "OperatorProperty": "Contains",
+          "OperatorProperty": "Equal",
           "NegationConditon": true,
           "MatchValues": [
             "babot.albtests.com"
@@ -212,6 +212,48 @@
       ],
       "GroupByUserSession": [],
       "Action": "Block",
+      "State": "Enabled"
+    },
+    {
+      "Name": "AllowBaaSIPs",
+      "Priority": 50,
+      "RateLimitDuration": null,
+      "RateLimitThreshold": 0,
+      "RuleType": "MatchRule",
+      "MatchConditions": [
+        {
+          "MatchVariables": [
+            {
+              "VariableName": "RemoteAddr",
+              "Selector": null
+            }
+          ],
+          "OperatorProperty": "IPMatch",
+          "NegationConditon": false,
+          "MatchValues": [
+            "66.9.139.229",
+            "172.160.248.155",
+            "74.241.251.79"
+          ],
+          "Transforms": []
+        },
+        {
+          "MatchVariables": [
+            {
+              "VariableName": "RequestHeaders",
+              "Selector": "Host"
+            }
+          ],
+          "OperatorProperty": "Equal",
+          "NegationConditon": false,
+          "MatchValues": [
+            "baas-api@albtests.com"
+          ],
+          "Transforms": []
+        }
+      ],
+      "GroupByUserSession": [],
+      "Action": "Allow",
       "State": "Enabled"
     }
   ],
@@ -1494,6 +1536,6 @@
   },
   "TagsTable": "\r\nName     Value\r\n=======  =====\r\nCompany  BAB  \r\n",
   "Name": "bab-core-default-waf-policy",
-  "Etag": "W/\"8cc426de-3227-4428-befd-3e4fee929900\"",
+  "Etag": "W/\"2993f069-4ba2-4bc4-b99c-71623041931c\"",
   "Id": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-appgw-weeu-rg-01/providers/Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies/bab-core-default-waf-policy"
 }

@@ -1,5 +1,5 @@
 WAF Policy Export Summary Report
-Generated: 2025-11-05 12:10:37
+Generated: 2025-11-10 17:26:05
 
 Subscriptions processed: 1
 Subscriptions with errors: 0
@@ -12,4 +12,4 @@ Output files created:
 - WAF-Policies-Summary.json (if JSON export enabled)
 - Individual policy JSON files (if JSON export enabled)
 
-Log file: .\waf-export-20251105-121033.log
+Log file: .\waf-export-20251110-172602.log
