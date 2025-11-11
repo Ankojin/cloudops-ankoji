@@ -101,7 +101,28 @@ class TerraformVMGenerator:
             raise ValueError("Missing default_tags_json environment variable")
         tags = json.loads(json_tags)
         tags['CreatedBy'] = 'Terraform'
-        tags['CreationDate'] = datetime.now().strftime('%Y-%m-%d')
+
+        # Try to preserve original CreationDate from output file
+        creation_date = None
+        if os.path.exists(self.output_tf_file):
+            try:
+                with open(self.output_tf_file, 'r') as f:
+                    for line in f:
+                        if '"CreationDate"' in line:
+                            # Extract date string between quotes after =
+                            parts = line.split('=')
+                            if len(parts) == 2:
+                                date_str = parts[1].strip().strip('"')
+                                # Remove trailing comma if present
+                                date_str = date_str.rstrip(',')
+                                creation_date = date_str
+                                break
+            except Exception:
+                pass
+        if creation_date:
+            tags['CreationDate'] = creation_date
+        else:
+            tags['CreationDate'] = datetime.now().strftime('%Y-%m-%d')
         tags['Environment'] = self.environment
         tags['Project'] = self.project_name
         return tags
@@ -278,6 +299,11 @@ resource "azurerm_resource_group" "{rg.replace('-', '_')}_rg" {{
         create_rg = row.get("create_rg", "false").lower() == "true"
 
         depends_on_str = ""
+        # Data disk logic: import from CSV
+        data_disk_count = int(row.get("data_disk_count", "0").strip() or "0")
+        data_disk_size = row.get("data_disk_size", "128").strip()  # Default 128 GB
+        data_disk_type = row.get("data_disk_type", self.storage_standards['data_disk_type']).strip()
+        data_disk_caching = row.get("data_disk_caching", self.storage_standards['data_disk_caching']).strip()
         if create_rg:
             depends_on_str = f'  depends_on = [azurerm_resource_group.{rg.replace("-", "_")}_rg]\n'
             rg_ref = f'azurerm_resource_group.{rg.replace("-", "_")}_rg.name'
@@ -313,16 +339,55 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 ''')
 
         if os_type == "linux":
-            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, os_config, rg_ref)
+            # Enhanced Data disk logic: import disk_1_size, disk_2_size, ... from CSV
+            max_disks = 12
+            data_disks = []
+            for i in range(1, max_disks + 1):
+                size_key = f"disk_{i}_size"
+                size_val = row.get(size_key)
+                if size_val and size_val.strip():
+                    data_disks.append({
+                        "name": f"{vm_name}_datadisk{i}",
+                        "size": size_val.strip(),
+                        "lun": i - 1
+                    })
+            # Create managed disks
+            for disk in data_disks:
+                tf_file.write(f'''
+resource "azurerm_managed_disk" "{disk['name']}" {{
+  name                = "{disk['name']}"
+  location            = var.location
+  resource_group_name = {rg_ref}
+  storage_account_type = "{self.storage_standards['data_disk_type']}"
+  create_option       = "Empty"
+  disk_size_gb        = {disk['size']}
+  tags = {{
+    {tags_str}
+  }}
+}}
+''')
+            # Prepare data disk attachments
+            data_disk_blocks = ""
+            for disk in data_disks:
+                data_disk_blocks += f'''  storage_data_disk {{
+    name              = azurerm_managed_disk.{disk['name']}.name
+    lun               = {disk['lun']}
+    caching           = "{self.storage_standards['data_disk_caching']}"
+    managed_disk_id   = azurerm_managed_disk.{disk['name']}.id
+    disk_size_gb      = {disk['size']}
+    storage_account_type = "{self.storage_standards['data_disk_type']}"
+  }}
+'''
+            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, os_config, rg_ref, data_disks, data_disk_blocks)
         else:
-            self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, os_config, rg_ref)
+            self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, os_config, rg_ref, data_disks)
 
         self._generate_dcr_and_shutdown(tf_file, vm_name, os_type, tags_str)
 
     # --------------------------
     # Linux VM
     # --------------------------
-    def _generate_linux_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
+    def _generate_linux_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref, data_disks, data_disk_blocks):
         script_enabled = self.config['enable_custom_script']
         script_sas_url = None
 
@@ -337,10 +402,6 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
         tf_file.write(f'''
 resource "azurerm_linux_virtual_machine" "{vm_name}" {{
   name                = "{vm_name}"
-  resource_group_name = {rg_ref}
-  location            = var.location
-  size                = "{vm_size}"
-  network_interface_ids = [azurerm_network_interface.{vm_name}_nic.id]
   admin_username      = "azureadmin"
   admin_password      = data.azurerm_key_vault_secret.{vm_name}_admin_password.value
   disable_password_authentication = false
@@ -357,6 +418,7 @@ resource "azurerm_linux_virtual_machine" "{vm_name}" {{
     version   = "{os_image['version']}"
   }}
 
+{data_disk_blocks}
   boot_diagnostics {{
     storage_account_uri = "https://{self.config['diagnostics_storage']}.blob.core.windows.net/"
   }}
@@ -395,7 +457,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
     # --------------------------
     # Windows VM
     # --------------------------
-    def _generate_windows_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref):
+    def _generate_windows_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref, data_disks):
         script_enabled = self.config['enable_custom_script']
         script_sas_url = None
 
@@ -406,6 +468,19 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
                 self.config['script_blob_name_windows'],
                 self.config['script_storage_key']
             )
+
+        # Prepare data disk attachments
+        data_disk_blocks = ""
+        for disk in data_disks:
+            data_disk_blocks += f'''  storage_data_disk {{
+    name              = azurerm_managed_disk.{disk['name']}.name
+    lun               = {disk['lun']}
+    caching           = "{self.storage_standards['data_disk_caching']}"
+    managed_disk_id   = azurerm_managed_disk.{disk['name']}.id
+    disk_size_gb      = {disk['size']}
+    storage_account_type = "{self.storage_standards['data_disk_type']}"
+  }}
+'''
 
         tf_file.write(f'''
 resource "azurerm_windows_virtual_machine" "{vm_name}" {{
@@ -430,6 +505,7 @@ resource "azurerm_windows_virtual_machine" "{vm_name}" {{
     version   = "{os_image['version']}"
   }}
 
+{data_disk_blocks}
   boot_diagnostics {{
     storage_account_uri = "https://{self.config['diagnostics_storage']}.blob.core.windows.net/"
   }}
@@ -525,4 +601,4 @@ def main():
 
 
 if __name__ == "__main__":
-  main()
+    main()
