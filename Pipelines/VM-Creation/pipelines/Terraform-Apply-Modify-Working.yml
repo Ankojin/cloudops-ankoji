@@ -6,19 +6,30 @@ pool:
 
 parameters:
   - name: action
+    displayName: "Action to Perform"
     type: string
     default: apply
-    values: [apply, modify]
+    values:
+      - apply
+      - modify
+
   - name: environment
+    displayName: "Target Environment"
     type: string
     default: DEV
-    values: [DEV, SIT]
+    values:
+      - DEV
+      - SIT
+
   - name: project
+    displayName: "Project Name"
     type: string
     default: pilot-test
+
   - name: tags_json_override
+    displayName: "Tags (JSON Format)"
     type: string
-    default: '{"Company":"BAB","Department":"IT"}'
+    default: '{"Company":"BAB","Department":"Information Technology","ProjectName":"pilot-test","ApplicationName":"pilot-test","Region":"Sweden Central","ApproverName":"pilot-test","RequesterName":"CloudOps Team","BusinessOwner":"pilot-test","TechnicalOwner":"pilot-test","CostCenter":"pilot-test","ServiceClass":"pilot-test","ManagedBy":"CloudOps Team"}'
 
 variables:
   - name: tfWorkingDirectory
@@ -26,16 +37,16 @@ variables:
   - name: tfStateDirectory
     value: "C:/TerraformState/Project"
   - group: TerraformVariables
-  - ${{ if eq(parameters.environment,'DEV') }}:
+  - ${{ if eq(parameters.environment, 'DEV') }}:
     - group: VM-Creation-DEV
-  - ${{ if eq(parameters.environment,'SIT') }}:
+  - ${{ if eq(parameters.environment, 'SIT') }}:
     - group: VM-Creation-SIT
   - name: pythonVersion
     value: "3.9"
 
 stages:
 # =========================
-#  Stage 1: PLAN
+#  STAGE 1: TERRAFORM PLAN
 # =========================
 - stage: TerraformPlan
   displayName: "Terraform Plan Stage"
@@ -45,12 +56,15 @@ stages:
     pool:
       name: cloudops-agent
     steps:
+
+    # Step 1: Setup Python
     - task: UsePythonVersion@0
       inputs:
         versionSpec: '$(pythonVersion)'
         architecture: 'x64'
-      displayName: "Setup Python"
+      displayName: "Setup Python $(pythonVersion)"
 
+    # Step 2: Set Environment Variables
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -60,8 +74,9 @@ stages:
           $env:TF_STATE_PATH="$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
           New-Item -Path $env:TF_STATE_PATH -ItemType Directory -Force | Out-Null
           Write-Host "📁 Ensured TF State Directory: $($env:TF_STATE_PATH)"
-      displayName: "Set Env Vars"
+      displayName: "Set Environment Variables"
 
+    # Step 3: Azure Login
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -71,6 +86,7 @@ stages:
           Write-Host "✅ Azure login successful."
       displayName: "Azure Login"
 
+    # Step 4: Python Script Execution + Immediate TF Copy
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -78,7 +94,8 @@ stages:
           Set-Location "$(tfWorkingDirectory)"
           Write-Host "🐍 Running Terraform Generator..."
           python "$(tfWorkingDirectory)/core/generate-tf-v2.5.py"
-          if ($LASTEXITCODE -ne 0) { throw "Python failed" }
+          if ($LASTEXITCODE -ne 0) { throw "Python script failed" }
+
           $tfFile="$(tfWorkingDirectory)/Project/${{ parameters.project }}/main-${{ parameters.environment }}.tf".ToLower()
           $dst="C:/TerraformState/Project/${{ parameters.project }}/${{ parameters.environment }}"
           $ts=(Get-Date -Format 'yyyy-MM-dd-HHmm')
@@ -86,10 +103,11 @@ stages:
           if (Test-Path $tfFile) {
               Copy-Item $tfFile "$dst/main-${{ parameters.environment }}-$ts.tf" -Force
               Copy-Item $tfFile "$dst/main-${{ parameters.environment }}.tf" -Force
-              Write-Host "📦 Copied TF to $dst"
+              Write-Host "📦 Copied TF file to $dst (timestamp + latest)"
           }
-      displayName: "Generate TF + Copy Immediately"
+      displayName: "Run Python + Copy TF to State Path"
 
+    # Step 5: Validate and Plan Terraform
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -100,60 +118,70 @@ stages:
           terraform fmt
           terraform plan -out=tfplan
           terraform show tfplan > tfplan.txt
-          Write-Host "✅ Plan complete."
-      displayName: "Validate & Plan"
+          Write-Host "✅ Terraform Plan complete."
+      displayName: "Validate & Plan Terraform"
 
+    # Step 6: Publish Plan Artifact
     - task: PublishBuildArtifacts@1
       inputs:
         PathtoPublish: '$(tfWorkingDirectory)/Project/${{ parameters.project }}/tfplan.txt'
         ArtifactName: 'TerraformPlan-${{ parameters.environment }}'
-      displayName: "Publish Plan Artifact"
+      displayName: "Publish Terraform Plan Artifact"
 
 # =========================
-#  Stage 2: APPLY
+#  STAGE 2: TERRAFORM APPLY
 # =========================
 - stage: TerraformApply
   displayName: "Terraform Apply Stage (Requires Approval)"
   dependsOn: TerraformPlan
   condition: succeeded()
-  environment:
-    name: 'vm-deploy'      # <-- must exist in DevOps Environments with approvers
+
   jobs:
-  - job: ApplyJob
+  - deployment: ApplyJob                 # Deployment job supports environment approvals
     displayName: "Run Terraform Apply After Approval"
+    environment: 'vm-deploy'             # <-- must exist in DevOps Environments with approvers
     pool:
       name: cloudops-agent
-    steps:
-    - checkout: self
-    - task: PowerShell@2
-      inputs:
-        targetType: 'inline'
-        script: |
-          Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
-          terraform apply -auto-approve tfplan
-          $dst="$(TF_STATE_PATH)"
-          $ts=(Get-Date -Format 'yyyy-MM-dd-HHmm')
-          New-Item -Path $dst -ItemType Directory -Force | Out-Null
-          $tf="main-${{ parameters.environment }}.tf".ToLower()
-          if (Test-Path $tf) {
-              Copy-Item $tf "$dst/main-${{ parameters.environment }}-$ts.tf" -Force
-              Copy-Item $tf "$dst/" -Force
-          }
-          if (Test-Path "terraform.tfstate"){Copy-Item "terraform.tfstate" "$dst/" -Force}
-          if (Test-Path ".terraform.lock.hcl"){Copy-Item ".terraform.lock.hcl" "$dst/" -Force}
-          Write-Host "🎉 Apply completed successfully!"
-      displayName: "Terraform Apply"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
 
-    - task: PowerShell@2
-      inputs:
-        targetType: 'inline'
-        script: |
-          Write-Host "🔍 Verifying Custom Script Extensions..."
-          $vms=az vm list --query "[].{Name:name,RG:resourceGroup}" -o json|ConvertFrom-Json
-          foreach($v in $vms){
-            $ext=az vm extension list -g $v.RG --vm-name $v.Name -o json|ConvertFrom-Json
-            $csx=$ext|?{$_.publisher -like "*Microsoft.Compute*" -and $_.type -like "*CustomScript*"}
-            if($csx){Write-Host "✅ $($v.Name): $($csx.settings.fileUris[0])"}
-            else{Write-Warning "⚠️ No Custom Script for $($v.Name)"}
-          }
-      displayName: "Post-Deployment Verification"
+          # Step 1: Terraform Apply
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
+                terraform apply -auto-approve tfplan
+
+                $dst="$(TF_STATE_PATH)"
+                $ts=(Get-Date -Format 'yyyy-MM-dd-HHmm')
+                New-Item -Path $dst -ItemType Directory -Force | Out-Null
+
+                $tf="main-${{ parameters.environment }}.tf".ToLower()
+                if (Test-Path $tf) {
+                    Copy-Item $tf "$dst/main-${{ parameters.environment }}-$ts.tf" -Force
+                    Copy-Item $tf "$dst/" -Force
+                }
+                if (Test-Path "terraform.tfstate"){Copy-Item "terraform.tfstate" "$dst/" -Force}
+                if (Test-Path ".terraform.lock.hcl"){Copy-Item ".terraform.lock.hcl" "$dst/" -Force}
+                Write-Host "🎉 Terraform Apply completed successfully!"
+            displayName: "Terraform Apply"
+
+          # Step 2: Post-Deployment Validation
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "🔍 Checking Custom Script Extensions..."
+                $vms=az vm list --query "[].{Name:name,RG:resourceGroup}" -o json|ConvertFrom-Json
+                foreach($v in $vms){
+                  $ext=az vm extension list -g $v.RG --vm-name $v.Name -o json|ConvertFrom-Json
+                  $csx=$ext|?{$_.publisher -like "*Microsoft.Compute*" -and $_.type -like "*CustomScript*"}
+                  if($csx){Write-Host "✅ $($v.Name): $($csx.settings.fileUris[0])"}
+                  else{Write-Warning "⚠️ No Custom Script Extension found for $($v.Name)"}
+                }
+                Write-Host "✅ Post-deployment validation done."
+            displayName: "Post-Deployment Verification"
