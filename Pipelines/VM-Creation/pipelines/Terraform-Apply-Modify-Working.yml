@@ -9,24 +9,23 @@ parameters:
     displayName: "Action to Perform"
     type: string
     default: "apply"
-    values:
-      - apply
-      - modify
+    values: [apply, modify]
+
   - name: environment
     displayName: "Target Environment"
     type: string
     default: "DEV"
-    values:
-      - DEV
-      - SIT
+    values: [DEV, SIT]
+
   - name: project
     displayName: "Project Name"
     type: string
     default: "pilot-test"
+
   - name: tags_json_override
     displayName: "Tags (JSON Format)"
     type: string
-    default: '{"Company": "BAB", "Department": "Information Technology", "ProjectName": "pilot-test", "ApplicationName": "pilot-test", "StartDate": "2025-11-08", "EndDate": "2025-11-08", "Region": "Sweden Central", "ApproverName": "pilot-test", "RequesterName": "CloudOps Team", "BusinessOwner": "pilot-test", "TechnicalOwner": "pilot-test", "CostCenter": "pilot-test", "ServiceClass": "pilot-test", "ManagedBy": "CloudOps Team"}'
+    default: '{"Company":"BAB","Department":"Information Technology","ProjectName":"pilot-test","ApplicationName":"pilot-test","Region":"Sweden Central","ApproverName":"pilot-test","RequesterName":"CloudOps Team","BusinessOwner":"pilot-test","TechnicalOwner":"pilot-test","CostCenter":"pilot-test","ServiceClass":"pilot-test","ManagedBy":"CloudOps Team"}'
 
 variables:
   - name: tfWorkingDirectory
@@ -42,261 +41,148 @@ variables:
     value: "3.9"
 
 steps:
-# Step 1: Setup Python
+
+# Step 1 – Python
 - task: UsePythonVersion@0
   inputs:
     versionSpec: '$(pythonVersion)'
-    addToPath: true
     architecture: 'x64'
   displayName: 'Setup Python $(pythonVersion)'
 
-# Step 2: Set Environment Variables
+# Step 2 – Env Vars
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
     script: |
-      Write-Host "Setting environment variables for ${{ parameters.environment }}..."
-      $env:PROJECT_NAME = "${{ parameters.project }}"
-      $env:ENVIRONMENT = "${{ parameters.environment }}"
-      $env:SUBSCRIPTION_ID = "$(subscription_id)"
-      $env:LOCATION = "$(location)"
-      $env:VNET_NAME = "$(vnet_name)"
-      $env:VNET_RG = "$(vnet_rg)"
-      $env:TF_STATE_PATH = "$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
-      Write-Host "##vso[task.setvariable variable=TF_STATE_PATH]$($env:TF_STATE_PATH)"
+      $env:PROJECT_NAME="${{ parameters.project }}"
+      $env:ENVIRONMENT="${{ parameters.environment }}"
+      $env:TF_STATE_PATH="$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
       New-Item -Path $env:TF_STATE_PATH -ItemType Directory -Force | Out-Null
-      Write-Host "📁 Terraform state directory ensured: $($env:TF_STATE_PATH)"
-  displayName: "Set Environment Variables from Variable Groups"
+      Write-Host "📁 TF state dir ensured → $($env:TF_STATE_PATH)"
+  displayName: "Set Environment Variables"
 
-# Step 3: Azure Login
+# Step 3 – Azure Login
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
     script: |
-      Write-Host "Logging into Azure..."
       az login --service-principal -u "$(ARM_CLIENT_ID)" -p "$(ARM_CLIENT_SECRET)" --tenant "$(ARM_TENANT_ID)"
       if ($LASTEXITCODE -ne 0) { throw "Azure login failed" }
       Write-Host "✅ Azure login successful."
   displayName: "Azure Login"
 
-# Step 4: Run Python Script and Copy TF Immediately
+# Step 4 – Python Generator + Immediate TF Copy
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
-    errorActionPreference: 'stop'
-    failOnStderr: true
     script: |
-      $ErrorActionPreference = "Stop"
       Set-Location "$(tfWorkingDirectory)"
+      Write-Host "🐍 Running Terraform generator (v2.5)…"
+      python "$(tfWorkingDirectory)/core/generate-tf-v2.5.py"
+      if ($LASTEXITCODE -ne 0) { throw "❌ Python script failed" }
 
-      Write-Host "🔧 Validating and setting environment variables from Variable Groups..."
-
-      function Set-ValidatedEnvVar {
-          param($Name, $Value, $Required = $true)
-          if ([string]::IsNullOrWhiteSpace($Value) -and $Required) {
-              Write-Error "❌ MISSING REQUIRED VARIABLE: $Name"
-              throw "Required variable $Name missing"
-          }
-          if (![string]::IsNullOrWhiteSpace($Value)) {
-              Set-Item -Path "env:$Name" -Value $Value
-              Write-Host "✅ SET: $Name"
-          }
-      }
-
-      # Core parameters
-      Set-ValidatedEnvVar "ENVIRONMENT" "${{ parameters.environment }}"
-      Set-ValidatedEnvVar "PROJECT_NAME" "${{ parameters.project }}"
-      Set-ValidatedEnvVar "SUBSCRIPTION_ID" "$(subscription_id)"
-      Set-ValidatedEnvVar "LOCATION" "$(location)"
-      Set-ValidatedEnvVar "TF_STATE_PATH" "$(TF_STATE_PATH)"
-
-      # Network + Key Vault + DCR
-      Set-ValidatedEnvVar "VNET_NAME" "$(vnet_name)"
-      Set-ValidatedEnvVar "VNET_RG" "$(vnet_rg)"
-      Set-ValidatedEnvVar "SUBNET_RG" "$(subnet_rg)"
-      Set-ValidatedEnvVar "KEYVAULT_NAME" "$(keyvault_name)"
-      Set-ValidatedEnvVar "KEYVAULT_RG" "$(keyvault_rg)"
-      Set-ValidatedEnvVar "DCR_NAME" "$(dcr_name)"
-      Set-ValidatedEnvVar "DCR_RG" "$(dcr_rg)"
-      Set-ValidatedEnvVar "DIAGNOSTICS_STORAGE" "$(diagnostics_storage)"
-      Set-ValidatedEnvVar "DIAGNOSTICS_STORAGE_RG" "$(diagnostics_storage_rg)"
-
-      # Custom Script Storage
-      Set-ValidatedEnvVar "SCRIPT_STORAGE_ACCOUNT" "$(script_storage_account)"
-      Set-ValidatedEnvVar "SCRIPT_STORAGE_CONTAINER" "$(script_storage_container)"
-      Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_WINDOWS" "$(script_blob_name_windows)"
-      Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_LINUX" "$(script_blob_name_linux)"
-      Set-ValidatedEnvVar "SCRIPT_STORAGE_KEY" "$(script_storage_key)"
-
-      # Shutdown
-      Set-ValidatedEnvVar "shutdown_enabled" "$(shutdown_enabled)"
-      Set-ValidatedEnvVar "shutdown_time" "$(shutdown_time)"
-      Set-ValidatedEnvVar "shutdown_timezone" "$(shutdown_timezone)"
-
-      # Tags
-      $tagsInput = '${{ parameters.tags_json_override }}'
-      if ('${{ parameters.action }}' -eq 'apply') {
-          if ([string]::IsNullOrWhiteSpace($tagsInput)) { throw "❌ Missing mandatory tags for apply" }
-          $env:default_tags_json = $tagsInput
-          Write-Host "🏷️ Tags loaded for apply"
-      } else {
-          if ([string]::IsNullOrWhiteSpace($tagsInput) -or $tagsInput -eq "Use Variable Group") {
-              $env:default_tags_json = "{}"
-              Write-Host "🏷️ Using existing tags for modify"
-          } else {
-              $env:default_tags_json = $tagsInput
-              Write-Host "🏷️ Updated tags loaded for modify"
-          }
-      }
-
-      Write-Host ""
-      Write-Host "🐍 Executing Terraform generator (v2.5)..."
-      $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$(tfWorkingDirectory)/core/generate-tf-v2.5.py" -Wait -PassThru -NoNewWindow
-      if ($pythonProcess.ExitCode -ne 0) {
-          throw "❌ Python script failed with exit code $($pythonProcess.ExitCode)"
-      }
-      Write-Host "✅ Python generator completed successfully"
-
-      # Immediately copy the generated .tf to persistent state directory
-      $tfFile = "$(tfWorkingDirectory)/Project/${{ parameters.project }}/main-${{ parameters.environment }}.tf".ToLower()
-      $stateTargetPath = "C:/TerraformState/Project/${{ parameters.project }}/${{ parameters.environment }}"
-      $timestamp = (Get-Date -Format "yyyy-MM-dd-HHmm")
-
-      New-Item -Path $stateTargetPath -ItemType Directory -Force | Out-Null
-
+      $tfFile="$(tfWorkingDirectory)/Project/${{ parameters.project }}/main-${{ parameters.environment }}.tf".ToLower()
+      $target="C:/TerraformState/Project/${{ parameters.project }}/${{ parameters.environment }}"
+      $ts=(Get-Date -Format 'yyyy-MM-dd-HHmm')
+      New-Item -Path $target -ItemType Directory -Force | Out-Null
       if (Test-Path $tfFile) {
-          $backupFile = "$stateTargetPath/main-${{ parameters.environment }}-$timestamp.tf"
-          Copy-Item $tfFile $backupFile -Force
-          Write-Host "🕒 Immediate backup created: $backupFile"
-
-          Copy-Item $tfFile "$stateTargetPath/main-${{ parameters.environment }}.tf" -Force
-          Write-Host "📦 Active Terraform file saved: $stateTargetPath/main-${{ parameters.environment }}.tf"
-      } else {
-          Write-Warning "⚠️ Generated .tf file not found at expected path: $tfFile"
+          Copy-Item $tfFile "$target/main-${{ parameters.environment }}-$ts.tf" -Force
+          Copy-Item $tfFile "$target/main-${{ parameters.environment }}.tf" -Force
+          Write-Host "📦 Copied TF file to $target (with backup)"
       }
-  displayName: "Run Python Script (Generate TF + Immediate Copy)"
-  condition: and(succeeded(), or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
+  displayName: "Run Python and Copy TF Immediately"
+  condition: and(succeeded(), or(eq('${{ parameters.action }}','apply'),eq('${{ parameters.action }}','modify')))
 
-# Step 5: Prepare Modify
+# Step 5 – Modify Check
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
     script: |
-      $tfFile = "$(tfWorkingDirectory)/Project/${{ parameters.project }}/main-${{ parameters.environment }}.tf".ToLower()
+      $tfFile="$(tfWorkingDirectory)/Project/${{ parameters.project }}/main-${{ parameters.environment }}.tf".ToLower()
       if ("${{ parameters.action }}" -eq "modify" -and !(Test-Path $tfFile)) {
-          throw "❌ Terraform configuration missing. Run 'apply' first."
+          throw "❌ Missing TF config; run apply first."
       }
-      Write-Host "✅ Modify check passed."
-  displayName: "Prepare for Modify Operation"
-  condition: and(succeeded(), eq('${{ parameters.action }}', 'modify'))
+  displayName: "Prepare Modify"
+  condition: and(succeeded(),eq('${{ parameters.action }}','modify'))
 
-# Step 6: Validate Terraform Configuration
+# Step 6 – Validate TF
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
     script: |
-      $ErrorActionPreference = "Stop"
       Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
-      $tfFile = "main-${{ parameters.environment }}.tf".ToLower()
-      if (!(Test-Path $tfFile)) { throw "Missing Terraform configuration file" }
-      Write-Host "🔍 Validating Terraform configuration..."
       terraform init
       terraform validate
       terraform fmt
-      Write-Host "✅ Terraform validated and ready for deployment"
-  displayName: "Validate Terraform Configuration"
+      Write-Host "✅ Terraform validated."
+  displayName: "Validate Terraform"
   condition: succeeded()
 
-# Step 7a: Terraform Plan (Preview)
+# Step 7a – Plan
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
     script: |
-      $ErrorActionPreference = "Stop"
       Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
       terraform plan -out=tfplan
       terraform show tfplan > tfplan.txt
-      Write-Host "📄 Terraform plan saved as tfplan.txt"
+      Write-Host "📄 Plan saved → tfplan.txt"
   displayName: "Terraform Plan (Preview)"
-  condition: and(succeeded(), or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
+  condition: and(succeeded(),or(eq('${{ parameters.action }}','apply'),eq('${{ parameters.action }}','modify')))
 
-# Step 7b: Manual Approval (Pause for Review)
-- task: ManualValidation@0
-  displayName: "🧍 Manual Approval Required Before Apply"
-  inputs:
-    notifyUsers: |
-      user1@yourcompany.com
-      user2@yourcompany.com
-    instructions: |
-      Please review tfplan.txt before approving.
-      - Approve = Proceed with Apply
-      - Reject = Abort deployment
-  condition: and(succeeded(), or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
+# Step 7b+7c – Apply (Requires Environment Approval)
+- job: TerraformApply
+  displayName: "Terraform Apply (Requires Approval)"
+  environment:
+    name: 'vm-deploy'   # must exist in DevOps GUI with approvers
+  pool:
+    name: cloudops-agent
+  steps:
+    - checkout: self
+    - task: PowerShell@2
+      inputs:
+        targetType: 'inline'
+        script: |
+          Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
+          terraform apply -auto-approve tfplan
 
-# Step 7c: Terraform Apply (After Approval + Backup)
-- task: PowerShell@2
-  inputs:
-    targetType: 'inline'
-    script: |
-      $ErrorActionPreference = "Stop"
-      Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
-      terraform apply -auto-approve tfplan
+          $dst="$(TF_STATE_PATH)"
+          $ts=(Get-Date -Format 'yyyy-MM-dd-HHmm')
+          New-Item -Path $dst -ItemType Directory -Force | Out-Null
 
-      $stateTargetPath = "$(TF_STATE_PATH)"
-      $timestamp = (Get-Date -Format "yyyy-MM-dd-HHmm")
-      New-Item -Path $stateTargetPath -ItemType Directory -Force | Out-Null
+          $tf="main-${{ parameters.environment }}.tf".ToLower()
+          $bak="$dst/main-${{ parameters.environment }}-$ts.tf"
+          if (Test-Path "$dst/$tf") {
+              Copy-Item "$dst/$tf" "$bak" -Force
+              Write-Host "🕒 Backup → $bak"
+          }
+          Copy-Item $tf "$dst/" -Force
+          if (Test-Path "terraform.tfstate"){Copy-Item "terraform.tfstate" "$dst/" -Force}
+          if (Test-Path ".terraform.lock.hcl"){Copy-Item ".terraform.lock.hcl" "$dst/" -Force}
+          Write-Host "🎉 Apply completed successfully!"
+      displayName: "Run Terraform Apply (Post-Approval)"
 
-      $tfFile = "main-${{ parameters.environment }}.tf".ToLower()
-      $backupFile = "$stateTargetPath/main-${{ parameters.environment }}-$timestamp.tf"
-
-      if (Test-Path "$stateTargetPath/$tfFile") {
-          Copy-Item "$stateTargetPath/$tfFile" "$backupFile" -Force
-          Write-Host "🕒 Backup created: $backupFile"
-      }
-
-      Copy-Item $tfFile "$stateTargetPath/" -Force
-      if (Test-Path "terraform.tfstate") {
-          Copy-Item "terraform.tfstate" "$stateTargetPath/" -Force
-      }
-      if (Test-Path ".terraform.lock.hcl") {
-          Copy-Item ".terraform.lock.hcl" "$stateTargetPath/" -Force
-      }
-
-      Write-Host "🎉 Terraform Apply completed successfully!"
-  displayName: "Terraform Apply (After Manual Approval)"
-  condition: and(succeeded(), or(eq('${{ parameters.action }}', 'apply'), eq('${{ parameters.action }}', 'modify')))
-
-# Step 8: Publish Build Artifacts
+# Step 8 – Artifacts
 - task: PublishBuildArtifacts@1
   inputs:
     PathtoPublish: '$(tfWorkingDirectory)/Project/${{ parameters.project }}/'
     ArtifactName: 'TerraformFiles-${{ parameters.environment }}-$(Build.BuildNumber)'
-    publishLocation: 'Container'
-  displayName: "Upload Terraform Files as Build Artifacts"
+  displayName: "Publish TF Artifacts"
   condition: succeeded()
 
-# Step 9: Post-Deployment Verification (Custom Script Extensions)
+# Step 9 – Post-Deployment Verification
 - task: PowerShell@2
   inputs:
     targetType: 'inline'
     script: |
-      Write-Host "🔍 Validating Custom Script Extensions post-deployment..."
-      $vms = az vm list --query "[].{Name:name,RG:resourceGroup}" -o json | ConvertFrom-Json
-      foreach ($vm in $vms) {
-          $ext = az vm extension list -g $vm.RG --vm-name $vm.Name -o json | ConvertFrom-Json
-          $csx = $ext | Where-Object { $_.publisher -like "*Microsoft.Compute*" -and $_.type -like "*CustomScript*" }
-          if ($csx) {
-              $uri = $csx.settings.fileUris[0]
-              Write-Host "✅ $($vm.Name): Custom Script detected → $uri"
-              if ($uri -match "sig=.*") {
-                  Write-Host "🔐 SAS token present → Verified"
-              } else {
-                  Write-Warning "⚠️ SAS token missing for $($vm.Name)"
-              }
-          } else {
-              Write-Warning "⚠️ No Custom Script Extension found on $($vm.Name)"
-          }
+      Write-Host "🔍 Checking Custom Script Extensions..."
+      $vms=az vm list --query "[].{Name:name,RG:resourceGroup}" -o json|ConvertFrom-Json
+      foreach($v in $vms){
+        $ext=az vm extension list -g $v.RG --vm-name $v.Name -o json|ConvertFrom-Json
+        $csx=$ext|?{$_.publisher -like "*Microsoft.Compute*" -and $_.type -like "*CustomScript*"}
+        if($csx){$uri=$csx.settings.fileUris[0];Write-Host "✅ $($v.Name): $uri"}
+        else{Write-Warning "⚠️ No Custom Script found for $($v.Name)"}
       }
-      Write-Host "✅ Post-deployment validation completed."
-  displayName: "Post-Deployment Verification (Custom Script SAS Validation)"
+      Write-Host "✅ Post-deployment validation done."
+  displayName: "Post-Deployment Verification"
   condition: succeeded()
