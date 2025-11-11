@@ -106,12 +106,15 @@ class TerraformVMGenerator:
         creation_date = None
         if os.path.exists(self.output_tf_file):
             try:
-                with open(self.output_tf_file, 'r', encoding='utf-8') as f:
+                with open(self.output_tf_file, 'r') as f:
                     for line in f:
                         if '"CreationDate"' in line:
+                            # Extract date string between quotes after =
                             parts = line.split('=')
-                            if len(parts) >= 2:
-                                date_str = parts[1].strip().strip('"').strip().rstrip(',')
+                            if len(parts) == 2:
+                                date_str = parts[1].strip().strip('"')
+                                # Remove trailing comma if present
+                                date_str = date_str.rstrip(',')
                                 creation_date = date_str
                                 break
             except Exception:
@@ -137,49 +140,73 @@ class TerraformVMGenerator:
     # --------------------------
     # SAS Token Generator
     # --------------------------
+    # def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
+    #     """Generate a read-only SAS URL for the blob."""
+    #     if not all([account, container, blob, key]):
+    #         print("[WARN] SAS generation skipped due to missing info")
+    #         return None
+
+    #     expiry = (datetime.utcnow() + timedelta(hours=validity_hours)).strftime('%Y-%m-%dT%H:%MZ')
+    #     start = (datetime.utcnow() - timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%MZ')
+    #     permissions = "r"
+    #     resource = "b"
+    #     signed_version = "2022-11-02"
+
+    #     string_to_sign = f"{permissions}\n{start}\n{expiry}\n/blob/{account}/{container}/{blob}\n\n{signed_version}\n\nhttps\n\n"
+    #     decoded_key = base64.b64decode(key)
+    #     signature = base64.b64encode(
+    #         hmac.new(decoded_key, msg=string_to_sign.encode('utf-8'), digestmod=hashlib.sha256).digest()
+    #     ).decode('utf-8')
+
+    #     sas_token = (
+    #         f"sv={signed_version}&st={quote_plus(start)}&se={quote_plus(expiry)}"
+    #         f"&sr={resource}&sp={permissions}&sig={quote_plus(signature)}"
+    #     )
+    #     return f"https://{account}.blob.core.windows.net/{container}/{blob}?{sas_token}"
+
     def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
-        """Generate a valid read-only SAS URL for Azure Blob Storage."""
-        if not all([account, container, blob, key]):
-            print("[WARN] SAS generation skipped due to missing parameters")
-            return None
+      """Generate a valid read-only SAS URL for Azure Blob Storage."""
+      if not all([account, container, blob, key]):
+        print("[WARN] SAS generation skipped due to missing parameters")
+        return None
 
-        start = (datetime.utcnow() - timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%MZ')
-        expiry = (datetime.utcnow() + timedelta(hours=validity_hours)).strftime('%Y-%m-%dT%H:%MZ')
-        permissions = "r"
-        resource = "b"
-        signed_version = "2020-02-10"  # stable and compatible
-        protocol = "https"
+      start = (datetime.utcnow() - timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%MZ')
+      expiry = (datetime.utcnow() + timedelta(hours=validity_hours)).strftime('%Y-%m-%dT%H:%MZ')
+      permissions = "r"
+      resource = "b"
+      signed_version = "2020-02-10"  # stable and compatible
+      protocol = "https"
 
-        string_to_sign = (
-            f"{permissions}\n"
-            f"{start}\n"
-            f"{expiry}\n"
-            f"/blob/{account}/{container}/{blob}\n"
-            f"\n"         # signed identifier (si)
-            f"\n"         # signed IP (sip)
-            f"{protocol}\n"
-            f"{signed_version}\n"
-            f"\n" * 5     # response headers (rscc, rscd, rsce, rscl, rsct)
-        )
+      string_to_sign = (
+        f"{permissions}\n"
+        f"{start}\n"
+        f"{expiry}\n"
+        f"/blob/{account}/{container}/{blob}\n"
+        f"\n"         # signed identifier (si)
+        f"\n"         # signed IP (sip)
+        f"{protocol}\n"
+        f"{signed_version}\n"
+        f"\n" * 5     # response headers (rscc, rscd, rsce, rscl, rsct)
+      )
 
-        decoded_key = base64.b64decode(key)
-        signature = base64.b64encode(
-            hmac.new(decoded_key, msg=string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
-        ).decode("utf-8")
+      decoded_key = base64.b64decode(key)
+      signature = base64.b64encode(
+        hmac.new(decoded_key, msg=string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+      ).decode("utf-8")
 
-        sas_token = (
-            f"sv={signed_version}"
-            f"&st={quote_plus(start)}"
-            f"&se={quote_plus(expiry)}"
-            f"&sr={resource}"
-            f"&sp={permissions}"
-            f"&spr={protocol}"
-            f"&sig={quote_plus(signature)}"
-        )
+      sas_token = (
+        f"sv={signed_version}"
+        f"&st={quote_plus(start)}"
+        f"&se={quote_plus(expiry)}"
+        f"&sr={resource}"
+        f"&sp={permissions}"
+        f"&spr={protocol}"
+        f"&sig={quote_plus(signature)}"
+      )
 
-        url = f"https://{account}.blob.core.windows.net/{container}/{blob}?{sas_token}"
-        print(f"[INFO] SAS token generated for {blob} (valid {validity_hours}h)")
-        return url
+      url = f"https://{account}.blob.core.windows.net/{container}/{blob}?{sas_token}"
+      print(f"[INFO] SAS token generated for {blob} (valid {validity_hours}h)")
+      return url
 
     # --------------------------
     # Main Generator
@@ -191,7 +218,7 @@ class TerraformVMGenerator:
 
         # Always force overwrite main.tf file
         try:
-            with open(self.output_tf_file, "w", encoding='utf-8') as tf_file:
+            with open(self.output_tf_file, "w") as tf_file:
                 self._write_provider_block(tf_file)
                 self._collect_resource_groups()
                 self._generate_resource_groups(tf_file)
@@ -218,7 +245,7 @@ class TerraformVMGenerator:
         if not os.path.exists(self.output_tf_file):
             print(f"[ERROR] Terraform file not generated: {self.output_tf_file}")
             sys.exit(2)
-        with open(self.output_tf_file, "r", encoding='utf-8') as tf_file:
+        with open(self.output_tf_file, "r") as tf_file:
             content = tf_file.read()
         if "blob.core.windows.net" not in content or "sv=" not in content:
             print(f"[ERROR] SAS token not found in generated Terraform file: {self.output_tf_file}")
@@ -321,7 +348,6 @@ resource "azurerm_resource_group" "{rg.replace('-', '_')}_rg" {{
         data_disk_size = row.get("data_disk_size", "128").strip()  # Default 128 GB
         data_disk_type = row.get("data_disk_type", self.storage_standards['data_disk_type']).strip()
         data_disk_caching = row.get("data_disk_caching", self.storage_standards['data_disk_caching']).strip()
-
         if create_rg:
             depends_on_str = f'  depends_on = [azurerm_resource_group.{rg.replace("-", "_")}_rg]\n'
             rg_ref = f'azurerm_resource_group.{rg.replace("-", "_")}_rg.name'
@@ -356,24 +382,21 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 }}
 ''')
 
-        # Ensure data_disks is always defined for both branches
-        data_disks = []
-
         if os_type == "linux":
             # Enhanced Data disk logic: import disk_1_size, disk_2_size, ... from CSV
             max_disks = 12
-            linux_data_disks = []
+            data_disks = []
             for i in range(1, max_disks + 1):
                 size_key = f"disk_{i}_size"
                 size_val = row.get(size_key)
                 if size_val and size_val.strip():
-                    linux_data_disks.append({
+                    data_disks.append({
                         "name": f"{vm_name}_datadisk{i}",
                         "size": size_val.strip(),
                         "lun": i - 1
                     })
             # Create managed disks
-            for disk in linux_data_disks:
+            for disk in data_disks:
                 tf_file.write(f'''
 resource "azurerm_managed_disk" "{disk['name']}" {{
   name                = "{disk['name']}"
@@ -387,14 +410,7 @@ resource "azurerm_managed_disk" "{disk['name']}" {{
   }}
 }}
 ''')
-                # append to data_disks for VM attachment use
-                data_disks.append({
-                    "name": disk['name'],
-                    "size": disk['size'],
-                    "lun": disk['lun']
-                })
-
-            # Prepare data disk attachments block to inject into linux VM
+            # Prepare data disk attachments
             data_disk_blocks = ""
             for disk in data_disks:
                 data_disk_blocks += f'''  storage_data_disk {{
@@ -408,31 +424,6 @@ resource "azurerm_managed_disk" "{disk['name']}" {{
 '''
             self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, os_config, rg_ref, data_disks, data_disk_blocks)
         else:
-            # Windows branch: collect data disks if disk_* present (keeps parity)
-            max_disks = 12
-            for i in range(1, max_disks + 1):
-                size_key = f"disk_{i}_size"
-                size_val = row.get(size_key)
-                if size_val and size_val.strip():
-                    data_disks.append({
-                        "name": f"{vm_name}_datadisk{i}",
-                        "size": size_val.strip(),
-                        "lun": i - 1
-                    })
-                    # Also create managed disk resource for windows
-                    tf_file.write(f'''
-resource "azurerm_managed_disk" "{vm_name}_datadisk{i}" {{
-  name                = "{vm_name}_datadisk{i}"
-  location            = var.location
-  resource_group_name = {rg_ref}
-  storage_account_type = "{self.storage_standards['data_disk_type']}"
-  create_option       = "Empty"
-  disk_size_gb        = {size_val.strip()}
-  tags = {{
-    {tags_str}
-  }}
-}}
-''')
             self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, os_config, rg_ref, data_disks)
 
         self._generate_dcr_and_shutdown(tf_file, vm_name, os_type, tags_str)
@@ -455,10 +446,6 @@ resource "azurerm_managed_disk" "{vm_name}_datadisk{i}" {{
         tf_file.write(f'''
 resource "azurerm_linux_virtual_machine" "{vm_name}" {{
   name                = "{vm_name}"
-  resource_group_name = {rg_ref}
-  location            = var.location
-  size                = "{vm_size}"
-  network_interface_ids = [azurerm_network_interface.{vm_name}_nic.id]
   admin_username      = "azureadmin"
   admin_password      = data.azurerm_key_vault_secret.{vm_name}_admin_password.value
   disable_password_authentication = false
@@ -651,10 +638,10 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
 
 
 def main():
-    print("[START] Terraform Generator v3.4 (Auto SAS + Windows/Linux Script Toggle)")
-    gen = TerraformVMGenerator()
-    gen.generate_terraform()
-    print("[SUCCESS] Terraform configuration generated successfully")
+  print("[START] Terraform Generator v3.4 (Auto SAS + Windows/Linux Script Toggle)")
+  gen = TerraformVMGenerator()
+  gen.generate_terraform()
+  print("[SUCCESS] Terraform configuration generated successfully")
 
 
 if __name__ == "__main__":
