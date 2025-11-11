@@ -115,7 +115,15 @@ class TerraformVMGenerator:
         tags['Environment'] = self.environment
         tags['Project'] = self.project_name
         return tags
-
+    # --------------------------
+    # OS template resolver
+    # --------------------------
+    def resolve_os_template(self, name: str) -> Dict[str, str]:
+        name = name.strip().lower()
+        if name not in self.os_templates:
+            print(f"[WARN] Unknown OS template '{name}', defaulting to windows-2019")
+            name = "windows-2019"
+        return self.os_templates[name]
     # --------------------------
     # SAS Token Generator
     # --------------------------
