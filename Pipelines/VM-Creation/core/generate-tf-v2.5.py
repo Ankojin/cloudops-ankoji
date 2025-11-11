@@ -26,33 +26,35 @@ import base64
 
 class TerraformVMGenerator:
     def __init__(self):
-        """Initialize generator with environment variables"""
-        self.environment = os.getenv('ENVIRONMENT', 'DEV')
-        self.project_name = os.getenv('PROJECT_NAME', 'BaaS-Platform')
+        """Initialize generator with environment variables (case-insensitive)"""
+        # Normalize all environment variables for consistent access
+        env = {k.lower(): v for k, v in os.environ.items()}
+
+        self.environment = env.get('environment', 'DEV')
+        self.project_name = env.get('project_name', 'BaaS-Platform')
 
         # Environment configuration
         self.config = {
-            'subscription_id': os.getenv('SUBSCRIPTION_ID'),
-            'location': os.getenv('LOCATION', 'swedencentral'),
-            'vnet_name': os.getenv('VNET_NAME'),
-            'vnet_rg': os.getenv('VNET_RG'),
-            'subnet_rg': os.getenv('SUBNET_RG'),
-            'keyvault_name': os.getenv('KEYVAULT_NAME'),
-            'keyvault_rg': os.getenv('KEYVAULT_RG'),
-            'dcr_name': os.getenv('DCR_NAME'),
-            'dcr_rg': os.getenv('DCR_RG'),
-            'diagnostics_storage': os.getenv('DIAGNOSTICS_STORAGE'),
-            'diagnostics_storage_rg': os.getenv('DIAGNOSTICS_STORAGE_RG'),
-            'script_storage_account': os.getenv('SCRIPT_STORAGE_ACCOUNT'),
-            'script_storage_container': os.getenv('SCRIPT_STORAGE_CONTAINER'),
-            'script_blob_name_windows': os.getenv('SCRIPT_BLOB_NAME_WINDOWS'),
-            'script_blob_name_linux': os.getenv('SCRIPT_BLOB_NAME_LINUX'),
-            'script_storage_key': os.getenv('SCRIPT_STORAGE_KEY'),
-            # allow runtime toggle via env if desired — default True
-            'enable_custom_script': os.getenv('ENABLE_CUSTOM_SCRIPT', 'true').lower() == 'true',
-            'shutdown_enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
-            'shutdown_time': os.getenv('shutdown_time', '2000'),
-            'shutdown_timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
+            'subscription_id': env.get('subscription_id'),
+            'location': env.get('location', 'swedencentral'),
+            'vnet_name': env.get('vnet_name'),
+            'vnet_rg': env.get('vnet_rg'),
+            'subnet_rg': env.get('subnet_rg'),
+            'keyvault_name': env.get('keyvault_name'),
+            'keyvault_rg': env.get('keyvault_rg'),
+            'dcr_name': env.get('dcr_name'),
+            'dcr_rg': env.get('dcr_rg'),
+            'diagnostics_storage': env.get('diagnostics_storage'),
+            'diagnostics_storage_rg': env.get('diagnostics_storage_rg'),
+            'script_storage_account': env.get('script_storage_account'),
+            'script_storage_container': env.get('script_storage_container'),
+            'script_blob_name_windows': env.get('script_blob_name_windows'),
+            'script_blob_name_linux': env.get('script_blob_name_linux'),
+            'script_storage_key': env.get('script_storage_key'),
+            'enable_custom_script': str(env.get('enable_custom_script', 'true')).lower() == 'true',
+            'shutdown_enabled': str(env.get('shutdown_enabled', 'true')).lower() == 'true',
+            'shutdown_time': env.get('shutdown_time', '2000'),
+            'shutdown_timezone': env.get('shutdown_timezone', 'Arab Standard Time')
         }
 
         # OS Templates (corporate standards)
@@ -73,11 +75,11 @@ class TerraformVMGenerator:
         }
 
         # Paths
-        self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
+        self.csv_file_path = env.get('csv_path', './core/simplified-vms.csv')
         self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
         self.resource_groups_to_create = set()
 
-        # Validate
+        # Validate configuration
         self.validate_config()
 
     # --------------------------
@@ -91,6 +93,7 @@ class TerraformVMGenerator:
             sys.exit(1)
         print(f"[OK] Configuration validated for {self.environment}")
         print(f"[INFO] Custom Script Extensions enabled={self.config['enable_custom_script']}")
+
 
     # --------------------------
     # Tags
