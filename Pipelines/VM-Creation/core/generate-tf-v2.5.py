@@ -389,11 +389,20 @@ resource "azurerm_resource_group" "{rg.replace('-', '_')}_rg" {{
 
         # Prepare collection of additional disks (up to 10)
         additional_disks = []
+        lun_counter = 0
         for i in range(1, 11):
             disk_name = row.get(f"disk_name_{i}", "") or row.get(f"disk_{i}_name", "")
             disk_size = row.get(f"disk_size_gb_{i}", "") or row.get(f"disk_{i}_size", "")
-            disk_lun = row.get(f"disk_lun_{i}", "") or row.get(f"disk_{i}_lun", "") or row.get(f"disk_{i}_lun", "")
+            disk_lun = row.get(f"disk_lun_{i}", "") or row.get(f"disk_{i}_lun", "")
             disk_type = row.get(f"storage_type_{i}", "") or row.get(f"disk_{i}_type", "") or self.storage_standards['data_disk_type']
+
+            # If only disk_size is present, auto-generate name and lun
+            if disk_size and not disk_name and not disk_lun:
+                disk_name = f"{vm_name}-data-{i}"
+                disk_lun = str(lun_counter)
+                lun_counter += 1
+
+            # If all required fields are present, use them
             if disk_name and disk_size and disk_lun:
                 try:
                     lun_int = int(disk_lun)
