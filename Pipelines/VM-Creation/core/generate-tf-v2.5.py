@@ -678,10 +678,13 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
         tf_file.write("  }\n}\n")
 
 def main():
-    print("[START] Terraform Generator v2.5 (Auto SAS + full multi-disk support)")
-    gen = TerraformVMGenerator()
-    gen.generate_terraform()
-    print("[SUCCESS] Terraform configuration generated successfully")
+  print("[START] Terraform Generator v2.5 (Auto SAS + full multi-disk support)")
+  print("[DEBUG] All environment variables:")
+  for k, v in os.environ.items():
+    print(f"  {k} = {v}")
+  gen = TerraformVMGenerator()
+  gen.generate_terraform()
+  print("[SUCCESS] Terraform configuration generated successfully")
 
 if __name__ == "__main__":
     main()
