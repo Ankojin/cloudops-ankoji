@@ -64,29 +64,90 @@ stages:
         architecture: 'x64'
       displayName: "Setup Python $(pythonVersion)"
 
-    # Step 2: Set Environment Variables
+    # Step 2: Azure Login
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
         script: |
-          $env:PROJECT_NAME="${{ parameters.project }}"
-          $env:ENVIRONMENT="${{ parameters.environment }}"
-          $env:TF_STATE_PATH="$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
-          New-Item -Path $env:TF_STATE_PATH -ItemType Directory -Force | Out-Null
-          Write-Host "📁 Ensured TF State Directory: $($env:TF_STATE_PATH)"
-      displayName: "Set Environment Variables"
-
-    # Step 3: Azure Login
-    - task: PowerShell@2
-      inputs:
-        targetType: 'inline'
-        script: |
+          Write-Host "🔐 Logging into Azure..."
           az login --service-principal -u "$(ARM_CLIENT_ID)" -p "$(ARM_CLIENT_SECRET)" --tenant "$(ARM_TENANT_ID)"
           if ($LASTEXITCODE -ne 0) { throw "Azure login failed" }
           Write-Host "✅ Azure login successful."
       displayName: "Azure Login"
 
-    # Step 4: Python Script Execution + Immediate TF Copy
+    # Step 3: Set & Validate Environment Variables (Full Original Logic)
+    - task: PowerShell@2
+      inputs:
+        targetType: 'inline'
+        errorActionPreference: 'stop'
+        failOnStderr: true
+        script: |
+          Write-Host "🔧 Validating and setting environment variables from Variable Groups..."
+
+          function Set-ValidatedEnvVar {
+              param($Name, $Value, $Required = $true)
+              if ([string]::IsNullOrWhiteSpace($Value) -and $Required) {
+                  Write-Error "❌ MISSING REQUIRED VARIABLE: $Name is not defined in variable groups"
+                  throw "Required variable $Name is missing or empty"
+              }
+              if (![string]::IsNullOrWhiteSpace($Value)) {
+                  Set-Item -Path "env:$Name" -Value $Value
+                  Write-Host "✅ SET: $Name"
+              } else {
+                  Write-Host "⚠️ SKIP: $Name (empty/optional)"
+              }
+          }
+
+          # Core environment setup
+          Set-ValidatedEnvVar "ENVIRONMENT" "${{ parameters.environment }}"
+          Set-ValidatedEnvVar "PROJECT_NAME" "${{ parameters.project }}"
+          Set-ValidatedEnvVar "SUBSCRIPTION_ID" "$(subscription_id)"
+          Set-ValidatedEnvVar "LOCATION" "$(location)"
+          Set-ValidatedEnvVar "TF_STATE_PATH" "$(tfStateDirectory)/${{ parameters.project }}/${{ parameters.environment }}"
+
+          # Networking
+          Set-ValidatedEnvVar "VNET_NAME" "$(vnet_name)"
+          Set-ValidatedEnvVar "VNET_RG" "$(vnet_rg)"
+          Set-ValidatedEnvVar "SUBNET_RG" "$(subnet_rg)"
+
+          # Key Vault + DCR
+          Set-ValidatedEnvVar "KEYVAULT_NAME" "$(keyvault_name)"
+          Set-ValidatedEnvVar "KEYVAULT_RG" "$(keyvault_rg)"
+          Set-ValidatedEnvVar "DCR_NAME" "$(dcr_name)"
+          Set-ValidatedEnvVar "DCR_RG" "$(dcr_rg)"
+
+          # Diagnostics + Custom Script Storage
+          Set-ValidatedEnvVar "DIAGNOSTICS_STORAGE" "$(diagnostics_storage)"
+          Set-ValidatedEnvVar "DIAGNOSTICS_STORAGE_RG" "$(diagnostics_storage_rg)"
+          Set-ValidatedEnvVar "SCRIPT_STORAGE_ACCOUNT" "$(script_storage_account)"
+          Set-ValidatedEnvVar "SCRIPT_STORAGE_CONTAINER" "$(script_storage_container)"
+          Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_WINDOWS" "$(script_blob_name_windows)"
+          Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_LINUX" "$(script_blob_name_linux)"
+          Set-ValidatedEnvVar "SCRIPT_STORAGE_KEY" "$(script_storage_key)"
+
+          # Shutdown config
+          Set-ValidatedEnvVar "shutdown_enabled" "$(shutdown_enabled)"
+          Set-ValidatedEnvVar "shutdown_time" "$(shutdown_time)"
+          Set-ValidatedEnvVar "shutdown_timezone" "$(shutdown_timezone)"
+
+          # Tag handling
+          $tagsInput = '${{ parameters.tags_json_override }}'
+          if ('${{ parameters.action }}' -eq 'apply') {
+              if ([string]::IsNullOrWhiteSpace($tagsInput)) { throw "❌ Missing mandatory tags for apply" }
+              $env:default_tags_json = $tagsInput
+              Write-Host "🏷️ Tags loaded for apply"
+          } else {
+              if ([string]::IsNullOrWhiteSpace($tagsInput) -or $tagsInput -eq "Use Variable Group") {
+                  $env:default_tags_json = "{}"
+                  Write-Host "🏷️ Using existing tags for modify"
+              } else {
+                  $env:default_tags_json = $tagsInput
+                  Write-Host "🏷️ Updated tags loaded for modify"
+              }
+          }
+      displayName: "Set & Validate Environment Variables"
+
+    # Step 4: Python Generator + Copy TF Files
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -105,9 +166,9 @@ stages:
               Copy-Item $tfFile "$dst/main-${{ parameters.environment }}.tf" -Force
               Write-Host "📦 Copied TF file to $dst (timestamp + latest)"
           }
-      displayName: "Run Python + Copy TF to State Path"
+      displayName: "Run Python + Copy TF"
 
-    # Step 5: Validate and Plan Terraform
+    # Step 5: Terraform Validate & Plan
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -118,18 +179,11 @@ stages:
           terraform fmt
           terraform plan -out=tfplan
           terraform show tfplan > tfplan.txt
-          Write-Host "✅ Terraform Plan complete."
-      displayName: "Validate & Plan Terraform"
-
-    # Step 6: Publish Plan Artifact
-    - task: PublishBuildArtifacts@1
-      inputs:
-        PathtoPublish: '$(tfWorkingDirectory)/Project/${{ parameters.project }}/tfplan.txt'
-        ArtifactName: 'TerraformPlan-${{ parameters.environment }}'
-      displayName: "Publish Terraform Plan Artifact"
+          Write-Host "✅ Terraform plan complete."
+      displayName: "Terraform Validate + Plan"
 
 # =========================
-#  STAGE 2: TERRAFORM APPLY
+#  STAGE 2: APPLY (WITH APPROVAL)
 # =========================
 - stage: TerraformApply
   displayName: "Terraform Apply Stage (Requires Approval)"
@@ -137,9 +191,9 @@ stages:
   condition: succeeded()
 
   jobs:
-  - deployment: ApplyJob                 # Deployment job supports environment approvals
+  - deployment: ApplyJob
     displayName: "Run Terraform Apply After Approval"
-    environment: 'vm-deploy'             # <-- must exist in DevOps Environments with approvers
+    environment: 'vm-deploy'     # GUI approval
     pool:
       name: cloudops-agent
     strategy:
@@ -148,7 +202,7 @@ stages:
           steps:
           - checkout: self
 
-          # Step 1: Terraform Apply
+          # Terraform Apply + Copy
           - task: PowerShell@2
             inputs:
               targetType: 'inline'
@@ -170,7 +224,7 @@ stages:
                 Write-Host "🎉 Terraform Apply completed successfully!"
             displayName: "Terraform Apply"
 
-          # Step 2: Post-Deployment Validation
+          # Post Validation
           - task: PowerShell@2
             inputs:
               targetType: 'inline'
@@ -181,7 +235,6 @@ stages:
                   $ext=az vm extension list -g $v.RG --vm-name $v.Name -o json|ConvertFrom-Json
                   $csx=$ext|?{$_.publisher -like "*Microsoft.Compute*" -and $_.type -like "*CustomScript*"}
                   if($csx){Write-Host "✅ $($v.Name): $($csx.settings.fileUris[0])"}
-                  else{Write-Warning "⚠️ No Custom Script Extension found for $($v.Name)"}
+                  else{Write-Warning "⚠️ No Custom Script Extension for $($v.Name)"}
                 }
-                Write-Host "✅ Post-deployment validation done."
-            displayName: "Post-Deployment Verification"
+              displayName: "Post-Deployment Verification"
