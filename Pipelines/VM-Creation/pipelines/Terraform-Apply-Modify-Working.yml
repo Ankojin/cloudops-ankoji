@@ -153,7 +153,7 @@ steps:
 
       Write-Host ""
       Write-Host "🐍 Executing Terraform generator (v2-enhanced)..."
-      $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$(tfWorkingDirectory)/core/generate-tf-v2-enhanced.py" -Wait -PassThru -NoNewWindow
+      $pythonProcess = Start-Process -FilePath "python" -ArgumentList "$(tfWorkingDirectory)/core/generate-tf-v2.5.py" -Wait -PassThru -NoNewWindow
       if ($pythonProcess.ExitCode -ne 0) {
           throw "❌ Python script failed with exit code $($pythonProcess.ExitCode)"
       }

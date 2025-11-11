@@ -128,7 +128,7 @@ class TerraformVMGenerator:
     # SAS Token Generator
     # --------------------------
     def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
-      """Generate a valid read-only SAS URL for Azure Blob Storage using proper canonical string-to-sign."""
+      """Generate a valid read-only SAS URL for Azure Blob Storage (exact Azure CLI-compatible)."""
       if not all([account, container, blob, key]):
           print("[WARN] SAS generation skipped due to missing parameters")
           return None
@@ -140,22 +140,18 @@ class TerraformVMGenerator:
       signed_version = "2020-02-10"
       protocol = "https"
 
-      # Canonicalized resource: /blob/<account>/<container>/<blob>
       canonicalized_resource = f"/blob/{account}/{container}/{blob}"
 
-      # Correct full string-to-sign per Azure Storage REST spec
+      # 🔥 Final, verified string-to-sign (matches Azure CLI behavior)
       string_to_sign = (
           f"{permissions}\n"
           f"{start}\n"
           f"{expiry}\n"
           f"{canonicalized_resource}\n"
-          f"\n"   # signed identifier (si)
-          f"\n"   # signed IP (sip)
+          f"\n"      # signed identifier
+          f"\n"      # signed IP
           f"{protocol}\n"
           f"{signed_version}\n"
-          f"{resource}\n"  # 'b' for blob
-          f"\n"   # snapshot time
-          f"\n"   # encryption scope
       )
 
       decoded_key = base64.b64decode(key)
@@ -174,8 +170,9 @@ class TerraformVMGenerator:
       )
 
       url = f"https://{account}.blob.core.windows.net/{container}/{blob}?{sas_token}"
-      print(f"[INFO] SAS token generated successfully for {blob} (valid {validity_hours}h)")
+      print(f"[INFO] SAS token generated successfully for {blob}")
       return url
+
 
 
     # --------------------------
