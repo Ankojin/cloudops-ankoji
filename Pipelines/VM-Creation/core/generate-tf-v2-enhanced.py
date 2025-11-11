@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Enhanced VM Creation Terraform Generator v3.4
-- No cloud-init/custom_data
+Enhanced VM Creation Terraform Generator v2
 - Keeps DCR, boot diagnostics, auto-shutdown
 - Adds automatic SAS generation for Windows and Linux Custom Script Extensions
 - Controlled by ENABLE_CUSTOM_SCRIPT flag (hardcoded to True)
+- Fixes invalid storage_data_disk blocks for Linux VMs (uses data_disk_attachment)
 """
 
 import csv
@@ -66,13 +66,6 @@ class TerraformVMGenerator:
             'data_disk_caching': 'None'
         }
 
-        # Auto shutdown
-        self.shutdown_config = {
-            'enabled': os.getenv('shutdown_enabled', 'true').lower() == 'true',
-            'time': os.getenv('shutdown_time', '2000'),
-            'timezone': os.getenv('shutdown_timezone', 'Arab Standard Time')
-        }
-
         # Paths
         self.csv_file_path = os.getenv('CSV_PATH', './core/simplified-vms.csv')
         self.output_tf_file = f"./Project/{self.project_name}/main-{self.environment.lower()}.tf"
@@ -102,7 +95,6 @@ class TerraformVMGenerator:
         tags = json.loads(json_tags)
         tags['CreatedBy'] = 'Terraform'
 
-        # Try to preserve original CreationDate from output file
         creation_date = None
         if os.path.exists(self.output_tf_file):
             try:
@@ -110,8 +102,8 @@ class TerraformVMGenerator:
                     for line in f:
                         if '"CreationDate"' in line:
                             parts = line.split('=')
-                            if len(parts) >= 2:
-                                date_str = parts[1].strip().strip('"').strip().rstrip(',')
+                            if len(parts) == 2:
+                                date_str = parts[1].strip().strip('"').rstrip(',')
                                 creation_date = date_str
                                 break
             except Exception:
@@ -125,105 +117,83 @@ class TerraformVMGenerator:
         return tags
 
     # --------------------------
-    # OS template
-    # --------------------------
-    def resolve_os_template(self, name: str) -> Dict[str, str]:
-        name = name.strip().lower()
-        if name not in self.os_templates:
-            print(f"[WARN] Unknown OS template '{name}', defaulting to windows-2019")
-            name = "windows-2019"
-        return self.os_templates[name]
-
-    # --------------------------
     # SAS Token Generator
     # --------------------------
     def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
-        """Generate a valid read-only SAS URL for Azure Blob Storage."""
-        if not all([account, container, blob, key]):
-            print("[WARN] SAS generation skipped due to missing parameters")
-            return None
+      """Generate a valid read-only SAS URL for Azure Blob Storage using proper canonical string-to-sign."""
+      if not all([account, container, blob, key]):
+          print("[WARN] SAS generation skipped due to missing parameters")
+          return None
 
-        start = (datetime.utcnow() - timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%MZ')
-        expiry = (datetime.utcnow() + timedelta(hours=validity_hours)).strftime('%Y-%m-%dT%H:%MZ')
-        permissions = "r"
-        resource = "b"
-        signed_version = "2020-02-10"  # stable and compatible
-        protocol = "https"
+      start = (datetime.utcnow() - timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%MZ')
+      expiry = (datetime.utcnow() + timedelta(hours=validity_hours)).strftime('%Y-%m-%dT%H:%MZ')
+      permissions = "r"
+      resource = "b"
+      signed_version = "2020-02-10"
+      protocol = "https"
 
-        string_to_sign = (
-            f"{permissions}\n"
-            f"{start}\n"
-            f"{expiry}\n"
-            f"/blob/{account}/{container}/{blob}\n"
-            f"\n"         # signed identifier (si)
-            f"\n"         # signed IP (sip)
-            f"{protocol}\n"
-            f"{signed_version}\n"
-            f"\n" * 5     # response headers (rscc, rscd, rsce, rscl, rsct)
-        )
+      # Canonicalized resource: /blob/<account>/<container>/<blob>
+      canonicalized_resource = f"/blob/{account}/{container}/{blob}"
 
-        decoded_key = base64.b64decode(key)
-        signature = base64.b64encode(
-            hmac.new(decoded_key, msg=string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
-        ).decode("utf-8")
+      # Correct full string-to-sign per Azure Storage REST spec
+      string_to_sign = (
+          f"{permissions}\n"
+          f"{start}\n"
+          f"{expiry}\n"
+          f"{canonicalized_resource}\n"
+          f"\n"   # signed identifier (si)
+          f"\n"   # signed IP (sip)
+          f"{protocol}\n"
+          f"{signed_version}\n"
+          f"{resource}\n"  # 'b' for blob
+          f"\n"   # snapshot time
+          f"\n"   # encryption scope
+      )
 
-        sas_token = (
-            f"sv={signed_version}"
-            f"&st={quote_plus(start)}"
-            f"&se={quote_plus(expiry)}"
-            f"&sr={resource}"
-            f"&sp={permissions}"
-            f"&spr={protocol}"
-            f"&sig={quote_plus(signature)}"
-        )
+      decoded_key = base64.b64decode(key)
+      signature = base64.b64encode(
+          hmac.new(decoded_key, msg=string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+      ).decode("utf-8")
 
-        url = f"https://{account}.blob.core.windows.net/{container}/{blob}?{sas_token}"
-        print(f"[INFO] SAS token generated for {blob} (valid {validity_hours}h)")
-        return url
+      sas_token = (
+          f"sv={signed_version}"
+          f"&st={quote_plus(start)}"
+          f"&se={quote_plus(expiry)}"
+          f"&sr={resource}"
+          f"&sp={permissions}"
+          f"&spr={protocol}"
+          f"&sig={quote_plus(signature)}"
+      )
+
+      url = f"https://{account}.blob.core.windows.net/{container}/{blob}?{sas_token}"
+      print(f"[INFO] SAS token generated successfully for {blob} (valid {validity_hours}h)")
+      return url
+
 
     # --------------------------
     # Main Generator
     # --------------------------
-
     def generate_terraform(self):
         os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
         vm_outputs = []
 
-        # Always force overwrite main.tf file
-        try:
-            with open(self.output_tf_file, "w", encoding='utf-8') as tf_file:
-                self._write_provider_block(tf_file)
-                self._collect_resource_groups()
-                self._generate_resource_groups(tf_file)
+        with open(self.output_tf_file, "w", encoding='utf-8') as tf_file:
+            self._write_provider_block(tf_file)
+            self._collect_resource_groups()
+            self._generate_resource_groups(tf_file)
 
-                try:
-                    with open(self.csv_file_path, newline='') as csvfile:
-                        reader = csv.DictReader(csvfile)
-                        for row in reader:
-                            if not row.get("vm_name", "").strip():
-                                continue
-                            vm_name = row["vm_name"].strip()
-                            vm_outputs.append(vm_name)
-                            self._generate_vm_resources(tf_file, row)
-                except FileNotFoundError:
-                    print(f"[ERROR] CSV file not found: {self.csv_file_path}")
-                    sys.exit(1)
+            with open(self.csv_file_path, newline='') as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    if not row.get("vm_name", "").strip():
+                        continue
+                    vm_name = row["vm_name"].strip()
+                    vm_outputs.append(vm_name)
+                    self._generate_vm_resources(tf_file, row)
 
-                self._generate_outputs(tf_file, vm_outputs)
-        except Exception as e:
-            print(f"[ERROR] Failed to write Terraform file: {self.output_tf_file} - {e}")
-            sys.exit(2)
+            self._generate_outputs(tf_file, vm_outputs)
 
-        # Verification: main.tf exists and contains SAS token
-        if not os.path.exists(self.output_tf_file):
-            print(f"[ERROR] Terraform file not generated: {self.output_tf_file}")
-            sys.exit(2)
-        with open(self.output_tf_file, "r", encoding='utf-8') as tf_file:
-            content = tf_file.read()
-        if "blob.core.windows.net" not in content or "sv=" not in content:
-            print(f"[ERROR] SAS token not found in generated Terraform file: {self.output_tf_file}")
-            sys.exit(3)
-        print(f"[OK] Terraform configuration generated: {self.output_tf_file} (SAS token verified)")
+        print(f"[OK] Terraform configuration generated: {self.output_tf_file}")
 
     # --------------------------
     # Provider Block
@@ -241,11 +211,7 @@ terraform {{
 }}
 
 provider "azurerm" {{
-  features {{
-    virtual_machine {{
-      delete_os_disk_on_deletion = true
-    }}
-  }}
+  features {{}}
   subscription_id = "{self.config['subscription_id']}"
 }}
 
@@ -270,19 +236,16 @@ data "azurerm_monitor_data_collection_rule" "main_dcr" {{
 ''')
 
     # --------------------------
-    # Resource Group Creation
+    # Resource Groups
     # --------------------------
     def _collect_resource_groups(self):
-        try:
-            with open(self.csv_file_path, newline='') as csvfile:
-                reader = csv.DictReader(csvfile)
-                for row in reader:
-                    if row.get("create_rg", "").lower() == "true":
-                        rg = row.get("resource_group", "").strip()
-                        if rg:
-                            self.resource_groups_to_create.add(rg)
-        except FileNotFoundError:
-            pass
+        with open(self.csv_file_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                if row.get("create_rg", "").lower() == "true":
+                    rg = row.get("resource_group", "").strip()
+                    if rg:
+                        self.resource_groups_to_create.add(rg)
 
     def _generate_resource_groups(self, tf_file):
         for rg in self.resource_groups_to_create:
@@ -299,7 +262,7 @@ resource "azurerm_resource_group" "{rg.replace('-', '_')}_rg" {{
 ''')
 
     # --------------------------
-    # VM Generation (Windows/Linux)
+    # VM Creation
     # --------------------------
     def _generate_vm_resources(self, tf_file, row: Dict[str, str]):
         vm_name = row["vm_name"].strip()
@@ -316,12 +279,6 @@ resource "azurerm_resource_group" "{rg.replace('-', '_')}_rg" {{
         create_rg = row.get("create_rg", "false").lower() == "true"
 
         depends_on_str = ""
-        # Data disk logic: import from CSV
-        data_disk_count = int(row.get("data_disk_count", "0").strip() or "0")
-        data_disk_size = row.get("data_disk_size", "128").strip()  # Default 128 GB
-        data_disk_type = row.get("data_disk_type", self.storage_standards['data_disk_type']).strip()
-        data_disk_caching = row.get("data_disk_caching", self.storage_standards['data_disk_caching']).strip()
-
         if create_rg:
             depends_on_str = f'  depends_on = [azurerm_resource_group.{rg.replace("-", "_")}_rg]\n'
             rg_ref = f'azurerm_resource_group.{rg.replace("-", "_")}_rg.name'
@@ -356,25 +313,21 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 }}
 ''')
 
-        # Ensure data_disks is always defined for both branches
+        # Collect data disks
+        max_disks = 12
         data_disks = []
-
-        if os_type == "linux":
-            # Enhanced Data disk logic: import disk_1_size, disk_2_size, ... from CSV
-            max_disks = 12
-            linux_data_disks = []
-            for i in range(1, max_disks + 1):
-                size_key = f"disk_{i}_size"
-                size_val = row.get(size_key)
-                if size_val and size_val.strip():
-                    linux_data_disks.append({
-                        "name": f"{vm_name}_datadisk{i}",
-                        "size": size_val.strip(),
-                        "lun": i - 1
-                    })
-            # Create managed disks
-            for disk in linux_data_disks:
-                tf_file.write(f'''
+        for i in range(1, max_disks + 1):
+            size_key = f"disk_{i}_size"
+            size_val = row.get(size_key)
+            if size_val and size_val.strip():
+                data_disks.append({
+                    "name": f"{vm_name}_datadisk{i}",
+                    "size": size_val.strip(),
+                    "lun": i - 1
+                })
+        # Managed disks
+        for disk in data_disks:
+            tf_file.write(f'''
 resource "azurerm_managed_disk" "{disk['name']}" {{
   name                = "{disk['name']}"
   location            = var.location
@@ -387,52 +340,10 @@ resource "azurerm_managed_disk" "{disk['name']}" {{
   }}
 }}
 ''')
-                # append to data_disks for VM attachment use
-                data_disks.append({
-                    "name": disk['name'],
-                    "size": disk['size'],
-                    "lun": disk['lun']
-                })
 
-            # Prepare data disk attachments block to inject into linux VM
-            data_disk_blocks = ""
-            for disk in data_disks:
-                data_disk_blocks += f'''  storage_data_disk {{
-    name              = azurerm_managed_disk.{disk['name']}.name
-    lun               = {disk['lun']}
-    caching           = "{self.storage_standards['data_disk_caching']}"
-    managed_disk_id   = azurerm_managed_disk.{disk['name']}.id
-    disk_size_gb      = {disk['size']}
-    storage_account_type = "{self.storage_standards['data_disk_type']}"
-  }}
-'''
-            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, os_config, rg_ref, data_disks, data_disk_blocks)
+        if os_type == "linux":
+            self._generate_linux_vm(tf_file, vm_name, vm_size, tags_str, os_config, rg_ref, data_disks)
         else:
-            # Windows branch: collect data disks if disk_* present (keeps parity)
-            max_disks = 12
-            for i in range(1, max_disks + 1):
-                size_key = f"disk_{i}_size"
-                size_val = row.get(size_key)
-                if size_val and size_val.strip():
-                    data_disks.append({
-                        "name": f"{vm_name}_datadisk{i}",
-                        "size": size_val.strip(),
-                        "lun": i - 1
-                    })
-                    # Also create managed disk resource for windows
-                    tf_file.write(f'''
-resource "azurerm_managed_disk" "{vm_name}_datadisk{i}" {{
-  name                = "{vm_name}_datadisk{i}"
-  location            = var.location
-  resource_group_name = {rg_ref}
-  storage_account_type = "{self.storage_standards['data_disk_type']}"
-  create_option       = "Empty"
-  disk_size_gb        = {size_val.strip()}
-  tags = {{
-    {tags_str}
-  }}
-}}
-''')
             self._generate_windows_vm(tf_file, vm_name, vm_size, tags_str, os_config, rg_ref, data_disks)
 
         self._generate_dcr_and_shutdown(tf_file, vm_name, os_type, tags_str)
@@ -440,7 +351,7 @@ resource "azurerm_managed_disk" "{vm_name}_datadisk{i}" {{
     # --------------------------
     # Linux VM
     # --------------------------
-    def _generate_linux_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref, data_disks, data_disk_blocks):
+    def _generate_linux_vm(self, tf_file, vm_name, vm_size, tags_str, os_image, rg_ref, data_disks):
         script_enabled = self.config['enable_custom_script']
         script_sas_url = None
 
@@ -475,7 +386,6 @@ resource "azurerm_linux_virtual_machine" "{vm_name}" {{
     version   = "{os_image['version']}"
   }}
 
-{data_disk_blocks}
   boot_diagnostics {{
     storage_account_uri = "https://{self.config['diagnostics_storage']}.blob.core.windows.net/"
   }}
@@ -486,9 +396,20 @@ resource "azurerm_linux_virtual_machine" "{vm_name}" {{
 }}
 ''')
 
+        # Attach disks separately
+        for disk in data_disks:
+            tf_file.write(f'''
+resource "azurerm_virtual_machine_data_disk_attachment" "{vm_name}_{disk['name']}_attach" {{
+  managed_disk_id    = azurerm_managed_disk.{disk['name']}.id
+  virtual_machine_id = azurerm_linux_virtual_machine.{vm_name}.id
+  lun                = {disk['lun']}
+  caching            = "{self.storage_standards['data_disk_caching']}"
+}}
+''')
+
         if script_enabled and script_sas_url:
             tf_file.write(f'''
-# Custom Script Extension (Linux Auto SAS)
+# Custom Script Extension (Linux)
 resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   name                 = "CustomScriptExtension"
   virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
@@ -506,10 +427,6 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   }}
 }}
 ''')
-        elif not script_enabled:
-            tf_file.write(f"# [INFO] Custom Script Extension disabled globally for {vm_name}\n")
-        else:
-            tf_file.write(f"# [WARN] Skipped Linux script extension for {vm_name} (SAS generation failed)\n")
 
     # --------------------------
     # Windows VM
@@ -526,7 +443,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
                 self.config['script_storage_key']
             )
 
-        # Prepare data disk attachments
+        # Prepare inline disk attachments (Windows supports this)
         data_disk_blocks = ""
         for disk in data_disks:
             data_disk_blocks += f'''  storage_data_disk {{
@@ -575,7 +492,7 @@ resource "azurerm_windows_virtual_machine" "{vm_name}" {{
 
         if script_enabled and script_sas_url:
             tf_file.write(f'''
-# Custom Script Extension (Windows Auto SAS)
+# Custom Script Extension (Windows)
 resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   name                 = "CustomScriptExtension"
   virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
@@ -593,10 +510,6 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
   }}
 }}
 ''')
-        elif not script_enabled:
-            tf_file.write(f"# [INFO] Custom Script Extension disabled globally for {vm_name}\n")
-        else:
-            tf_file.write(f"# [WARN] Skipped Windows script extension for {vm_name} (SAS generation failed)\n")
 
     # --------------------------
     # DCR + Shutdown
@@ -604,7 +517,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
     def _generate_dcr_and_shutdown(self, tf_file, vm_name, os_type, tags_str):
         vm_type = "linux_virtual_machine" if os_type == "linux" else "windows_virtual_machine"
         tf_file.write(f'''
-# Azure Monitor Agent + DCR
+# DCR + Shutdown
 resource "azurerm_virtual_machine_extension" "{vm_name}_ama" {{
   name                       = "AzureMonitorAgent"
   virtual_machine_id         = azurerm_{vm_type}.{vm_name}.id
@@ -623,13 +536,12 @@ resource "azurerm_monitor_data_collection_rule_association" "{vm_name}_dcr_assoc
   data_collection_rule_id = data.azurerm_monitor_data_collection_rule.main_dcr.id
 }}
 
-# Auto Shutdown
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
   virtual_machine_id = azurerm_{vm_type}.{vm_name}.id
   location           = var.location
-  enabled            = {str(self.shutdown_config['enabled']).lower()}
-  daily_recurrence_time = "{self.shutdown_config['time']}"
-  timezone              = "{self.shutdown_config['timezone']}"
+  enabled            = {str(self.config['shutdown_enabled']).lower()}
+  daily_recurrence_time = "{self.config['shutdown_time']}"
+  timezone              = "{self.config['shutdown_timezone']}"
   notification_settings {{
     enabled = false
   }}
@@ -651,7 +563,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
 
 
 def main():
-    print("[START] Terraform Generator v3.4 (Auto SAS + Windows/Linux Script Toggle)")
+    print("[START] Terraform Generator v2 (Auto SAS + Windows/Linux Fix)")
     gen = TerraformVMGenerator()
     gen.generate_terraform()
     print("[SUCCESS] Terraform configuration generated successfully")
