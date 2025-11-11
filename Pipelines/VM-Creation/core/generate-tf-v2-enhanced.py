@@ -140,29 +140,73 @@ class TerraformVMGenerator:
     # --------------------------
     # SAS Token Generator
     # --------------------------
+    # def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
+    #     """Generate a read-only SAS URL for the blob."""
+    #     if not all([account, container, blob, key]):
+    #         print("[WARN] SAS generation skipped due to missing info")
+    #         return None
+
+    #     expiry = (datetime.utcnow() + timedelta(hours=validity_hours)).strftime('%Y-%m-%dT%H:%MZ')
+    #     start = (datetime.utcnow() - timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%MZ')
+    #     permissions = "r"
+    #     resource = "b"
+    #     signed_version = "2022-11-02"
+
+    #     string_to_sign = f"{permissions}\n{start}\n{expiry}\n/blob/{account}/{container}/{blob}\n\n{signed_version}\n\nhttps\n\n"
+    #     decoded_key = base64.b64decode(key)
+    #     signature = base64.b64encode(
+    #         hmac.new(decoded_key, msg=string_to_sign.encode('utf-8'), digestmod=hashlib.sha256).digest()
+    #     ).decode('utf-8')
+
+    #     sas_token = (
+    #         f"sv={signed_version}&st={quote_plus(start)}&se={quote_plus(expiry)}"
+    #         f"&sr={resource}&sp={permissions}&sig={quote_plus(signature)}"
+    #     )
+    #     return f"https://{account}.blob.core.windows.net/{container}/{blob}?{sas_token}"
+
     def generate_blob_sas_url(self, account: str, container: str, blob: str, key: str, validity_hours: int = 24) -> str:
-        """Generate a read-only SAS URL for the blob."""
-        if not all([account, container, blob, key]):
-            print("[WARN] SAS generation skipped due to missing info")
-            return None
+      """Generate a valid read-only SAS URL for Azure Blob Storage."""
+      if not all([account, container, blob, key]):
+        print("[WARN] SAS generation skipped due to missing parameters")
+        return None
 
-        expiry = (datetime.utcnow() + timedelta(hours=validity_hours)).strftime('%Y-%m-%dT%H:%MZ')
-        start = (datetime.utcnow() - timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%MZ')
-        permissions = "r"
-        resource = "b"
-        signed_version = "2022-11-02"
+      start = (datetime.utcnow() - timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%MZ')
+      expiry = (datetime.utcnow() + timedelta(hours=validity_hours)).strftime('%Y-%m-%dT%H:%MZ')
+      permissions = "r"
+      resource = "b"
+      signed_version = "2020-02-10"  # stable and compatible
+      protocol = "https"
 
-        string_to_sign = f"{permissions}\n{start}\n{expiry}\n/blob/{account}/{container}/{blob}\n\n{signed_version}\n\nhttps\n\n"
-        decoded_key = base64.b64decode(key)
-        signature = base64.b64encode(
-            hmac.new(decoded_key, msg=string_to_sign.encode('utf-8'), digestmod=hashlib.sha256).digest()
-        ).decode('utf-8')
+      string_to_sign = (
+        f"{permissions}\n"
+        f"{start}\n"
+        f"{expiry}\n"
+        f"/blob/{account}/{container}/{blob}\n"
+        f"\n"         # signed identifier (si)
+        f"\n"         # signed IP (sip)
+        f"{protocol}\n"
+        f"{signed_version}\n"
+        f"\n" * 5     # response headers (rscc, rscd, rsce, rscl, rsct)
+      )
 
-        sas_token = (
-            f"sv={signed_version}&st={quote_plus(start)}&se={quote_plus(expiry)}"
-            f"&sr={resource}&sp={permissions}&sig={quote_plus(signature)}"
-        )
-        return f"https://{account}.blob.core.windows.net/{container}/{blob}?{sas_token}"
+      decoded_key = base64.b64decode(key)
+      signature = base64.b64encode(
+        hmac.new(decoded_key, msg=string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+      ).decode("utf-8")
+
+      sas_token = (
+        f"sv={signed_version}"
+        f"&st={quote_plus(start)}"
+        f"&se={quote_plus(expiry)}"
+        f"&sr={resource}"
+        f"&sp={permissions}"
+        f"&spr={protocol}"
+        f"&sig={quote_plus(signature)}"
+      )
+
+      url = f"https://{account}.blob.core.windows.net/{container}/{blob}?{sas_token}"
+      print(f"[INFO] SAS token generated for {blob} (valid {validity_hours}h)")
+      return url
 
     # --------------------------
     # Main Generator
