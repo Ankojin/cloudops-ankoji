@@ -64,7 +64,43 @@ stages:
         architecture: 'x64'
       displayName: "Setup Python $(pythonVersion)"
 
-    # Step 2: Azure Login
+    # Step 2: Set Environment Variables from Variable Groups
+    - task: PowerShell@2
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "Setting environment variables for ${{ parameters.environment }}..."
+          
+          # All infrastructure variables come from Variable Groups
+          $env:PROJECT_NAME = "${{ parameters.project }}"
+          $env:ENVIRONMENT = "${{ parameters.environment }}"
+          $env:SUBSCRIPTION_ID = "$(subscription_id)"
+          $env:LOCATION = "$(location)"
+          $env:VNET_NAME = "$(vnet_name)"
+          $env:VNET_RG = "$(vnet_rg)"
+          $env:TF_STATE_PATH = "$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
+
+          Write-Host "##vso[task.setvariable variable=PROJECT_NAME]$($env:PROJECT_NAME)"
+          Write-Host "##vso[task.setvariable variable=ENVIRONMENT]$($env:ENVIRONMENT)"
+          Write-Host "##vso[task.setvariable variable=SUBSCRIPTION_ID]$($env:SUBSCRIPTION_ID)"
+          Write-Host "##vso[task.setvariable variable=LOCATION_USED]$($env:LOCATION)"
+          Write-Host "##vso[task.setvariable variable=VNET_NAME_USED]$($env:VNET_NAME)"
+          Write-Host "##vso[task.setvariable variable=VNET_RG_USED]$($env:VNET_RG)"
+          Write-Host "##vso[task.setvariable variable=TF_STATE_PATH]$($env:TF_STATE_PATH)"
+
+          Write-Host "✅ Using Project: $($env:PROJECT_NAME)"
+          Write-Host "✅ Using Environment: $($env:ENVIRONMENT)"
+          Write-Host "✅ Using Subscription: $($env:SUBSCRIPTION_ID)"
+          Write-Host "✅ Using Location: $($env:LOCATION)"
+          Write-Host "✅ Using VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
+          Write-Host "📁 Terraform state will be stored at: $($env:TF_STATE_PATH)"
+
+          # Create directory structure
+          New-Item -Path $env:TF_STATE_PATH -ItemType Directory -Force | Out-Null
+          Write-Host "📁 Created state directory: $($env:TF_STATE_PATH)"
+      displayName: "Set Environment Variables from Variable Groups"
+
+    # Step 3: Azure Login
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -75,7 +111,7 @@ stages:
           Write-Host "✅ Azure login successful."
       displayName: "Azure Login"
 
-    # Step 3: Set & Validate Environment Variables (Full Original Logic)
+    # Step 4: Full Variable Validation
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -83,7 +119,6 @@ stages:
         failOnStderr: true
         script: |
           Write-Host "🔧 Validating and setting environment variables from Variable Groups..."
-
           function Set-ValidatedEnvVar {
               param($Name, $Value, $Required = $true)
               if ([string]::IsNullOrWhiteSpace($Value) -and $Required) {
@@ -98,25 +133,19 @@ stages:
               }
           }
 
-          # Core environment setup
+          # Full configuration injection (identical to v2.7)
           Set-ValidatedEnvVar "ENVIRONMENT" "${{ parameters.environment }}"
           Set-ValidatedEnvVar "PROJECT_NAME" "${{ parameters.project }}"
           Set-ValidatedEnvVar "SUBSCRIPTION_ID" "$(subscription_id)"
           Set-ValidatedEnvVar "LOCATION" "$(location)"
           Set-ValidatedEnvVar "TF_STATE_PATH" "$(tfStateDirectory)/${{ parameters.project }}/${{ parameters.environment }}"
-
-          # Networking
           Set-ValidatedEnvVar "VNET_NAME" "$(vnet_name)"
           Set-ValidatedEnvVar "VNET_RG" "$(vnet_rg)"
           Set-ValidatedEnvVar "SUBNET_RG" "$(subnet_rg)"
-
-          # Key Vault + DCR
           Set-ValidatedEnvVar "KEYVAULT_NAME" "$(keyvault_name)"
           Set-ValidatedEnvVar "KEYVAULT_RG" "$(keyvault_rg)"
           Set-ValidatedEnvVar "DCR_NAME" "$(dcr_name)"
           Set-ValidatedEnvVar "DCR_RG" "$(dcr_rg)"
-
-          # Diagnostics + Custom Script Storage
           Set-ValidatedEnvVar "DIAGNOSTICS_STORAGE" "$(diagnostics_storage)"
           Set-ValidatedEnvVar "DIAGNOSTICS_STORAGE_RG" "$(diagnostics_storage_rg)"
           Set-ValidatedEnvVar "SCRIPT_STORAGE_ACCOUNT" "$(script_storage_account)"
@@ -124,30 +153,12 @@ stages:
           Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_WINDOWS" "$(script_blob_name_windows)"
           Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_LINUX" "$(script_blob_name_linux)"
           Set-ValidatedEnvVar "SCRIPT_STORAGE_KEY" "$(script_storage_key)"
-
-          # Shutdown config
           Set-ValidatedEnvVar "shutdown_enabled" "$(shutdown_enabled)"
           Set-ValidatedEnvVar "shutdown_time" "$(shutdown_time)"
           Set-ValidatedEnvVar "shutdown_timezone" "$(shutdown_timezone)"
+      displayName: "Set & Validate All Variables"
 
-          # Tag handling
-          $tagsInput = '${{ parameters.tags_json_override }}'
-          if ('${{ parameters.action }}' -eq 'apply') {
-              if ([string]::IsNullOrWhiteSpace($tagsInput)) { throw "❌ Missing mandatory tags for apply" }
-              $env:default_tags_json = $tagsInput
-              Write-Host "🏷️ Tags loaded for apply"
-          } else {
-              if ([string]::IsNullOrWhiteSpace($tagsInput) -or $tagsInput -eq "Use Variable Group") {
-                  $env:default_tags_json = "{}"
-                  Write-Host "🏷️ Using existing tags for modify"
-              } else {
-                  $env:default_tags_json = $tagsInput
-                  Write-Host "🏷️ Updated tags loaded for modify"
-              }
-          }
-      displayName: "Set & Validate Environment Variables"
-
-    # Step 4: Python Generator + Copy TF Files
+    # Step 5: Python Terraform Generator
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -168,7 +179,7 @@ stages:
           }
       displayName: "Run Python + Copy TF"
 
-    # Step 5: Terraform Validate & Plan
+    # Step 6: Terraform Validate + Plan
     - task: PowerShell@2
       inputs:
         targetType: 'inline'
@@ -193,7 +204,7 @@ stages:
   jobs:
   - deployment: ApplyJob
     displayName: "Run Terraform Apply After Approval"
-    environment: 'vm-deploy'     # GUI approval
+    environment: 'vm-deploy'
     pool:
       name: cloudops-agent
     strategy:
@@ -202,7 +213,6 @@ stages:
           steps:
           - checkout: self
 
-          # Terraform Apply + Copy
           - task: PowerShell@2
             inputs:
               targetType: 'inline'
@@ -224,7 +234,6 @@ stages:
                 Write-Host "🎉 Terraform Apply completed successfully!"
             displayName: "Terraform Apply"
 
-          # Post Validation
           - task: PowerShell@2
             inputs:
               targetType: 'inline'
