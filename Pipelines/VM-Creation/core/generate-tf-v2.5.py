@@ -50,7 +50,7 @@ class TerraformVMGenerator:
             'script_storage_container': env.get('script_storage_container'),
             'script_blob_name_windows': env.get('script_blob_name_windows'),
             'script_blob_name_linux': env.get('script_blob_name_linux'),
-            'script_storage_key': env.get('script_storage_key'),
+            # 'script_storage_key' removed; only Azure CLI SAS generation is supported
             'enable_custom_script': str(env.get('enable_custom_script', 'true')).lower() == 'true',
             'shutdown_enabled': str(env.get('shutdown_enabled', 'true')).lower() == 'true',
             'shutdown_time': env.get('shutdown_time', '2000'),
@@ -221,18 +221,12 @@ class TerraformVMGenerator:
             print(f"[WARN] HMAC SAS generation failed: {e}")
             return None
 
-    def generate_blob_sas_url(self, account: str, container: str, blob: str, key: Optional[str], validity_hours: int = 24) -> Optional[str]:
-        """Generate blob SAS: try az CLI first, then fallback to HMAC method using account key."""
-        # Prefer az CLI approach
+    def generate_blob_sas_url(self, account: str, container: str, blob: str, key: Optional[str] = None, validity_hours: int = 24) -> Optional[str]:
+        """Generate blob SAS: only use az CLI approach."""
         url = self._try_az_cli_generate_sas(account, container, blob, validity_hours)
         if url:
             return url
-
-        # Fallback to HMAC method if key provided
-        if key:
-            return self._hmac_generate_sas(account, container, blob, key, validity_hours)
-
-        print("[WARN] No method available to generate SAS token (no az CLI or account key).")
+        print("[WARN] SAS token generation failed: az CLI not available or not authenticated.")
         return None
 
     # --------------------------
@@ -503,7 +497,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{attach_name}" {{
                 self.config['script_storage_account'],
                 self.config['script_storage_container'],
                 self.config['script_blob_name_linux'],
-                self.config.get('script_storage_key')
+                None
             )
 
         tf_file.write(f'''
@@ -574,7 +568,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
                 self.config['script_storage_account'],
                 self.config['script_storage_container'],
                 self.config['script_blob_name_windows'],
-                self.config.get('script_storage_key')
+                None
             )
 
         tf_file.write(f'''
