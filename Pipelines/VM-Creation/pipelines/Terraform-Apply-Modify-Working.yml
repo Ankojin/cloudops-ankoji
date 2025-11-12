@@ -179,47 +179,68 @@ stages:
           }
           Write-Host "✅ Azure CLI detected and ready for SAS generation."
 
-    # Step 6: Preflight Blob Verification
+    # Step 6: Preflight Blob Verification + Diagnostics
     - task: PowerShell@2
-      displayName: "Preflight: Verify Script Blob Exists"
+      displayName: "Preflight: Verify Script Blob Exists (with Diagnostics)"
       inputs:
         targetType: 'inline'
         script: |
           Write-Host "🔎 Checking blob access..."
-          $account = "$(script_storage_account)"
+          $account   = "$(script_storage_account)"
           $container = "$(script_storage_container)"
-          $blobWin = "$(script_blob_name_windows)"
+          $blobWin   = "$(script_blob_name_windows)"
           $blobLinux = "$(script_blob_name_linux)"
-          $verified = $false
+          $verified  = $false
 
-          try {
-              Write-Host "🔹 Checking Windows blob: $blobWin"
-              az storage blob show --account-name $account --container-name $container --name $blobWin --auth-mode login --only-show-errors --output none 2>$null
-              if ($LASTEXITCODE -eq 0) {
-                  Write-Host "✅ Verified Windows blob: $blobWin"
-                  $verified = $true
-              } else {
-                  Write-Host "⚠️ Windows blob not found or not accessible."
+          # Function to run az CLI and capture stdout/stderr safely
+          function Test-Blob {
+              param($BlobName)
+              try {
+                  Write-Host "🔹 Checking blob: $BlobName"
+                  $result = az storage blob show `
+                      --account-name $account `
+                      --container-name $container `
+                      --name $BlobName `
+                      --auth-mode login `
+                      --output json 2>&1
+
+                  if ($LASTEXITCODE -eq 0) {
+                      Write-Host "✅ Verified blob: $BlobName"
+                      return $true
+                  } else {
+                      Write-Warning "⚠️ Blob check failed for $BlobName"
+                      Write-Warning "🔧 CLI Output: $result"
+                      return $false
+                  }
               }
-
-              Write-Host "🔹 Checking Linux blob: $blobLinux"
-              az storage blob show --account-name $account --container-name $container --name $blobLinux --auth-mode login --only-show-errors --output none 2>$null
-              if ($LASTEXITCODE -eq 0) {
-                  Write-Host "✅ Verified Linux blob: $blobLinux"
-                  $verified = $true
-              } else {
-                  Write-Host "⚠️ Linux blob not found or not accessible."
-              }
-
-              if (-not $verified) {
-                  Write-Warning "⚠️ No accessible blobs found (Windows/Linux). Continuing without SAS validation."
+              catch {
+                  Write-Warning "⚠️ Blob verification threw exception for $BlobName:"
+                  Write-Warning "💬 Exception: $($_.Exception.Message)"
+                  return $false
               }
           }
-          catch {
-              Write-Warning "⚠️ Blob verification step encountered a CLI error: $($_.Exception.Message)"
-          }
-          Write-Host "✅ Preflight blob check complete."
 
+          # Check both blobs independently
+          $winOK = $false
+          $linOK = $false
+
+          if ($blobWin -and $blobWin -ne "") { $winOK = Test-Blob -BlobName $blobWin }
+          if ($blobLinux -and $blobLinux -ne "") { $linOK = Test-Blob -BlobName $blobLinux }
+
+          if ($winOK -or $linOK) {
+              Write-Host "✅ One or more blobs verified successfully."
+          }
+          else {
+              Write-Warning "⚠️ No accessible blobs found. SAS generation may fail."
+              Write-Host ""
+              Write-Host "🩺 Diagnostic Hints:"
+              Write-Host "  • Ensure blob names and container are correct."
+              Write-Host "  • Confirm service principal has **Storage Blob Data Reader** on $account."
+              Write-Host "  • If the storage account is in another subscription, run 'az account show' to verify context."
+              Write-Host "  • If using private endpoints or firewalls, ensure agent IP is allowed."
+          }
+
+          Write-Host "✅ Preflight blob diagnostic check complete."
 
     # Step 7: Python Terraform Generator
     - task: PowerShell@2
