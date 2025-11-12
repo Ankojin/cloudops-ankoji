@@ -57,21 +57,18 @@ stages:
       name: cloudops-agent
     steps:
 
-    # Step 1: Setup Python
     - task: UsePythonVersion@0
       displayName: "Setup Python $(pythonVersion)"
       inputs:
         versionSpec: '$(pythonVersion)'
         architecture: 'x64'
 
-    # Step 2: Set Environment Variables from Variable Groups
     - task: PowerShell@2
       displayName: "Set Environment Variables from Variable Groups"
       inputs:
         targetType: 'inline'
         script: |
           Write-Host "Setting environment variables for ${{ parameters.environment }}..."
-
           $env:PROJECT_NAME = "${{ parameters.project }}"
           $env:ENVIRONMENT = "${{ parameters.environment }}"
           $env:SUBSCRIPTION_ID = "$(subscription_id)"
@@ -79,8 +76,6 @@ stages:
           $env:VNET_NAME = "$(vnet_name)"
           $env:VNET_RG = "$(vnet_rg)"
           $env:TF_STATE_PATH = "$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
-
-          # ✅ Re-export critical vars for Python runtime
           $env:SUBNET_RG = "$(subnet_rg)"
           $env:KEYVAULT_NAME = "$(keyvault_name)"
           $env:KEYVAULT_RG = "$(keyvault_rg)"
@@ -95,17 +90,14 @@ stages:
           $env:shutdown_enabled = "$(shutdown_enabled)"
           $env:shutdown_time = "$(shutdown_time)"
           $env:shutdown_timezone = "$(shutdown_timezone)"
-
           Write-Host "✅ Using Project: $($env:PROJECT_NAME)"
           Write-Host "✅ Using Environment: $($env:ENVIRONMENT)"
           Write-Host "✅ Using Subscription: $($env:SUBSCRIPTION_ID)"
           Write-Host "✅ Using Location: $($env:LOCATION)"
           Write-Host "✅ Using VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
           Write-Host "📁 Terraform state directory: $($env:TF_STATE_PATH)"
-
           New-Item -Path $env:TF_STATE_PATH -ItemType Directory -Force | Out-Null
 
-    # Step 3: Azure Login
     - task: PowerShell@2
       displayName: "Azure Login"
       inputs:
@@ -116,7 +108,6 @@ stages:
           if ($LASTEXITCODE -ne 0) { throw "Azure login failed" }
           Write-Host "✅ Azure login successful."
 
-    # Step 4: Full Variable Validation
     - task: PowerShell@2
       displayName: "Set & Validate All Variables"
       inputs:
@@ -136,8 +127,6 @@ stages:
                   Write-Host "⚠️ SKIP: $Name (optional)"
               }
           }
-
-          # Validate key vars
           Set-ValidatedEnvVar "SUBSCRIPTION_ID" "$(subscription_id)"
           Set-ValidatedEnvVar "LOCATION" "$(location)"
           Set-ValidatedEnvVar "VNET_NAME" "$(vnet_name)"
@@ -154,62 +143,7 @@ stages:
           Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_WINDOWS" "$(script_blob_name_windows)"
           Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_LINUX" "$(script_blob_name_linux)"
 
-    # # Step 5: Preflight Blob Access Validation
-    # - task: PowerShell@2
-    #   displayName: "Preflight: Validate SPN Storage Access"
-    #   inputs:
-    #     targetType: 'inline'
-    #     script: |
-    #       Write-Host "🔎 Checking blob access using service principal login..."
-    #       az account show
-    #       $account   = "$(script_storage_account)"
-    #       $container = "$(script_storage_container)"
-    #       $blobWin   = "$(script_blob_name_windows)"
-    #       $blobLinux = "$(script_blob_name_linux)"
-    #       $accessGranted = $false
-
-    #       function Test-Blob {
-    #           param($BlobName)
-    #           try {
-    #               Write-Host "🔹 Checking blob: $BlobName"
-    #               $result = az storage blob show `
-    #                   --account-name $account `
-    #                   --container-name $container `
-    #                   --name $BlobName `
-    #                   --auth-mode login `
-    #                   --output json 2>&1
-
-    #               if ($LASTEXITCODE -eq 0 -and $result) {
-    #                   Write-Host "✅ Access confirmed for blob: $BlobName"
-    #                   return $true
-    #               } else {
-    #                   Write-Warning "⚠️ Access check failed for $BlobName"
-    #                   Write-Warning "🔧 CLI Output: $result"
-    #                   return $false
-    #               }
-    #           }
-    #           catch {
-    #               Write-Warning "⚠️ Exception while checking ${BlobName}: $($_.Exception.Message)"
-    #               return $false
-    #           }
-    #       }
-
-    #       if ($blobWin) { if (Test-Blob -BlobName $blobWin) { $accessGranted = $true } }
-    #       if ($blobLinux) { if (Test-Blob -BlobName $blobLinux) { $accessGranted = $true } }
-
-    #       if ($accessGranted) {
-    #           Write-Host "✅ SPN verified: Storage Account '$account' accessible."
-    #           exit 0
-    #       } else {
-    #           Write-Error "❌ SPN cannot access Storage Account '$account' or blobs missing."
-    #           Write-Host "🩺 Diagnostic Hints:"
-    #           Write-Host "  • Check blob names and container."
-    #           Write-Host "  • Ensure SPN has 'Storage Blob Data Reader' role on '$account'."
-    #           Write-Host "  • Verify 'az account show' context."
-    #           exit 1
-    #       }
-
-    # Step 6: Python Terraform Generator
+    # Step 6: Python Terraform Generator (fixed)
     - task: PowerShell@2
       displayName: "Run Python + Copy TF"
       inputs:
@@ -217,6 +151,14 @@ stages:
         script: |
           Set-Location "$(tfWorkingDirectory)"
           Write-Host "🐍 Running Terraform Generator..."
+
+          # ✅ Ensure correct project/environment passed to Python
+          $env:PROJECT_NAME = "${{ parameters.project }}"
+          $env:ENVIRONMENT  = "${{ parameters.environment }}"
+
+          # Ensure az CLI path is available for Python SAS generation
+          $env:PATH += ";C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin"
+
           python "$(tfWorkingDirectory)/core/generate-tf-v2.5.py"
           if ($LASTEXITCODE -ne 0) { throw "Python script failed" }
 
@@ -229,8 +171,12 @@ stages:
               Copy-Item $tfFile "$dst/main-${{ parameters.environment }}.tf" -Force
               Write-Host "📦 Copied TF file to $dst (timestamp + latest)"
           }
+          if (Select-String -Path $tfFile -Pattern "sig=") {
+              Write-Host "🔐 SAS tokens verified in Terraform file"
+          } else {
+              Write-Warning "⚠️ SAS tokens missing — check az CLI or SPN role assignments."
+          }
 
-    # Step 7: Terraform Validate + Plan
     - task: PowerShell@2
       displayName: "Terraform Validate + Plan"
       inputs:
@@ -244,7 +190,6 @@ stages:
               Write-Error "❌ Terraform project path not found: $tfProjectPath"
               exit 1
           }
-
           terraform init
           terraform validate
           terraform fmt
@@ -270,7 +215,6 @@ stages:
         deploy:
           steps:
           - checkout: self
-
           - task: PowerShell@2
             displayName: "Terraform Apply"
             inputs:
@@ -284,9 +228,7 @@ stages:
                     Write-Error "❌ Terraform project path not found: $tfProjectPath"
                     exit 1
                 }
-
                 terraform apply -auto-approve tfplan
-
                 $dst="$(TF_STATE_PATH)"
                 $ts=(Get-Date -Format 'yyyy-MM-dd-HHmm')
                 New-Item -Path $dst -ItemType Directory -Force | Out-Null
