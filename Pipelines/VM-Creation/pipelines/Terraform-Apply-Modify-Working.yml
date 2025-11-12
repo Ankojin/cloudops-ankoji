@@ -179,7 +179,7 @@ stages:
           }
           Write-Host "✅ Azure CLI detected and ready for SAS generation."
 
-    # Step 6: Preflight Blob Verification + Diagnostics
+        # Step 6: Preflight Blob Verification + Diagnostics
     - task: PowerShell@2
       displayName: "Preflight: Verify Script Blob Exists (with Diagnostics)"
       inputs:
@@ -214,7 +214,7 @@ stages:
                   }
               }
               catch {
-                  Write-Warning "⚠️ Blob verification threw exception for $BlobName:"
+                  Write-Warning "⚠️ Blob verification threw exception for ${BlobName}:"
                   Write-Warning "💬 Exception: $($_.Exception.Message)"
                   return $false
               }
