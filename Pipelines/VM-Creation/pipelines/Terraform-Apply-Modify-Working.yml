@@ -45,7 +45,6 @@ variables:
     value: "3.9"
 
 stages:
-
 # =========================
 #  STAGE 1: TERRAFORM PLAN
 # =========================
@@ -60,10 +59,10 @@ stages:
 
     # Step 1: Setup Python
     - task: UsePythonVersion@0
+      displayName: "Setup Python $(pythonVersion)"
       inputs:
         versionSpec: '$(pythonVersion)'
         architecture: 'x64'
-      displayName: "Setup Python $(pythonVersion)"
 
     # Step 2: Set Environment Variables from Variable Groups
     - task: PowerShell@2
@@ -81,11 +80,7 @@ stages:
           $env:VNET_RG = "$(vnet_rg)"
           $env:TF_STATE_PATH = "$(tfStateDirectory)/$($env:PROJECT_NAME)/$($env:ENVIRONMENT)"
 
-          # ✅ Re-export secure and critical variables to Python runtime
-          $env:SUBSCRIPTION_ID = "$(subscription_id)"
-          $env:LOCATION = "$(location)"
-          $env:VNET_NAME = "$(vnet_name)"
-          $env:VNET_RG = "$(vnet_rg)"
+          # ✅ Re-export critical vars for Python runtime
           $env:SUBNET_RG = "$(subnet_rg)"
           $env:KEYVAULT_NAME = "$(keyvault_name)"
           $env:KEYVAULT_RG = "$(keyvault_rg)"
@@ -106,39 +101,33 @@ stages:
           Write-Host "✅ Using Subscription: $($env:SUBSCRIPTION_ID)"
           Write-Host "✅ Using Location: $($env:LOCATION)"
           Write-Host "✅ Using VNet: $($env:VNET_NAME) in RG: $($env:VNET_RG)"
-          Write-Host "📁 Terraform state will be stored at: $($env:TF_STATE_PATH)"
+          Write-Host "📁 Terraform state directory: $($env:TF_STATE_PATH)"
 
           New-Item -Path $env:TF_STATE_PATH -ItemType Directory -Force | Out-Null
-          Write-Host "📁 Created state directory: $($env:TF_STATE_PATH)"
 
     # Step 3: Azure Login
     - task: PowerShell@2
-      displayName: "Azure Login (Service Principal)"
+      displayName: "Azure Login"
       inputs:
         targetType: 'inline'
         script: |
           Write-Host "🔐 Logging into Azure..."
-          if (!(Get-Command az -ErrorAction SilentlyContinue)) {
-            Write-Error "❌ Azure CLI not installed on agent."
-            exit 1
-          }
           az login --service-principal -u "$(ARM_CLIENT_ID)" -p "$(ARM_CLIENT_SECRET)" --tenant "$(ARM_TENANT_ID)"
           if ($LASTEXITCODE -ne 0) { throw "Azure login failed" }
-          az account show
           Write-Host "✅ Azure login successful."
 
-    # Step 4: Validate Environment Variables
+    # Step 4: Full Variable Validation
     - task: PowerShell@2
-      displayName: "Validate Environment Variables"
+      displayName: "Set & Validate All Variables"
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "🔧 Validating required variables..."
+          Write-Host "🔧 Validating and setting environment variables..."
           function Set-ValidatedEnvVar {
               param($Name, $Value, $Required = $true)
               if ([string]::IsNullOrWhiteSpace($Value) -and $Required) {
-                  Write-Error "❌ Missing required variable: $Name"
-                  throw "Variable $Name missing or empty"
+                  Write-Error "❌ MISSING REQUIRED VARIABLE: $Name"
+                  throw "Required variable $Name missing or empty"
               }
               if (![string]::IsNullOrWhiteSpace($Value)) {
                   Set-Item -Path "env:$Name" -Value $Value
@@ -148,6 +137,7 @@ stages:
               }
           }
 
+          # Validate key vars
           Set-ValidatedEnvVar "SUBSCRIPTION_ID" "$(subscription_id)"
           Set-ValidatedEnvVar "LOCATION" "$(location)"
           Set-ValidatedEnvVar "VNET_NAME" "$(vnet_name)"
@@ -163,35 +153,21 @@ stages:
           Set-ValidatedEnvVar "SCRIPT_STORAGE_CONTAINER" "$(script_storage_container)"
           Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_WINDOWS" "$(script_blob_name_windows)"
           Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_LINUX" "$(script_blob_name_linux)"
-          Set-ValidatedEnvVar "shutdown_enabled" "$(shutdown_enabled)"
-          Set-ValidatedEnvVar "shutdown_time" "$(shutdown_time)"
-          Set-ValidatedEnvVar "shutdown_timezone" "$(shutdown_timezone)"
 
-    # Step 5: Verify CLI
+    # Step 5: Preflight Blob Access Validation
     - task: PowerShell@2
-      displayName: "Verify Azure CLI Availability"
+      displayName: "Preflight: Validate SPN Storage Access"
       inputs:
         targetType: 'inline'
         script: |
-          if (!(Get-Command az -ErrorAction SilentlyContinue)) {
-            Write-Error "❌ Azure CLI missing."
-            exit 1
-          }
-          Write-Host "✅ Azure CLI detected and ready for SAS generation."
-
-            # Step 6: Preflight Blob Verification + Diagnostics (Non-Fatal)
-    - task: PowerShell@2
-      displayName: "Preflight: Verify Script Blob Exists (with Diagnostics)"
-      inputs:
-        targetType: 'inline'
-        script: |
-          Write-Host "🔎 Checking blob access..."
+          Write-Host "🔎 Checking blob access using service principal login..."
+          az account show
           $account   = "$(script_storage_account)"
           $container = "$(script_storage_container)"
           $blobWin   = "$(script_blob_name_windows)"
           $blobLinux = "$(script_blob_name_linux)"
+          $accessGranted = $false
 
-          # Function to run az CLI and capture stdout/stderr safely
           function Test-Blob {
               param($BlobName)
               try {
@@ -203,60 +179,78 @@ stages:
                       --auth-mode login `
                       --output json 2>&1
 
-                  if ($LASTEXITCODE -eq 0) {
-                      Write-Host "✅ Verified blob: $BlobName"
+                  if ($LASTEXITCODE -eq 0 -and $result) {
+                      Write-Host "✅ Access confirmed for blob: $BlobName"
                       return $true
                   } else {
-                      Write-Warning "⚠️ Blob check failed for $BlobName"
+                      Write-Warning "⚠️ Access check failed for $BlobName"
                       Write-Warning "🔧 CLI Output: $result"
                       return $false
                   }
               }
               catch {
-                  Write-Warning "⚠️ Blob verification threw exception for ${BlobName}:"
-                  Write-Warning "💬 Exception: $($_.Exception.Message)"
+                  Write-Warning "⚠️ Exception while checking ${BlobName}: $($_.Exception.Message)"
                   return $false
               }
           }
 
-          $winOK = $false
-          $linOK = $false
+          if ($blobWin) { if (Test-Blob -BlobName $blobWin) { $accessGranted = $true } }
+          if ($blobLinux) { if (Test-Blob -BlobName $blobLinux) { $accessGranted = $true } }
 
-          if ($blobWin -and $blobWin -ne "") { $winOK = Test-Blob -BlobName $blobWin }
-          if ($blobLinux -and $blobLinux -ne "") { $linOK = Test-Blob -BlobName $blobLinux }
-
-          if ($winOK -or $linOK) {
-              Write-Host "✅ One or more blobs verified successfully."
-          }
-          else {
-              Write-Warning "⚠️ No accessible blobs found. SAS generation may fail."
-              Write-Host ""
+          if ($accessGranted) {
+              Write-Host "✅ SPN verified: Storage Account '$account' accessible."
+              exit 0
+          } else {
+              Write-Error "❌ SPN cannot access Storage Account '$account' or blobs missing."
               Write-Host "🩺 Diagnostic Hints:"
-              Write-Host "  • Ensure blob names and container are correct."
-              Write-Host "  • Confirm service principal has **Storage Blob Data Reader** on $account."
-              Write-Host "  • If the storage account is in another subscription, run 'az account show' to verify context."
-              Write-Host "  • If using private endpoints or firewalls, ensure agent IP is allowed."
+              Write-Host "  • Check blob names and container."
+              Write-Host "  • Ensure SPN has 'Storage Blob Data Reader' role on '$account'."
+              Write-Host "  • Verify 'az account show' context."
+              exit 1
           }
 
-          Write-Host "✅ Preflight blob diagnostic check complete."
+    # Step 6: Python Terraform Generator
+    - task: PowerShell@2
+      displayName: "Run Python + Copy TF"
+      inputs:
+        targetType: 'inline'
+        script: |
+          Set-Location "$(tfWorkingDirectory)"
+          Write-Host "🐍 Running Terraform Generator..."
+          python "$(tfWorkingDirectory)/core/generate-tf-v2.5.py"
+          if ($LASTEXITCODE -ne 0) { throw "Python script failed" }
 
-          # ✅ Force successful exit to prevent pipeline failure
-          $global:LASTEXITCODE = 0
-          exit 0
+          $tfFile = "$(tfWorkingDirectory)/Project/${{ parameters.project }}/main-${{ parameters.environment }}.tf".ToLower()
+          $dst = "C:/TerraformState/Project/${{ parameters.project }}/${{ parameters.environment }}"
+          $ts = (Get-Date -Format 'yyyy-MM-dd-HHmm')
+          New-Item -Path $dst -ItemType Directory -Force | Out-Null
+          if (Test-Path $tfFile) {
+              Copy-Item $tfFile "$dst/main-${{ parameters.environment }}-$ts.tf" -Force
+              Copy-Item $tfFile "$dst/main-${{ parameters.environment }}.tf" -Force
+              Write-Host "📦 Copied TF file to $dst (timestamp + latest)"
+          }
 
-    # Step 8: Terraform Validate + Plan
+    # Step 7: Terraform Validate + Plan
     - task: PowerShell@2
       displayName: "Terraform Validate + Plan"
       inputs:
         targetType: 'inline'
         script: |
-          Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
+          $tfProjectPath = Join-Path "$(tfWorkingDirectory)" "Project/${{ parameters.project }}"
+          if (Test-Path $tfProjectPath) {
+              Set-Location $tfProjectPath
+              Write-Host "📁 Working directory set to: $tfProjectPath"
+          } else {
+              Write-Error "❌ Terraform project path not found: $tfProjectPath"
+              exit 1
+          }
+
           terraform init
           terraform validate
           terraform fmt
           terraform plan -out=tfplan
           terraform show tfplan > tfplan.txt
-          Write-Host "✅ Terraform plan completed successfully."
+          Write-Host "✅ Terraform plan complete."
 
 # =========================
 #  STAGE 2: APPLY (WITH APPROVAL)
@@ -265,7 +259,6 @@ stages:
   displayName: "Terraform Apply Stage (Requires Approval)"
   dependsOn: TerraformPlan
   condition: succeeded()
-
   jobs:
   - deployment: ApplyJob
     displayName: "Run Terraform Apply After Approval"
@@ -283,13 +276,20 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Set-Location "$(tfWorkingDirectory)/Project/${{ parameters.project }}/"
+                $tfProjectPath = Join-Path "$(tfWorkingDirectory)" "Project/${{ parameters.project }}"
+                if (Test-Path $tfProjectPath) {
+                    Set-Location $tfProjectPath
+                    Write-Host "📁 Working directory set to: $tfProjectPath"
+                } else {
+                    Write-Error "❌ Terraform project path not found: $tfProjectPath"
+                    exit 1
+                }
+
                 terraform apply -auto-approve tfplan
 
                 $dst="$(TF_STATE_PATH)"
                 $ts=(Get-Date -Format 'yyyy-MM-dd-HHmm')
                 New-Item -Path $dst -ItemType Directory -Force | Out-Null
-
                 $tf="main-${{ parameters.environment }}.tf".ToLower()
                 if (Test-Path $tf) {
                     Copy-Item $tf "$dst/main-${{ parameters.environment }}-$ts.tf" -Force
@@ -305,13 +305,10 @@ stages:
               targetType: 'inline'
               script: |
                 Write-Host "🔍 Checking Custom Script Extensions..."
-                $vms = az vm list --query "[].{Name:name,RG:resourceGroup}" -o json | ConvertFrom-Json
-                foreach ($v in $vms) {
-                  $ext = az vm extension list -g $v.RG --vm-name $v.Name -o json | ConvertFrom-Json
-                  $csx = $ext | ? { $_.publisher -like "*Microsoft.Compute*" -and $_.type -like "*CustomScript*" }
-                  if ($csx) {
-                    Write-Host "✅ $($v.Name): $($csx.settings.fileUris[0])"
-                  } else {
-                    Write-Warning "⚠️ No Custom Script Extension found for $($v.Name)"
-                  }
+                $vms=az vm list --query "[].{Name:name,RG:resourceGroup}" -o json|ConvertFrom-Json
+                foreach($v in $vms){
+                  $ext=az vm extension list -g $v.RG --vm-name $v.Name -o json|ConvertFrom-Json
+                  $csx=$ext|?{$_.publisher -like "*Microsoft.Compute*" -and $_.type -like "*CustomScript*"}
+                  if($csx){Write-Host "✅ $($v.Name): $($csx.settings.fileUris[0])"}
+                  else{Write-Warning "⚠️ No Custom Script Extension for $($v.Name)"}
                 }
