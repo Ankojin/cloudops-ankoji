@@ -412,26 +412,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{vm_name}_{disk['name']
 }}
 ''')
 
-        if script_enabled and script_sas_url:
-            tf_file.write(f'''
-# Custom Script Extension (Linux)
-resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
-  name                 = "CustomScriptExtension"
-  virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
-  publisher            = "Microsoft.Azure.Extensions"
-  type                 = "CustomScript"
-  type_handler_version = "2.0"
-
-  settings = jsonencode({{
-    fileUris = ["{script_sas_url}"]
-    commandToExecute = "sh {self.config['script_blob_name_linux']}"
-  }})
-
-  tags = {{
-    {tags_str}
-  }}
-}}
-''')
+        # ...existing code...
 
     # --------------------------
     # Windows VM
@@ -495,26 +476,7 @@ resource "azurerm_windows_virtual_machine" "{vm_name}" {{
 }}
 ''')
 
-        if script_enabled and script_sas_url:
-            tf_file.write(f'''
-# Custom Script Extension (Windows)
-resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
-  name                 = "CustomScriptExtension"
-  virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
-  publisher            = "Microsoft.Compute"
-  type                 = "CustomScriptExtension"
-  type_handler_version = "1.9"
-
-  settings = jsonencode({{
-    fileUris = ["{script_sas_url}"]
-    commandToExecute = "powershell -ExecutionPolicy Unrestricted -File {self.config['script_blob_name_windows']}"
-  }})
-
-  tags = {{
-    {tags_str}
-  }}
-}}
-''')
+        # ...existing code...
 
     # --------------------------
     # DCR + Shutdown
@@ -550,6 +512,62 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
   notification_settings {{
     enabled = false
   }}
+  tags = {{
+    {tags_str}
+  }}
+}}
+''')
+        # Move Custom Script Extension block here
+        script_enabled = self.config['enable_custom_script']
+        if os_type == "linux" and script_enabled:
+            script_sas_url = self.generate_blob_sas_url(
+                self.config['script_storage_account'],
+                self.config['script_storage_container'],
+                self.config['script_blob_name_linux'],
+                self.config['script_storage_key']
+            )
+            if script_sas_url:
+                tf_file.write(f'''
+# Custom Script Extension (Linux)
+resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
+  name                 = "CustomScriptExtension"
+  virtual_machine_id   = azurerm_linux_virtual_machine.{vm_name}.id
+  publisher            = "Microsoft.Azure.Extensions"
+  type                 = "CustomScript"
+  type_handler_version = "2.0"
+
+  settings = jsonencode({{
+    fileUris = ["{script_sas_url}"]
+    commandToExecute = "sh {self.config['script_blob_name_linux']}"
+  }})
+
+  tags = {{
+    {tags_str}
+  }}
+}}
+''')
+        elif os_type == "windows" and script_enabled:
+            script_sas_url = self.generate_blob_sas_url(
+                self.config['script_storage_account'],
+                self.config['script_storage_container'],
+                self.config['script_blob_name_windows'],
+                self.config['script_storage_key']
+            )
+            if script_sas_url:
+                tf_file.write(f'''
+# Custom Script Extension (Windows)
+resource "azurerm_virtual_machine_extension" "{vm_name}_script" {{
+  name                 = "CustomScriptExtension"
+  virtual_machine_id   = azurerm_windows_virtual_machine.{vm_name}.id
+  publisher            = "Microsoft.Compute"
+  type                 = "CustomScriptExtension"
+  type_handler_version = "1.9"
+
+  settings = jsonencode({{
+    fileUris = ["{script_sas_url}"]
+    commandToExecute = "powershell -ExecutionPolicy Unrestricted -File {self.config['script_blob_name_windows']}"
+  }})
+
   tags = {{
     {tags_str}
   }}

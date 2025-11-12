@@ -143,6 +143,81 @@ stages:
           Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_WINDOWS" "$(script_blob_name_windows)"
           Set-ValidatedEnvVar "SCRIPT_BLOB_NAME_LINUX" "$(script_blob_name_linux)"
 
+    # 🆕 New Step: Diagnostic SAS Access Validation
+    - task: PowerShell@2
+      displayName: "Diagnose: Validate Storage Access (Pre-SAS)"
+      inputs:
+        targetType: 'inline'
+        script: |
+          Write-Host "🔍 Checking blob access for SAS generation..."
+
+          $env:DIAGNOSTICS_STORAGE_RG = "$(diagnostics_storage_rg)"
+          $env:SCRIPT_STORAGE_ACCOUNT = "$(script_storage_account)"
+          $env:SCRIPT_STORAGE_CONTAINER = "$(script_storage_container)"
+          $env:SCRIPT_BLOB_NAME_WINDOWS = "$(script_blob_name_windows)"
+          $env:SCRIPT_BLOB_NAME_LINUX = "$(script_blob_name_linux)"
+
+          $account = $env:SCRIPT_STORAGE_ACCOUNT
+          $container = $env:SCRIPT_STORAGE_CONTAINER
+          $blobs = @($env:SCRIPT_BLOB_NAME_WINDOWS, $env:SCRIPT_BLOB_NAME_LINUX) | Where-Object { $_ -and $_ -ne "" }
+
+          if (-not $account -or -not $container) {
+              Write-Warning "⚠️ Storage account or container not defined — skipping blob verification."
+              exit 0
+          }
+
+          $accessibleCount = 0
+          foreach ($blob in $blobs) {
+              Write-Host "🔹 Checking blob: $blob"
+              try {
+                  $result = az storage blob show `
+                      --account-name $account `
+                      --container-name $container `
+                      --name $blob `
+                      --auth-mode login `
+                      --only-show-errors
+
+                  if ($LASTEXITCODE -eq 0) {
+                      Write-Host "✅ Successfully accessed blob: $blob"
+                      $accessibleCount++
+                  } else {
+                      Write-Warning "⚠️ Blob access failed: $blob (check permissions)"
+                  }
+              } catch {
+                  Write-Warning "⚠️ Blob verification threw exception for $blob:"
+                  Write-Warning "💬 Exception: $($_.Exception.Message)"
+              }
+          }
+
+          if ($accessibleCount -eq 0) {
+              Write-Warning "⚠️ No accessible blobs found. SAS generation may fail."
+              Write-Host ""
+              Write-Host "🩺 Diagnostic Hints:"
+              Write-Host "  • Ensure blob names and container are correct."
+              Write-Host "  • Confirm service principal has **Storage Blob Data Reader** role on $account."
+              Write-Host "  • Verify storage account RG: $($env:DIAGNOSTICS_STORAGE_RG)"
+              Write-Host "  • If storage uses firewall/private endpoints, ensure agent IP is allowed."
+          } else {
+              Write-Host "✅ Blob diagnostic check passed for $accessibleCount blob(s)."
+          }
+
+          Write-Host "✅ Preflight blob diagnostic check complete."
+
+
+    # 🆕 New Step: Check for CSV presence
+    - task: PowerShell@2
+      displayName: "Check CSV File Presence"
+      inputs:
+        targetType: 'inline'
+        script: |
+          $csvPath = "$(tfWorkingDirectory)/core/simplified-vms.csv"
+          if (!(Test-Path $csvPath)) {
+              Write-Error "❌ CSV file not found: $csvPath"
+              exit 1
+          } else {
+              Write-Host "✅ Found CSV file: $csvPath"
+          }
+
     # Step 6: Python Terraform Generator (fixed)
     - task: PowerShell@2
       displayName: "Run Python + Copy TF"
@@ -159,7 +234,7 @@ stages:
           # Ensure az CLI path is available for Python SAS generation
           $env:PATH += ";C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin;C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin"
 
-          python "$(tfWorkingDirectory)/core/generate-tf-v2.6.py"
+          python "$(tfWorkingDirectory)/core/generate-tf-v2.6.py" *>&1 | Tee-Object -FilePath "$(tfWorkingDirectory)/generate-tf.log"
           if ($LASTEXITCODE -ne 0) { throw "Python script failed" }
 
           $tfFile = "$(tfWorkingDirectory)/Project/${{ parameters.project }}/main-${{ parameters.environment }}.tf".ToLower()
