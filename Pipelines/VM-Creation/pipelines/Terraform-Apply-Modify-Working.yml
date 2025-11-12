@@ -192,20 +192,34 @@ stages:
           $blobLinux = "$(script_blob_name_linux)"
           $verified = $false
 
-          $result = az storage blob show --account-name $account --container-name $container --name $blobWin --auth-mode login --only-show-errors --output none 2>$null
-          if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ Verified Windows blob: $blobWin"
-              $verified = $true
-          } else {
-              $result = az storage blob show --account-name $account --container-name $container --name $blobLinux --auth-mode login --only-show-errors --output none 2>$null
+          try {
+              Write-Host "🔹 Checking Windows blob: $blobWin"
+              az storage blob show --account-name $account --container-name $container --name $blobWin --auth-mode login --only-show-errors --output none 2>$null
+              if ($LASTEXITCODE -eq 0) {
+                  Write-Host "✅ Verified Windows blob: $blobWin"
+                  $verified = $true
+              } else {
+                  Write-Host "⚠️ Windows blob not found or not accessible."
+              }
+
+              Write-Host "🔹 Checking Linux blob: $blobLinux"
+              az storage blob show --account-name $account --container-name $container --name $blobLinux --auth-mode login --only-show-errors --output none 2>$null
               if ($LASTEXITCODE -eq 0) {
                   Write-Host "✅ Verified Linux blob: $blobLinux"
                   $verified = $true
+              } else {
+                  Write-Host "⚠️ Linux blob not found or not accessible."
+              }
+
+              if (-not $verified) {
+                  Write-Warning "⚠️ No accessible blobs found (Windows/Linux). Continuing without SAS validation."
               }
           }
-          if (-not $verified) {
-              Write-Warning "⚠️ Could not verify blob access. SAS generation may fail."
+          catch {
+              Write-Warning "⚠️ Blob verification step encountered a CLI error: $($_.Exception.Message)"
           }
+          Write-Host "✅ Preflight blob check complete."
+
 
     # Step 7: Python Terraform Generator
     - task: PowerShell@2
