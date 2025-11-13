@@ -29,9 +29,9 @@ parameters:
 
 variables:
   - name: tfWorkingDirectory
-    value: "$(Build.SourcesDirectory)\Pipelines\VM-Creation"
+    value: '$(Build.SourcesDirectory)\Pipelines\VM-Creation'
   - name: tfStateDirectory
-    value: "C:\TerraformState\Project"
+    value: 'C:\TerraformState\Project'
   - group: TerraformVariables
   - ${{ if eq(parameters.environment, 'DEV') }}:
     - group: VM-Creation-DEV
