@@ -110,43 +110,80 @@ stages:
         targetType: 'inline'
         script: |
           Write-Host "🔑 Generating SAS tokens for Custom Script blobs..."
-          $expiry = (Get-Date).AddHours(24).ToString("yyyy-MM-ddTHH:mmZ")
-          $account = "$(script_storage_account)"
+          
+          # Input values from pipeline variables
+          $account   = "$(script_storage_account)"
           $container = "$(script_storage_container)"
-          $key = "$(script_storage_key)"
+          $key       = "$(script_storage_key)"
+          $expiry    = (Get-Date).AddHours(24).ToString("yyyy-MM-ddTHH:mmZ")
+
+          if (-not $account -or -not $container -or -not $key) {
+              Write-Error "❌ Missing SCRIPT_STORAGE_ACCOUNT, SCRIPT_STORAGE_CONTAINER, or SCRIPT_STORAGE_KEY"
+              exit 1
+          }
+
+          # Required for az CLI key access
           $env:AZURE_STORAGE_KEY = $key
 
           function Generate-SasUrl {
-              param($blobName)
-              try {
-                  if ([string]::IsNullOrWhiteSpace($blobName)) {
-                      Write-Warning "⚠️ Blob name missing, skipping SAS generation."
-                      return $null
-                  }
-                  $sas = az storage blob generate-sas `
-                      --account-name $account `
-                      --container-name $container `
-                      --name $blobName `
-                      --permissions r `
-                      --expiry $expiry `
-                      --account-key $key `
-                      --https-only `
-                      -o tsv
-                  if (-not $sas) { return $null }
-                  return "https://$account.blob.core.windows.net/$container/$blobName?$sas"
-              } catch {
-                  Write-Warning "⚠️ Failed SAS generation for ${blobName}: $_"
-                  return $null
-              }
+            param(
+              [string]$BlobName
+            )
+            
+            if ([string]::IsNullOrWhiteSpace($BlobName)) {
+                Write-Warning "⚠️ Blob name empty — skipping"
+                return $null
+            }
+
+            try {
+                Write-Host "🔄 Generating SAS token for: $BlobName"
+
+                $sas = az storage blob generate-sas `
+                    --account-name $account `
+                    --container-name $container `
+                    --name $BlobName `
+                    --permissions r `
+                    --expiry $expiry `
+                    --auth-mode key `
+                    --https-only `
+                    -o tsv
+
+                if (-not $sas) {
+                    Write-Warning "⚠️ az CLI returned empty SAS for $BlobName"
+                    return $null
+                }
+
+                $url = "https://$account.blob.core.windows.net/$container/$BlobName?$sas"
+
+                Write-Host "✔️ SAS URL generated for $BlobName:"
+                Write-Host $url
+
+                return $url
+            }
+            catch {
+                Write-Warning ("⚠️ Failed SAS generation for {0}: {1}" -f $BlobName, $_)
+                return $null
+            }
           }
 
-          $winBlob = "$(script_blob_name_windows)"
+          # Blob names from variables
+          $winBlob   = "$(script_blob_name_windows)"
           $linuxBlob = "$(script_blob_name_linux)"
-          $sasWin = Generate-SasUrl -blobName $winBlob
-          $sasLinux = Generate-SasUrl -blobName $linuxBlob
 
-          if ($sasWin) { Write-Host "✅ Windows SAS URL generated"; Write-Host "##vso[task.setvariable variable=SAS_URL_WINDOWS;issecret=true]$sasWin" }
-          if ($sasLinux) { Write-Host "✅ Linux SAS URL generated"; Write-Host "##vso[task.setvariable variable=SAS_URL_LINUX;issecret=true]$sasLinux" }
+          # Generate SAS URLs
+          $sasWin   = Generate-SasUrl -BlobName $winBlob
+          $sasLinux = Generate-SasUrl -BlobName $linuxBlob
+
+          # Export to pipeline variables (secret)
+          if ($sasWin) {
+            Write-Host "##vso[task.setvariable variable=SAS_URL_WINDOWS;issecret=true]$sasWin"
+            Write-Host "🔐 Stored SAS_URL_WINDOWS"
+          }
+          if ($sasLinux) {
+            Write-Host "##vso[task.setvariable variable=SAS_URL_LINUX;issecret=true]$sasLinux"
+            Write-Host "🔐 Stored SAS_URL_LINUX"
+          }
+
           Write-Host "📦 SAS generation complete."
 
     # =====================
@@ -180,13 +217,27 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
+          # Compute project directory again (variables do not persist between tasks)
           $tfProjectPath = Join-Path "$(tfWorkingDirectory)" "Project/${{ parameters.project }}"
-          Set-Location $tfProjectPath
+
+          if (Test-Path $tfProjectPath) {
+              Write-Host "📁 Working directory set to: $tfProjectPath"
+              Set-Location $tfProjectPath
+          } else {
+              Write-Error "❌ Terraform project path not found: $tfProjectPath"
+              exit 1
+          }
+
           terraform init
           terraform validate
           terraform plan -out=tfplan
-          terraform show tfplan > "$(tfProjectPath)/tfplan.txt"
+
+          # Generate tfplan.txt inside same directory
+          terraform show tfplan > "$tfProjectPath/tfplan.txt"
+          Write-Host "📄 tfplan.txt saved to $tfProjectPath"
+
           Write-Host "✅ Terraform plan complete."
+
 
     # ✅ Enhancement: Show Modify Summary only if action=modify
     - ${{ if eq(parameters.action, 'modify') }}:
@@ -210,36 +261,56 @@ stages:
   displayName: "Terraform Apply Stage (Requires Approval)"
   dependsOn: TerraformPlan
   condition: succeeded()
+
   jobs:
   - deployment: ApplyJob
     displayName: "Run Terraform Apply After Approval"
     environment: 'vm-deploy'
     pool:
       name: cloudops-agent
+
     strategy:
       runOnce:
         deploy:
           steps:
           - checkout: self
+
           - task: PowerShell@2
             displayName: "Terraform Apply"
             inputs:
               targetType: 'inline'
               script: |
+                # Rebuild tfProjectPath (variables do NOT persist between tasks)
                 $tfProjectPath = Join-Path "$(tfWorkingDirectory)" "Project/${{ parameters.project }}"
-                Set-Location $tfProjectPath
-                terraform apply -auto-approve tfplan
-                Write-Host "🎉 Terraform Apply completed successfully!"
 
-                # ✅ Enhancement: Copy tfstate + lock files to state dir
-                $dst="$(tfStateDirectory)/${{ parameters.project }}/${{ parameters.environment }}"
-                $ts=(Get-Date -Format 'yyyy-MM-dd-HHmm')
+                if (Test-Path $tfProjectPath) {
+                    Write-Host "📁 Working directory set to: $tfProjectPath"
+                    Set-Location $tfProjectPath
+                } else {
+                    Write-Error "❌ Terraform project path not found: $tfProjectPath"
+                    exit 1
+                }
+
+                terraform apply -auto-approve tfplan
+
+                # Persist Terraform state + tf + lock files
+                $dst = "$(TF_STATE_PATH)"
+                $ts  = (Get-Date -Format 'yyyy-MM-dd-HHmm')
                 New-Item -Path $dst -ItemType Directory -Force | Out-Null
-                $tf="main-${{ parameters.environment }}.tf".ToLower()
+
+                $tf = "main-${{ parameters.environment }}.tf".ToLower()
+
                 if (Test-Path $tf) {
                     Copy-Item $tf "$dst/main-${{ parameters.environment }}-$ts.tf" -Force
                     Copy-Item $tf "$dst/" -Force
                 }
-                if (Test-Path "terraform.tfstate"){Copy-Item "terraform.tfstate" "$dst/" -Force}
-                if (Test-Path ".terraform.lock.hcl"){Copy-Item ".terraform.lock.hcl" "$dst/" -Force}
-                Write-Host "📦 State and lock files copied to: $dst"
+
+                if (Test-Path "terraform.tfstate") {
+                    Copy-Item "terraform.tfstate" "$dst/" -Force
+                }
+
+                if (Test-Path ".terraform.lock.hcl") {
+                    Copy-Item ".terraform.lock.hcl" "$dst/" -Force
+                }
+
+                Write-Host "🎉 Terraform Apply completed successfully!"
