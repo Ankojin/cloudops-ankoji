@@ -53,17 +53,7 @@ stages:
     pool:
       name: cloudops-agent
     steps:
-
-      # Optional helper to inspect working directories (keeps original lines)
-      - task: PowerShell@2
-        displayName: "List Plan Directory Files (pre-run)"
-        inputs:
-          targetType: 'inline'
-          script: |
-            $path = "$(tfWorkingDirectory)\Project\${{ parameters.project }}\"
-            Write-Host "Listing files in: $path"
-            if (Test-Path $path) { Get-ChildItem -Path $path -Recurse | ForEach-Object { Write-Host $_.FullName } } else { Write-Host "Path not present yet: $path" }
-
+ 
       - task: UsePythonVersion@0
         displayName: "Setup Python $(pythonVersion)"
         inputs:
@@ -301,6 +291,7 @@ stages:
             terraform show tfplan > "$tfProjectPath/tfplan.txt"
             Write-Host "📄 tfplan.txt saved to $tfProjectPath"
 
+      # Verify that plan files exist
       - task: PowerShell@2
         displayName: "Verify Plan Files Exist"
         inputs:
@@ -317,12 +308,21 @@ stages:
             }
             Write-Host "✅ Plan files found in: $path"
 
+      # Publish tfplan and tfplan.txt as artifacts     
       - task: PublishBuildArtifacts@1
         displayName: "Publish Terraform Plan Artifacts"
         inputs:
-          PathtoPublish: '$(tfWorkingDirectory)\Project\${{ parameters.project }}\'
+          PathtoPublish: '$(tfWorkingDirectory)/Project/${{ parameters.project }}'
           ArtifactName: 'TerraformFiles-${{ parameters.environment }}-$(Build.BuildNumber)'
           publishLocation: 'Pipeline'
+      # Debugging step to show artifact contents    
+      - task: PowerShell@2
+        displayName: "Debug Artifact Folder"
+        inputs:
+          targetType: 'inline'
+          script: |
+            Write-Host "📁 Checking contents before publish:"
+            Get-ChildItem -Path "$(tfWorkingDirectory)/Project/${{ parameters.project }}" -Recurse
 
       # Show modify summary only for modify
       - ${{ if eq(parameters.action, 'modify') }}:
