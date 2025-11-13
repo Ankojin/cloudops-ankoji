@@ -274,6 +274,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{disk_name}_attach" {{
   virtual_machine_id = azurerm_{vm_type}.{vm_name}.id
   lun                = {n}
   create_option      = "Attach"
+  caching            = "None"
 }}
 """)
 
