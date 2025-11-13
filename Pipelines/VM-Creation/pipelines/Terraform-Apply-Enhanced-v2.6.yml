@@ -157,7 +157,7 @@ stages:
 
               $url = "https://$account.blob.core.windows.net/$container/$BlobName?$sas"
 
-              Write-Host "✔️ SAS for $BlobName:"
+              Write-Host "✔️ SAS for ${BlobName}:"
               Write-Host $url
 
               return $url
