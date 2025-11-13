@@ -241,7 +241,7 @@ stages:
     - task: PublishBuildArtifacts@1
       displayName: "Publish Terraform Plan Artifacts"
       inputs:
-        PathtoPublish: '$(tfWorkingDirectory)/Project/${{ parameters.project }}/'
+        PathtoPublish: '$(tfWorkingDirectory)\Project\${{ parameters.project }}\'
         ArtifactName: 'TerraformFiles-${{ parameters.environment }}-$(Build.BuildNumber)'
         publishLocation: 'Pipeline'
 
@@ -288,7 +288,7 @@ stages:
               buildType: 'current'
               downloadType: 'single'
               ArtifactName: 'TerraformFiles-${{ parameters.environment }}-$(Build.BuildNumber)'
-              downloadPath: '$(tfWorkingDirectory)/Project/${{ parameters.project }}/'
+              downloadPath: '$(tfWorkingDirectory)\Project\${{ parameters.project }}\'
 
           - task: PowerShell@2
             displayName: "Terraform Apply"
