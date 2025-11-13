@@ -117,86 +117,79 @@ stages:
     # =====================================================
     # 🔑 SAS TOKEN GENERATION
     # =====================================================
-    
     - task: PowerShell@2
       displayName: "Generate SAS URLs for Custom Script Blobs"
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "🔑 Generating SAS tokens for Custom Script blobs..."
-          $sasWin = Generate-SasUrl -BlobName "$(script_blob_name_windows)"
+          Write-Host "🔑 Generating SAS tokens..."
+
+          Write-Host "📌 DEBUG — VARIABLES RECEIVED:"
+          Write-Host "  script_storage_account      = '$(script_storage_account)'"
+          Write-Host "  script_storage_container    = '$(script_storage_container)'"
+          Write-Host "  script_storage_key          = '$(script_storage_key)'"
+          Write-Host "  script_blob_name_windows    = '$(script_blob_name_windows)'"
+          Write-Host "  script_blob_name_linux      = '$(script_blob_name_linux)'"
+          Write-Host ""
+
+          function Generate-SasUrl {
+            param([string]$BlobName)
+
+            if ([string]::IsNullOrWhiteSpace($BlobName)) {
+              Write-Warning "❌ Blob name EMPTY in pipeline — SAS URL cannot be generated."
+              return $null
+            }
+
+            $expiry    = (Get-Date).AddHours(24).ToString("yyyy-MM-ddTHH:mmZ")
+            $account   = "$(script_storage_account)"
+            $container = "$(script_storage_container)"
+            $key       = "$(script_storage_key)"
+
+            $env:AZURE_STORAGE_KEY = $key
+
+            try {
+              Write-Host "⏳ Generating SAS for blob: ${BlobName}"
+
+              $sas = az storage blob generate-sas `
+                      --account-name      $account `
+                      --container-name    $container `
+                      --name              $BlobName `
+                      --permissions       r `
+                      --expiry            $expiry `
+                      --auth-mode         key `
+                      --https-only `
+                      -o tsv
+
+              if (-not $sas) {
+                Write-Warning "⚠️ No SAS returned for $BlobName"
+                return $null
+              }
+
+              $url = "https://$account.blob.core.windows.net/$container/$BlobName?$sas"
+
+              Write-Host "✔️ SAS URL generated:"
+              Write-Host "   $url"
+
+              return $url
+            }
+            catch {
+              Write-Warning ("❌ SAS generation failed for {0}: {1}" -f $BlobName, $_)
+              return $null
+            }
+          }
+
+          $sasWin   = Generate-SasUrl -BlobName "$(script_blob_name_windows)"
           $sasLinux = Generate-SasUrl -BlobName "$(script_blob_name_linux)"
+
           if ($sasWin) {
             Write-Host "##vso[task.setvariable variable=SAS_URL_WINDOWS;issecret=true]$sasWin"
           }
           if ($sasLinux) {
             Write-Host "##vso[task.setvariable variable=SAS_URL_LINUX;issecret=true]$sasLinux"
           }
+
           Write-Host "📦 SAS generation complete."
-    
-    
-    # - task: PowerShell@2
-    #   displayName: "Generate SAS URLs for Custom Script Blobs"
-    #   inputs:
-    #     targetType: 'inline'
-    #     script: |
-    #       Write-Host "🔑 Generating SAS tokens..."
 
-    #       function Generate-SasUrl {
-    #         param([string]$BlobName)
-
-    #         if ([string]::IsNullOrWhiteSpace($BlobName)) {
-    #           Write-Warning "Empty blob name — skipping"
-    #           return $null
-    #         }
-
-    #         $expiry = (Get-Date).AddHours(24).ToString("yyyy-MM-ddTHH:mmZ")
-    #         $account = "$(script_storage_account)"
-    #         $container = "$(script_storage_container)"
-    #         $key = "$(script_storage_key)"
-
-    #         $env:AZURE_STORAGE_KEY = $key
-
-    #         try {
-    #           $sas = az storage blob generate-sas `
-    #                   --account-name $account `
-    #                   --container-name $container `
-    #                   --name $BlobName `
-    #                   --permissions r `
-    #                   --expiry $expiry `
-    #                   --auth-mode key `
-    #                   --https-only `
-    #                   -o tsv
-
-    #           if (-not $sas) {
-    #             Write-Warning "No SAS returned for $BlobName"
-    #             return $null
-    #           }
-
-    #           $url = "https://$account.blob.core.windows.net/$container/$BlobName?$sas"
-
-    #           Write-Host "✔️ SAS for ${BlobName}:"
-    #           Write-Host $url
-
-    #           return $url
-    #         }
-    #         catch {
-    #           Write-Warning ("Failed SAS generation for {0}: {1}" -f $BlobName, $_)
-    #           return $null
-    #         }
-    #       }
-
-    #       $sasWin = Generate-SasUrl -BlobName "$(script_blob_name_windows)"
-    #       $sasLinux = Generate-SasUrl -BlobName "$(script_blob_name_linux)"
-
-    #       if ($sasWin) {
-    #         Write-Host "##vso[task.setvariable variable=SAS_URL_WINDOWS;issecret=true]$sasWin"
-    #       }
-    #       if ($sasLinux) {
-    #         Write-Host "##vso[task.setvariable variable=SAS_URL_LINUX;issecret=true]$sasLinux"
-    #       }
-
-    #       Write-Host "📦 SAS generation complete."
 
     # =====================================================
     # 🐍 PYTHON GENERATOR
