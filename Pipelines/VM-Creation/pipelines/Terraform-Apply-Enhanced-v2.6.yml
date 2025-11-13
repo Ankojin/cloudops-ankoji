@@ -122,7 +122,7 @@ stages:
       inputs:
         targetType: 'inline'
         script: |
-          Write-Host "🔑 Generating SAS tokens..."
+          Write-Host "🔑 Generating SAS tokens for Custom Script blobs..."
 
           Write-Host "📌 DEBUG — VARIABLES RECEIVED:"
           Write-Host "  script_storage_account      = '$(script_storage_account)'"
@@ -131,6 +131,13 @@ stages:
           Write-Host "  script_blob_name_windows    = '$(script_blob_name_windows)'"
           Write-Host "  script_blob_name_linux      = '$(script_blob_name_linux)'"
           Write-Host ""
+          
+          $expiry    = (Get-Date).AddHours(24).ToString("yyyy-MM-ddTHH:mmZ")
+          $account   = "$(script_storage_account)"
+          $container = "$(script_storage_container)"
+          $key       = "$(script_storage_key)"
+
+          $env:AZURE_STORAGE_KEY = $key
 
           function Generate-SasUrl {
             param([string]$BlobName)
@@ -140,15 +147,8 @@ stages:
               return $null
             }
 
-            $expiry    = (Get-Date).AddHours(24).ToString("yyyy-MM-ddTHH:mmZ")
-            $account   = "$(script_storage_account)"
-            $container = "$(script_storage_container)"
-            $key       = "$(script_storage_key)"
-
-            $env:AZURE_STORAGE_KEY = $key
-
             try {
-              Write-Host "⏳ Generating SAS for blob: ${BlobName}"
+              Write-Host "⏳ Generating SAS for blob: $BlobName"
 
               $sas = az storage blob generate-sas `
                       --account-name      $account `
@@ -189,6 +189,7 @@ stages:
           }
 
           Write-Host "📦 SAS generation complete."
+
 
 
     # =====================================================
