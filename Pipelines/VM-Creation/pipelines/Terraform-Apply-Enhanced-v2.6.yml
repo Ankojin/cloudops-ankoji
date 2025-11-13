@@ -124,18 +124,21 @@ stages:
         script: |
           Write-Host "🔑 Generating SAS tokens for Custom Script blobs..."
 
+          # Make blob names available to function
+          $env:SCRIPT_BLOB_NAME_WINDOWS = "$(script_blob_name_windows)"
+          $env:SCRIPT_BLOB_NAME_LINUX   = "$(script_blob_name_linux)"
+
           Write-Host "📌 DEBUG — VARIABLES RECEIVED:"
-          Write-Host "  script_storage_account      = '$(script_storage_account)'"
-          Write-Host "  script_storage_container    = '$(script_storage_container)'"
-          Write-Host "  script_storage_key          = '$(script_storage_key)'"
-          Write-Host "  script_blob_name_windows    = '$(script_blob_name_windows)'"
-          Write-Host "  script_blob_name_linux      = '$(script_blob_name_linux)'"
+          Write-Host "  script_storage_account   = '$(script_storage_account)'"
+          Write-Host "  script_storage_container = '$(script_storage_container)'"
+          Write-Host "  script_blob_name_windows = '$env:SCRIPT_BLOB_NAME_WINDOWS'"
+          Write-Host "  script_blob_name_linux   = '$env:SCRIPT_BLOB_NAME_LINUX'"
           Write-Host ""
-          
-          $expiry    = (Get-Date).AddHours(24).ToString("yyyy-MM-ddTHH:mmZ")
+
           $account   = "$(script_storage_account)"
           $container = "$(script_storage_container)"
           $key       = "$(script_storage_key)"
+          $expiry    = (Get-Date).AddHours(24).ToString("yyyy-MM-ddTHH:mmZ")
 
           $env:AZURE_STORAGE_KEY = $key
 
@@ -143,7 +146,7 @@ stages:
             param([string]$BlobName)
 
             if ([string]::IsNullOrWhiteSpace($BlobName)) {
-              Write-Warning "❌ Blob name EMPTY in pipeline — SAS URL cannot be generated."
+              Write-Warning "❌ Blob name EMPTY — SAS cannot be generated."
               return $null
             }
 
@@ -151,20 +154,21 @@ stages:
               Write-Host "⏳ Generating SAS for blob: $BlobName"
 
               $sas = az storage blob generate-sas `
-                      --account-name      $account `
-                      --container-name    $container `
-                      --name              $BlobName `
-                      --permissions       r `
-                      --expiry            $expiry `
-                      --auth-mode         key `
+                      --account-name   $account `
+                      --container-name $container `
+                      --name           $BlobName `
+                      --permissions    r `
+                      --expiry         $expiry `
+                      --auth-mode      key `
                       --https-only `
                       -o tsv
 
               if (-not $sas) {
-                Write-Warning "⚠️ No SAS returned for $BlobName"
+                Write-Warning "⚠️ Empty SAS returned for $BlobName"
                 return $null
               }
 
+              # Construct correct SAS URL
               $url = "https://$account.blob.core.windows.net/$container/$BlobName?$sas"
 
               Write-Host "✔️ SAS URL generated:"
@@ -178,15 +182,15 @@ stages:
             }
           }
 
-          $sasWin   = Generate-SasUrl -BlobName "$(script_blob_name_windows)"
-          $sasLinux = Generate-SasUrl -BlobName "$(script_blob_name_linux)"
+          # FIX — use env vars directly
+          $winBlob   = $env:SCRIPT_BLOB_NAME_WINDOWS
+          $linuxBlob = $env:SCRIPT_BLOB_NAME_LINUX
 
-          if ($sasWin) {
-            Write-Host "##vso[task.setvariable variable=SAS_URL_WINDOWS;issecret=true]$sasWin"
-          }
-          if ($sasLinux) {
-            Write-Host "##vso[task.setvariable variable=SAS_URL_LINUX;issecret=true]$sasLinux"
-          }
+          $sasWin   = Generate-SasUrl -BlobName $winBlob
+          $sasLinux = Generate-SasUrl -BlobName $linuxBlob
+
+          if ($sasWin)   { Write-Host "##vso[task.setvariable variable=SAS_URL_WINDOWS;issecret=true]$sasWin" }
+          if ($sasLinux) { Write-Host "##vso[task.setvariable variable=SAS_URL_LINUX;issecret=true]$sasLinux" }
 
           Write-Host "📦 SAS generation complete."
 
