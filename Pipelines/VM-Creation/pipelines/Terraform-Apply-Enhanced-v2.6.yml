@@ -135,7 +135,7 @@ stages:
                   if (-not $sas) { return $null }
                   return "https://$account.blob.core.windows.net/$container/$blobName?$sas"
               } catch {
-                  Write-Warning "⚠️ Failed SAS generation for $blobName: $_"
+                  Write-Warning "⚠️ Failed SAS generation for ${blobName}: $_"
                   return $null
               }
           }
