@@ -221,6 +221,22 @@ stages:
 
           Write-Host "✅ Terraform plan complete."
 
+    - task: PowerShell@2
+      displayName: "Verify Plan Files Exist"
+      inputs:
+        targetType: 'inline'
+        script: |
+          $path = "$(tfWorkingDirectory)/Project/${{ parameters.project }}"
+          if (!(Test-Path $path)) {
+            Write-Error "❌ Plan directory not found: $path"
+            exit 1
+          }
+          if (!(Test-Path "$path/tfplan") -or !(Test-Path "$path/tfplan.txt")) {
+            Write-Error "❌ Plan files not found in: $path"
+            exit 1
+          }
+          Write-Host "✅ Plan files found in: $path"
+
     # Publish tfplan and tfplan.txt as pipeline artifacts for next stage
     - task: PublishBuildArtifacts@1
       displayName: "Publish Terraform Plan Artifacts"
@@ -228,6 +244,7 @@ stages:
         PathtoPublish: '$(tfWorkingDirectory)/Project/${{ parameters.project }}'
         ArtifactName: 'tfplan-artifacts'
         publishLocation: 'Pipeline'
+
 
 
     # ✅ Enhancement: Show Modify Summary only if action=modify
