@@ -256,9 +256,8 @@ stages:
               Write-Host "🔍 Modify Summary:"
               Get-Content $path | Select-String -Pattern "Plan:" -Context 2,2
             }
-
 # ===================================================
-#  STAGE 2 — APPLY
+#  STAGE 2 — APPLY (ENHANCED v2.6)
 # ===================================================
 - stage: TerraformApply
   displayName: "Terraform Apply Stage (Requires Approval)"
@@ -279,23 +278,116 @@ stages:
 
           - checkout: self
 
+          # =====================================================
+          # Azure Login for this job (fresh environment)
+          # =====================================================
           - task: PowerShell@2
-            displayName: "Terraform Apply"
+            displayName: "Azure Login"
             inputs:
               targetType: 'inline'
               script: |
-                $tfProjectPath = "$(tfWorkingDirectory)\Project\${{ parameters.project }}"
-                $tfStatePath   = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
+                Write-Host "🔐 Logging into Azure..."
+                az login `
+                  --service-principal `
+                  -u "$(ARM_CLIENT_ID)" `
+                  -p "$(ARM_CLIENT_SECRET)" `
+                  --tenant "$(ARM_TENANT_ID)"
 
-                if (!(Test-Path $tfProjectPath)) {
-                  throw "❌ Missing Terraform project path: $tfProjectPath"
+                if ($LASTEXITCODE -ne 0) { throw "Azure login failed" }
+                Write-Host "Azure login OK."
+
+          # =====================================================
+          # TERRAFORM APPLY WITH RETRY + BACKUP + SUMMARY
+          # =====================================================
+          - task: PowerShell@2
+            displayName: "Terraform Apply (Enhanced)"
+            inputs:
+              targetType: 'inline'
+              script: |
+                $project = "${{ parameters.project }}"
+                $envName = "${{ parameters.environment }}"
+                $tfStatePath = "$(tfStateDirectory)\$project\$envName"
+
+                Write-Host "📁 Using TF state path: $tfStatePath"
+
+                if (!(Test-Path $tfStatePath)) {
+                  throw "❌ Missing Terraform state directory: $tfStatePath"
                 }
 
-                if (!(Test-Path "$tfStatePath\tfplan")) {
-                  throw "❌ Missing tfplan at: $tfStatePath\tfplan"
+                $tfFile  = Join-Path $tfStatePath "main-$envName.tf"
+                $planFile = Join-Path $tfStatePath "tfplan"
+                $tfstateFile = Join-Path $tfStatePath "terraform.tfstate"
+                $backupDir = Join-Path $tfStatePath "backups"
+
+                if (!(Test-Path $tfFile)) { throw "❌ Missing TF file: $tfFile" }
+                if (!(Test-Path $planFile)) { throw "❌ Missing tfplan file: $planFile" }
+
+                # =====================================================
+                # Create backup directory if missing
+                # =====================================================
+                if (!(Test-Path $backupDir)) {
+                  New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
                 }
 
-                Set-Location $tfProjectPath
-                terraform apply -auto-approve "$tfStatePath\tfplan"
+                # =====================================================
+                # Backup existing terraform.tfstate (if any)
+                # =====================================================
+                if (Test-Path $tfstateFile) {
+                  $timestamp = (Get-Date -Format 'yyyyMMdd-HHmmss')
+                  $backupFile = Join-Path $backupDir "terraform-$timestamp.tfstate.bak"
+                  Copy-Item $tfstateFile $backupFile -Force
+                  Write-Host "🟩 State backup created: $backupFile"
+                } else {
+                  Write-Host "ℹ️ No existing tfstate to back up."
+                }
+
+                Write-Host "📌 Switching to state directory..."
+                Set-Location $tfStatePath
+
+                # =====================================================
+                # Retry Logic for Terraform Apply
+                # =====================================================
+                $maxRetries = 3
+                $retry = 0
+                $success = $false
+
+                while ($retry -lt $maxRetries -and -not $success) {
+                  try {
+                    Write-Host "🚀 Attempt $(retry + 1)/$maxRetries: terraform apply tfplan"
+                    terraform apply -auto-approve "tfplan"
+                    if ($LASTEXITCODE -eq 0) {
+                      $success = $true
+                      Write-Host "✔️ Terraform Apply succeeded."
+                    } else {
+                      throw "Terraform apply failed with exit code $LASTEXITCODE"
+                    }
+                  }
+                  catch {
+                    Write-Warning "⚠️ Terraform apply failed: $_"
+                    $retry++
+                    if ($retry -lt $maxRetries) {
+                      Write-Host "🔁 Retrying in 15 seconds..."
+                      Start-Sleep -Seconds 15
+                    }
+                  }
+                }
+
+                if (-not $success) {
+                  throw "❌ Terraform apply failed after $maxRetries attempts."
+                }
+
+                # =====================================================
+                # APPLY SUMMARY (extract from tfstate)
+                # =====================================================
+                if (Test-Path $tfstateFile) {
+                  Write-Host "📄 **Terraform Apply Summary**"
+                  Write-Host "--------------------------------"
+
+                  terraform show -json $tfstateFile | `
+                    ConvertFrom-Json | `
+                    Select-Object -ExpandProperty values | `
+                    Select-Object resources | `
+                    Out-String | Write-Host
+                }
 
                 Write-Host "🎉 Terraform Apply complete!"
