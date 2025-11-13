@@ -183,6 +183,7 @@ stages:
           $env:ENVIRONMENT  = "${{ parameters.environment }}"
           $env:SAS_URL_WINDOWS = "$(SAS_URL_WINDOWS)"
           $env:SAS_URL_LINUX   = "$(SAS_URL_LINUX)"
+          $env:LOCATION = "${{ parameters.location }}"
           python "$(tfWorkingDirectory)/core/generate-tf-v2.6.py"
           if ($LASTEXITCODE -ne 0) { throw "Python script failed" }
 
@@ -221,6 +222,14 @@ stages:
 
           Write-Host "✅ Terraform plan complete."
 
+    # Publish tfplan and tfplan.txt as pipeline artifacts for next stage
+    - task: PublishBuildArtifacts@1
+      displayName: "Publish Terraform Plan Artifacts"
+      inputs:
+        PathtoPublish: '$(tfWorkingDirectory)/Project/${{ parameters.project }}'
+        ArtifactName: 'tfplan-artifacts'
+        publishLocation: 'Pipeline'
+
 
     # ✅ Enhancement: Show Modify Summary only if action=modify
     - ${{ if eq(parameters.action, 'modify') }}:
@@ -257,6 +266,15 @@ stages:
         deploy:
           steps:
           - checkout: self
+
+          # Download tfplan and tfplan.txt artifacts from previous stage
+          - task: DownloadBuildArtifacts@0
+            displayName: "Download Terraform Plan Artifacts"
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'tfplan-artifacts'
+              downloadPath: '$(tfWorkingDirectory)/Project/${{ parameters.project }}'
 
           - task: PowerShell@2
             displayName: "Terraform Apply"
