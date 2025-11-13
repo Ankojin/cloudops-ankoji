@@ -146,9 +146,9 @@ stages:
               return $null
             }
 
-              Write-Host "DEBUG: az storage blob generate-sas --account-name $account --container-name $container --name $BlobName --permissions r --expiry $expiry --auth-mode key --https-only -o tsv"
+            Write-Host "DEBUG: az storage blob generate-sas --account-name $account --container-name $container --name ${BlobName} --permissions r --expiry $expiry --auth-mode key --https-only -o tsv"
             try {
-              Write-Host "⏳ Generating SAS for blob: $BlobName"
+              Write-Host "⏳ Generating SAS for blob: ${BlobName}"
 
               $sas = az storage blob generate-sas `
                       --account-name   $account `
@@ -161,7 +161,7 @@ stages:
                       -o tsv
 
               if (-not $sas) {
-                Write-Warning "⚠️ Empty SAS returned for $BlobName"
+                Write-Warning "⚠️ Empty SAS returned for ${BlobName}"
                 return $null
               }
 
@@ -169,13 +169,13 @@ stages:
               $url = ("https://{0}.blob.core.windows.net/{1}/{2}?{3}" -f `
                         $account, $container, $BlobName, $sas)
 
-              Write-Host "✔️ SAS URL generated for $BlobName:"
+              Write-Host "✔️ SAS URL generated for ${BlobName}:"
               Write-Host "   $url"
 
               return $url
             }
             catch {
-              Write-Warning "❌ SAS generation failed for $BlobName: $_"
+              Write-Warning "❌ SAS generation failed for ${BlobName}: ${_}"
               return $null
             }
           }
