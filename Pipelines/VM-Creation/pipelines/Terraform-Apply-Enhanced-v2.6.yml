@@ -259,6 +259,20 @@ stages:
           Set-Location $tfProjectPath
           terraform validate
 
+          # Archive old main-*.tf files except the latest
+          $archiveDir = Join-Path $tfStatePath "archive"
+          if (!(Test-Path $archiveDir)) {
+            New-Item -Path $archiveDir -ItemType Directory -Force | Out-Null
+          }
+          $tfFiles = Get-ChildItem -Path $tfStatePath -Filter "main-*.tf" | Sort-Object LastWriteTime -Descending
+          if ($tfFiles.Count -gt 1) {
+            $filesToArchive = $tfFiles | Select-Object -Skip 1
+            foreach ($file in $filesToArchive) {
+              Move-Item $file.FullName $archiveDir -Force
+              Write-Host "📦 Archived old TF file: $($file.Name)"
+            }
+          }
+
           terraform plan -out "$tfStatePath\tfplan"
           terraform show "$tfStatePath\tfplan" > "$tfStatePath\tfplan.txt"
 
