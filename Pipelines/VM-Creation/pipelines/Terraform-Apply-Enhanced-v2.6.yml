@@ -220,6 +220,13 @@ stages:
             Write-Host "📦 TF copied to state folder"
           }
 
+          # Copy .terraform.lock.hcl to state directory for provider consistency
+          $lockFile = "$(tfWorkingDirectory)\Project\${{ parameters.project }}\.terraform.lock.hcl"
+          if (Test-Path $lockFile) {
+            Copy-Item $lockFile "$dst\.terraform.lock.hcl" -Force
+            Write-Host "📦 .terraform.lock.hcl copied to state folder"
+          }
+
     # =====================================================
     # TERRAFORM PLAN
     # =====================================================
