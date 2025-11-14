@@ -221,8 +221,6 @@ stages:
   displayName: "Terraform Apply Stage"
   dependsOn: TerraformPlan
   condition: succeeded()
-  approval:
-    - name: vm-deploy   # Azure DevOps Manual Approval Environment Gate
 
   jobs:
   - deployment: ApplyJob
