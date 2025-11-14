@@ -218,6 +218,9 @@ stages:
             Copy-Item $tfFile "$dst\main-${{ parameters.environment }}-$ts.tf" -Force
             Copy-Item $tfFile "$dst\main-${{ parameters.environment }}.tf" -Force
             Write-Host "📦 TF copied to state folder"
+            # Output file list after copy
+            Write-Host "📂 Files in state directory after TF copy:"
+            Get-ChildItem -Path $dst | Select-Object Name, Length, LastWriteTime | Format-Table | Out-String | Write-Host
           }
 
           # Copy .terraform.lock.hcl to state directory for provider consistency
@@ -225,6 +228,9 @@ stages:
           if (Test-Path $lockFile) {
             Copy-Item $lockFile "$dst\.terraform.lock.hcl" -Force
             Write-Host "📦 .terraform.lock.hcl copied to state folder"
+            # Output file list after lock file copy
+            Write-Host "📂 Files in state directory after lock file copy:"
+            Get-ChildItem -Path $dst | Select-Object Name, Length, LastWriteTime | Format-Table | Out-String | Write-Host
           }
 
     # =====================================================
@@ -271,6 +277,11 @@ stages:
               Move-Item $file.FullName $archiveDir -Force
               Write-Host "📦 Archived old TF file: $($file.Name)"
             }
+            # Output file list after archive
+            Write-Host "📂 Files in state directory after archive:"
+            Get-ChildItem -Path $tfStatePath | Select-Object Name, Length, LastWriteTime | Format-Table | Out-String | Write-Host
+            Write-Host "📂 Files in archive directory:"
+            Get-ChildItem -Path $archiveDir | Select-Object Name, Length, LastWriteTime | Format-Table | Out-String | Write-Host
           }
 
           terraform plan -out "$tfStatePath\tfplan"
@@ -289,140 +300,103 @@ stages:
               Write-Host "🔍 Modify Summary:"
               Get-Content $path | Select-String -Pattern "Plan:" -Context 2,2
             }
-# ===================================================
-#  STAGE 2 — APPLY (ENHANCED v2.6)
-# ===================================================
-- stage: TerraformApply
-  displayName: "Terraform Apply Stage (Requires Approval)"
-  dependsOn: TerraformPlan
-  condition: succeeded()
+    # ===================================================
+    #  APPLY (ENHANCED v2.6) — MOVED FROM STAGE 2
+    # ===================================================
+    - task: PowerShell@2
+      displayName: "Terraform Apply (Enhanced)"
+      inputs:
+        targetType: 'inline'
+        script: |
+          $project = "${{ parameters.project }}"
+          $envName = "${{ parameters.environment }}"
+          $tfStatePath = "$(tfStateDirectory)\$project\$envName"
 
-  jobs:
-  - deployment: ApplyJob
-    displayName: "Apply Terraform"
-    environment: 'vm-deploy'
-    pool:
-      name: cloudops-agent
+          Write-Host "📁 Using TF state path: $tfStatePath"
+          # Ensure provider plugins and lock file are initialized before apply
+          terraform init
 
-    strategy:
-      runOnce:
-        deploy:
-          steps:
+          if (!(Test-Path $tfStatePath)) {
+            throw "❌ Missing Terraform state directory: $tfStatePath"
+          }
 
-          - checkout: self
+          $tfFile  = Join-Path $tfStatePath "main-$envName.tf"
+          $planFile = Join-Path $tfStatePath "tfplan"
+          $tfstateFile = Join-Path $tfStatePath "terraform.tfstate"
+          $backupDir = Join-Path $tfStatePath "backups"
 
-          # =====================================================
-          # Azure Login for this job (fresh environment)
-          # =====================================================
-          - task: PowerShell@2
-            displayName: "Azure Login"
-            inputs:
-              targetType: 'inline'
-              script: |
-                Write-Host "🔐 Logging into Azure..."
-                az login `
-                  --service-principal `
-                  -u "$(ARM_CLIENT_ID)" `
-                  -p "$(ARM_CLIENT_SECRET)" `
-                  --tenant "$(ARM_TENANT_ID)"
-
-                if ($LASTEXITCODE -ne 0) { throw "Azure login failed" }
-                Write-Host "Azure login OK."
+          if (!(Test-Path $tfFile)) { throw "❌ Missing TF file: $tfFile" }
+          if (!(Test-Path $planFile)) { throw "❌ Missing tfplan file: $planFile" }
 
           # =====================================================
-          # TERRAFORM APPLY WITH RETRY + BACKUP + SUMMARY
+          # Create backup directory if missing
           # =====================================================
-          - task: PowerShell@2
-            displayName: "Terraform Apply (Enhanced)"
-            inputs:
-              targetType: 'inline'
-              script: |
-                $project = "${{ parameters.project }}"
-                $envName = "${{ parameters.environment }}"
-                $tfStatePath = "$(tfStateDirectory)\$project\$envName"
+          if (!(Test-Path $backupDir)) {
+            New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
+          }
 
-                Write-Host "📁 Using TF state path: $tfStatePath"
-                # Ensure provider plugins and lock file are initialized before apply
-                terraform init
+          # =====================================================
+          # Backup existing terraform.tfstate (if any)
+          # =====================================================
+          if (Test-Path $tfstateFile) {
+            $timestamp = (Get-Date -Format 'yyyyMMdd-HHmmss')
+            $backupFile = Join-Path $backupDir "terraform-$timestamp.tfstate.bak"
+            Copy-Item $tfstateFile $backupFile -Force
+            Write-Host "🟩 State backup created: $backupFile"
+            # Output file list after backup
+            Write-Host "📂 Files in backup directory:"
+            Get-ChildItem -Path $backupDir | Select-Object Name, Length, LastWriteTime | Format-Table | Out-String | Write-Host
+          } else {
+            Write-Host "ℹ️ No existing tfstate to back up."
+          }
 
-                if (!(Test-Path $tfStatePath)) {
-                  throw "❌ Missing Terraform state directory: $tfStatePath"
-                }
+          Write-Host "📌 Switching to state directory..."
+          Set-Location $tfStatePath
 
-                $tfFile  = Join-Path $tfStatePath "main-$envName.tf"
-                $planFile = Join-Path $tfStatePath "tfplan"
-                $tfstateFile = Join-Path $tfStatePath "terraform.tfstate"
-                $backupDir = Join-Path $tfStatePath "backups"
+          # =====================================================
+          # Retry Logic for Terraform Apply
+          # =====================================================
+          $maxRetries = 3
+          $retry = 0
+          $success = $false
 
-                if (!(Test-Path $tfFile)) { throw "❌ Missing TF file: $tfFile" }
-                if (!(Test-Path $planFile)) { throw "❌ Missing tfplan file: $planFile" }
+          while ($retry -lt $maxRetries -and -not $success) {
+            try {
+              Write-Host "🚀 Attempt $(${retry} + 1)/${maxRetries}: terraform apply ..."
+              terraform apply -auto-approve "tfplan"
+              if ($LASTEXITCODE -eq 0) {
+                $success = $true
+                Write-Host "✔️ Terraform Apply succeeded."
+              } else {
+                throw "Terraform apply failed with exit code $LASTEXITCODE"
+              }
+            }
+            catch {
+              Write-Warning "⚠️ Terraform apply failed: $_"
+              $retry++
+              if ($retry -lt $maxRetries) {
+                Write-Host "🔁 Retrying in 15 seconds..."
+                Start-Sleep -Seconds 15
+              }
+            }
+          }
 
-                # =====================================================
-                # Create backup directory if missing
-                # =====================================================
-                if (!(Test-Path $backupDir)) {
-                  New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
-                }
+          if (-not $success) {
+            throw "❌ Terraform apply failed after $maxRetries attempts."
+          }
 
-                # =====================================================
-                # Backup existing terraform.tfstate (if any)
-                # =====================================================
-                if (Test-Path $tfstateFile) {
-                  $timestamp = (Get-Date -Format 'yyyyMMdd-HHmmss')
-                  $backupFile = Join-Path $backupDir "terraform-$timestamp.tfstate.bak"
-                  Copy-Item $tfstateFile $backupFile -Force
-                  Write-Host "🟩 State backup created: $backupFile"
-                } else {
-                  Write-Host "ℹ️ No existing tfstate to back up."
-                }
+          # =====================================================
+          # APPLY SUMMARY (extract from tfstate)
+          # =====================================================
+          if (Test-Path $tfstateFile) {
+            Write-Host "📄 **Terraform Apply Summary**"
+            Write-Host "--------------------------------"
 
-                Write-Host "📌 Switching to state directory..."
-                Set-Location $tfStatePath
+            terraform show -json $tfstateFile | `
+              ConvertFrom-Json | `
+              Select-Object -ExpandProperty values | `
+              Select-Object resources | `
+              Out-String | Write-Host
+          }
 
-                # =====================================================
-                # Retry Logic for Terraform Apply
-                # =====================================================
-                $maxRetries = 3
-                $retry = 0
-                $success = $false
-
-                while ($retry -lt $maxRetries -and -not $success) {
-                  try {
-                    Write-Host "🚀 Attempt $(${retry} + 1)/${maxRetries}: terraform apply ..."
-                    terraform apply -auto-approve "tfplan"
-                    if ($LASTEXITCODE -eq 0) {
-                      $success = $true
-                      Write-Host "✔️ Terraform Apply succeeded."
-                    } else {
-                      throw "Terraform apply failed with exit code $LASTEXITCODE"
-                    }
-                  }
-                  catch {
-                    Write-Warning "⚠️ Terraform apply failed: $_"
-                    $retry++
-                    if ($retry -lt $maxRetries) {
-                      Write-Host "🔁 Retrying in 15 seconds..."
-                      Start-Sleep -Seconds 15
-                    }
-                  }
-                }
-
-                if (-not $success) {
-                  throw "❌ Terraform apply failed after $maxRetries attempts."
-                }
-
-                # =====================================================
-                # APPLY SUMMARY (extract from tfstate)
-                # =====================================================
-                if (Test-Path $tfstateFile) {
-                  Write-Host "📄 **Terraform Apply Summary**"
-                  Write-Host "--------------------------------"
-
-                  terraform show -json $tfstateFile | `
-                    ConvertFrom-Json | `
-                    Select-Object -ExpandProperty values | `
-                    Select-Object resources | `
-                    Out-String | Write-Host
-                }
-
-                Write-Host "🎉 Terraform Apply complete!"
+          Write-Host "🎉 Terraform Apply complete!"
