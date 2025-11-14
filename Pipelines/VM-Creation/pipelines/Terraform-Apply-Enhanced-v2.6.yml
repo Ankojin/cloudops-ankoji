@@ -246,25 +246,26 @@ stages:
                 Write-Host "tfplan.txt not found at: $path"
               }
 
+## ===================================================
+#  STAGE 2 — APPLY (only when action == 'apply')
 # ===================================================
-#  STAGE 2 — APPLY (included only at compile-time when action == 'apply')
-#  (Option A: Plan-only runs do NOT include this stage.)
-# ===================================================
-${{ if eq(parameters.action, 'apply') }}:
-- stage: TerraformApply
-  displayName: "Terraform Apply Stage (Requires Approval)"
-  dependsOn: TerraformPlan
-  condition: succeeded()
-  jobs:
-  - deployment: ApplyJob
-    displayName: "Run Terraform Apply After Approval"
-    environment: 'vm-deploy'
-    pool:
-      name: cloudops-agent
-    strategy:
-      runOnce:
-        deploy:
-          steps:
+- ${{ if eq(parameters.action, 'apply') }}:
+  - stage: TerraformApply
+    displayName: "Terraform Apply Stage (Requires Approval)"
+    dependsOn: TerraformPlan
+    condition: succeeded()
+
+    jobs:
+    - deployment: ApplyJob
+      displayName: "Run Terraform Apply After Approval"
+      environment: 'vm-deploy'   # ← Manual Approval handled in Azure DevOps UI
+      pool:
+        name: cloudops-agent
+
+      strategy:
+        runOnce:
+          deploy:
+            steps:
             - checkout: self
 
             - task: PowerShell@2
