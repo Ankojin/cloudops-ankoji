@@ -25,8 +25,11 @@ class TerraformVMGenerator:
         env = {k.upper(): v for k, v in os.environ.items()}
 
         self.environment = env.get("ENVIRONMENT", "DEV")
-        self.project_name = env.get("PROJECT_NAME", "BaaS-Platform")
+        self.project_name = env.get("PROJECT_NAME")
+        if not self.project_name:
+            raise Exception("PROJECT_NAME environment variable is missing!")
 
+        
         # Config
         self.config = {
             "subscription_id": env.get("SUBSCRIPTION_ID"),

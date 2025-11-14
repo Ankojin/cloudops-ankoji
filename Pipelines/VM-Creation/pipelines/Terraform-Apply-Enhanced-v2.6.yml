@@ -167,6 +167,8 @@ stages:
         script: |
           Set-Location "$(tfWorkingDirectory)"
 
+          $env:PROJECT_NAME = "${{ parameters.project }}"
+          $env:ENVIRONMENT = "${{ parameters.environment }}"
           $env:SAS_URL_WINDOWS = "$(SAS_URL_WINDOWS)"
           $env:SAS_URL_LINUX   = "$(SAS_URL_LINUX)"
 
@@ -178,6 +180,8 @@ stages:
 
           Copy-Item $source "$dest\main-${{ parameters.environment }}.tf" -Force
           Write-Host "TF file copied → $dest"
+          Write-Host "DEBUG: Python sees PROJECT_NAME = $env:PROJECT_NAME"
+          Write-Host "DEBUG: Python sees ENVIRONMENT = $env:ENVIRONMENT"
 
     # ---------------------------------------------
     # Terraform Plan
