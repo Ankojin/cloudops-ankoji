@@ -191,19 +191,24 @@ stages:
       inputs:
         targetType: inline
         script: |
-          $tfProject = "$(tfWorkingDirectory)\Project\${{ parameters.project }}"
-          $tfState   = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
+            $tfProject = "$(tfWorkingDirectory)\Project\${{ parameters.project }}"
+            $tfState   = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
 
-          Set-Location $tfState
-          terraform init
+            # Always run terraform init in the directory with main.tf
+            Set-Location $tfProject
+            terraform init
+            if ($LASTEXITCODE -ne 0) { throw "Terraform init failed" }
 
-          Set-Location $tfProject
-          terraform validate
+            terraform validate
+            if ($LASTEXITCODE -ne 0) { throw "Terraform validate failed" }
 
-          terraform plan -out "$tfState\tfplan"
-          terraform show "$tfState\tfplan" > "$tfState\tfplan.txt"
+            terraform plan -out "$tfState\tfplan"
+            if ($LASTEXITCODE -ne 0 -or !(Test-Path "$tfState\tfplan")) {
+              throw "Terraform plan failed or tfplan file not created."
+            }
 
-          Write-Host "Plan saved to → $tfState"
+            terraform show "$tfState\tfplan" > "$tfState\tfplan.txt"
+            Write-Host "Plan saved to → $tfState"
 
     # Modify Mode Summary
     - ${{ if eq(parameters.action, 'modify') }}:
