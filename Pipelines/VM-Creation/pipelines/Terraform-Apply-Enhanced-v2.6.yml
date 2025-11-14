@@ -21,6 +21,12 @@ parameters:
     displayName: "Project Name"
     type: string
     default: pilot-test
+    
+  - name: tags_json_override
+    displayName: "Tags (JSON Format)"
+    type: string
+    default: '{"Company":"BAB","Department":"Information Technology","ProjectName":"pilot-test","ApplicationName":"pilot-test","Region":"Sweden Central","ApproverName":"pilot-test","RequesterName":"CloudOps Team","BusinessOwner":"pilot-test","TechnicalOwner":"pilot-test","CostCenter":"pilot-test","ServiceClass":"pilot-test","ManagedBy":"CloudOps Team"}'
+
 
 variables:
   - name: tfWorkingDirectory
