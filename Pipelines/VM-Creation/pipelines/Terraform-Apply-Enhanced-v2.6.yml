@@ -222,96 +222,90 @@ stages:
 
               if (Test-Path $planFile) {
                 Write-Host "MODIFY SUMMARY:"
-                Get-Content $planFile | Select-String "Plan:" -Context 2,2
+                $planContent = Get-Content $planFile
+                $planSummary = $planContent | Select-String "Plan:" -Context 2,2
+                $addCount = ($planContent | Select-String "  + create" | Measure-Object).Count
+                $changeCount = ($planContent | Select-String "  ~ update" | Measure-Object).Count
+                $destroyCount = ($planContent | Select-String "  - destroy" | Measure-Object).Count
+                Write-Host "Resources to add: $addCount"
+                Write-Host "Resources to change: $changeCount"
+                Write-Host "Resources to destroy: $destroyCount"
               } else {
                 Write-Warning "tfplan.txt not found."
               }
 
-              if (Test-Path $stateFile) {
-                Write-Host "terraform.tfstate file exists."
-                # Optionally, show a summary of resources
-                $stateSummary = Get-Content $stateFile | Select-String '"type":' | Measure-Object
-                Write-Host "Resource count in state: $($stateSummary.Count)"
+                if (Test-Path $stateFile) {
+                  Write-Host "terraform.tfstate file exists. Verifying usage in modify task..."
+                  $stateContent = Get-Content $stateFile -Raw
+                  if ($addCount -eq 0 -and $changeCount -eq 0 -and $destroyCount -eq 0) {
+                    Write-Host "No changes detected. Existing tfstate is being used."
+                  } else {
+                    Write-Host "Changes detected. tfstate will be updated after apply."
+                  }
+                } else {
+                  Write-Error "terraform.tfstate file not found. Modify mode requires an existing state file. Failing pipeline."
+                  exit 1
+                }
+
+# ===================================================
+
+    # ---------------------------------------------
+    # Terraform Apply (Backup + Retry)
+    # ---------------------------------------------
+    - task: PowerShell@2
+      displayName: "Terraform Apply (Backup + Retry)"
+      inputs:
+        targetType: inline
+        script: |
+          $project = "${{ parameters.project }}"
+          $envName = "${{ parameters.environment }}"
+          $tfState = "$(tfStateDirectory)\$project\$envName"
+
+          $tf       = "$tfState\main-$envName.tf"
+          $planFile = "$tfState\tfplan"
+          $state    = "$tfState\terraform.tfstate"
+          $backup   = "$tfState\backups"
+
+          if (!(Test-Path $backup)) {
+            New-Item -Path $backup -ItemType Directory -Force | Out-Null
+          }
+
+          # Backup existing state
+          if (Test-Path $state) {
+            $b = "$backup\terraform-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfstate.bak"
+            Copy-Item $state $b -Force
+          }
+
+          Set-Location $tfState
+          terraform init
+
+          # Retry logic
+          $tries = 3
+          $attempt = 1
+          $done = $false
+
+          while ($attempt -le $tries -and -not $done) {
+            try {
+              Write-Host "Attempt $attempt/$tries..."
+              terraform apply -auto-approve "$planFile"
+              if ($LASTEXITCODE -eq 0) {
+                $done = $true
+                Write-Host "Apply succeeded!"
               } else {
-                Write-Warning "terraform.tfstate file not found."
+                throw "Terraform failed."
               }
+            }
+            catch {
+              if ($attempt -lt $tries) {
+                Write-Warning "Retrying in 15 seconds..."
+                Start-Sleep -Seconds 15
+              }
+              $attempt++
+            }
+          }
 
-# ===================================================
-#  STAGE 2 — MANUAL APPROVAL + APPLY
-# ===================================================
-- stage: TerraformApply
-  displayName: "Terraform Apply Stage"
-  dependsOn: TerraformPlan
-  condition: succeeded()
+          if (-not $done) {
+            throw "Terraform Apply failed after retries."
+          }
 
-  jobs:
-  - deployment: ApplyJob
-    displayName: "Terraform Apply"
-    environment: 'vm-deploy'
-    pool:
-      name: cloudops-agent
-
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-
-          - checkout: self
-
-          - task: PowerShell@2
-            displayName: "Terraform Apply (Backup + Retry)"
-            inputs:
-              targetType: inline
-              script: |
-                $project = "${{ parameters.project }}"
-                $envName = "${{ parameters.environment }}"
-                $tfState = "$(tfStateDirectory)\$project\$envName"
-
-                $tf       = "$tfState\main-$envName.tf"
-                $planFile = "$tfState\tfplan"
-                $state    = "$tfState\terraform.tfstate"
-                $backup   = "$tfState\backups"
-
-                if (!(Test-Path $backup)) {
-                  New-Item -Path $backup -ItemType Directory -Force | Out-Null
-                }
-
-                # Backup existing state
-                if (Test-Path $state) {
-                  $b = "$backup\terraform-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfstate.bak"
-                  Copy-Item $state $b -Force
-                }
-
-                Set-Location $tfState
-                terraform init
-
-                # Retry logic
-                $tries = 3
-                $attempt = 1
-                $done = $false
-
-                while ($attempt -le $tries -and -not $done) {
-                  try {
-                    Write-Host "Attempt $attempt/$tries..."
-                    terraform apply -auto-approve "$planFile"
-                    if ($LASTEXITCODE -eq 0) {
-                      $done = $true
-                      Write-Host "Apply succeeded!"
-                    } else {
-                      throw "Terraform failed."
-                    }
-                  }
-                  catch {
-                    if ($attempt -lt $tries) {
-                      Write-Warning "Retrying in 15 seconds..."
-                      Start-Sleep -Seconds 15
-                    }
-                    $attempt++
-                  }
-                }
-
-                if (-not $done) {
-                  throw "Terraform Apply failed after retries."
-                }
-
-                Write-Host "Terraform Apply Completed."
+          Write-Host "Terraform Apply Completed."
