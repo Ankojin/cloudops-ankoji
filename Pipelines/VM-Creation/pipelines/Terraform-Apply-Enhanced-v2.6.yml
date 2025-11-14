@@ -1,0 +1,341 @@
+trigger:
+- none
+
+pool:
+  name: cloudops-agent
+
+parameters:
+  - name: action
+    displayName: "Action to Perform"
+    type: string
+    default: apply
+    values: [apply, modify]
+
+  - name: environment
+    displayName: "Target Environment"
+    type: string
+    default: DEV
+    values: [DEV, SIT]
+
+  - name: project
+    displayName: "Project Name"
+    type: string
+    default: pilot-test
+
+  - name: tags_json_override
+    displayName: "Tags (JSON Format)"
+    type: string
+    default: '{"Company":"BAB","Department":"Information Technology","ProjectName":"pilot-test","ApplicationName":"pilot-test","Region":"Sweden Central","ApproverName":"pilot-test","RequesterName":"CloudOps Team","BusinessOwner":"pilot-test","TechnicalOwner":"pilot-test","CostCenter":"pilot-test","ServiceClass":"pilot-test","ManagedBy":"CloudOps Team"}'
+
+variables:
+  - name: tfWorkingDirectory
+    value: '$(Build.SourcesDirectory)\Pipelines\VM-Creation'
+  - name: tfStateDirectory
+    value: 'C:\TerraformState\Project'
+  - group: TerraformVariables
+  - ${{ if eq(parameters.environment, 'DEV') }}:
+    - group: VM-Creation-DEV
+  - ${{ if eq(parameters.environment, 'SIT') }}:
+    - group: VM-Creation-SIT
+  - name: pythonVersion
+    value: "3.9"
+
+stages:
+# ===================================================
+#  STAGE 1 — PLAN (always runs)
+# ===================================================
+- stage: TerraformPlan
+  displayName: "Terraform Plan Stage"
+  jobs:
+  - job: PlanJob
+    displayName: "Generate + Validate + Plan"
+    pool:
+      name: cloudops-agent
+    steps:
+
+      - task: UsePythonVersion@0
+        displayName: "Setup Python $(pythonVersion)"
+        inputs:
+          versionSpec: '$(pythonVersion)'
+          architecture: 'x64'
+
+      - task: PowerShell@2
+        displayName: "Set Environment Variables"
+        inputs:
+          targetType: inline
+          script: |
+            Write-Host "Setting environment variables for ${{ parameters.environment }}..."
+            $env:PROJECT_NAME = "${{ parameters.project }}"
+            $env:ENVIRONMENT  = "${{ parameters.environment }}"
+
+            # Export variables used by Python generator and SAS step
+            $env:SUBSCRIPTION_ID         = "$(subscription_id)"
+            $env:LOCATION                = "$(location)"
+            $env:VNET_NAME               = "$(vnet_name)"
+            $env:VNET_RG                 = "$(vnet_rg)"
+            $env:SUBNET_RG               = "$(subnet_rg)"
+            $env:KEYVAULT_NAME           = "$(keyvault_name)"
+            $env:KEYVAULT_RG             = "$(keyvault_rg)"
+            $env:DCR_NAME                = "$(dcr_name)"
+            $env:DCR_RG                  = "$(dcr_rg)"
+            $env:DIAGNOSTICS_STORAGE     = "$(diagnostics_storage)"
+            $env:DIAGNOSTICS_STORAGE_RG  = "$(diagnostics_storage_rg)"
+            $env:SCRIPT_STORAGE_ACCOUNT  = "$(script_storage_account)"
+            $env:SCRIPT_STORAGE_CONTAINER= "$(script_storage_container)"
+            $env:SCRIPT_BLOB_NAME_WINDOWS= "$(script_blob_name_windows)"
+            $env:SCRIPT_BLOB_NAME_LINUX  = "$(script_blob_name_linux)"
+            $env:SCRIPT_STORAGE_KEY      = "$(script_storage_key)"
+            $env:shutdown_enabled        = "$(shutdown_enabled)"
+            $env:shutdown_time           = "$(shutdown_time)"
+            $env:shutdown_timezone       = "$(shutdown_timezone)"
+
+            $tfState = "$(tfStateDirectory)\$($env:PROJECT_NAME)\$($env:ENVIRONMENT)"
+            New-Item -Path $tfState -ItemType Directory -Force | Out-Null
+            Write-Host ("TF state directory ensured: {0}" -f $tfState)
+
+      - task: PowerShell@2
+        displayName: "Azure Login"
+        inputs:
+          targetType: inline
+          script: |
+            Write-Host "Logging into Azure..."
+            az login --service-principal -u "$(ARM_CLIENT_ID)" -p "$(ARM_CLIENT_SECRET)" --tenant "$(ARM_TENANT_ID)"
+            if ($LASTEXITCODE -ne 0) { throw "Azure login failed" }
+            Write-Host "Azure login OK."
+
+      # =====================================================
+      # 🔑 SAS TOKEN GENERATION
+      # =====================================================
+      - task: PowerShell@2
+        displayName: "Generate SAS URLs for Custom Script Blobs"
+        inputs:
+          targetType: inline
+          script: |
+            Write-Host "🔑 Generating SAS tokens for Custom Script blobs..."
+
+            $account   = "$(script_storage_account)"
+            $container = "$(script_storage_container)"
+            $key       = "$(script_storage_key)"
+            $expiry    = (Get-Date).AddHours(24).ToString("yyyy-MM-ddTHH:mmZ")
+
+            if ([string]::IsNullOrWhiteSpace($account) -or [string]::IsNullOrWhiteSpace($container)) {
+              Write-Warning "Storage account/container not defined — skipping SAS generation."
+            } else {
+              # Export storage key for az CLI usage
+              $env:AZURE_STORAGE_KEY = $key
+
+              function Generate-SasUrl {
+                param([string]$BlobName)
+                if ([string]::IsNullOrWhiteSpace($BlobName)) { return $null }
+
+                try {
+                  Write-Host ("Generating SAS for {0}" -f $BlobName)
+                  $sas = az storage blob generate-sas `
+                          --account-name $account `
+                          --container-name $container `
+                          --name $BlobName `
+                          --permissions r `
+                          --expiry $expiry `
+                          --auth-mode key `
+                          --https-only -o tsv
+
+                  if (-not $sas) {
+                    Write-Warning ("az CLI returned empty SAS for {0}" -f $BlobName)
+                    return $null
+                  }
+
+                  $url = ("https://{0}.blob.core.windows.net/{1}/{2}?{3}" -f $account, $container, $BlobName, $sas)
+                  Write-Host ("✔️ SAS URL generated for {0}" -f $BlobName)
+                  Write-Host $url
+                  return $url
+                }
+                catch {
+                  Write-Warning ("Failed SAS generation for {0}: {1}" -f $BlobName, $_)
+                  return $null
+                }
+              }
+
+              $winBlob   = "$(script_blob_name_windows)"
+              $linuxBlob = "$(script_blob_name_linux)"
+
+              $sasWin   = Generate-SasUrl -BlobName $winBlob
+              $sasLinux = Generate-SasUrl -BlobName $linuxBlob
+
+              if ($sasWin)   { Write-Host "##vso[task.setvariable variable=SAS_URL_WINDOWS;issecret=true]$sasWin" }
+              if ($sasLinux) { Write-Host "##vso[task.setvariable variable=SAS_URL_LINUX;issecret=true]$sasLinux" }
+
+              Write-Host "📦 SAS generation complete."
+            }
+
+      # =====================================================
+      # 🐍 Python generator (generate-tf-v2.6.py)
+      # =====================================================
+      - task: PowerShell@2
+        displayName: "Run Python generator + copy TF to state"
+        inputs:
+          targetType: inline
+          script: |
+            Set-Location "$(tfWorkingDirectory)"
+            Write-Host "Running Python generator..."
+
+            # Pass project/env and SAS URLs to Python as env vars
+            $env:PROJECT_NAME = "${{ parameters.project }}"
+            $env:ENVIRONMENT  = "${{ parameters.environment }}"
+            $env:SAS_URL_WINDOWS = "$(SAS_URL_WINDOWS)"
+            $env:SAS_URL_LINUX   = "$(SAS_URL_LINUX)"
+
+            python "$(tfWorkingDirectory)\core\generate-tf-v2.6.py"
+            if ($LASTEXITCODE -ne 0) { throw "Python generator failed" }
+
+            $src = "$(tfWorkingDirectory)\Project\${{ parameters.project }}\main-${{ parameters.environment }}.tf"
+            $dst = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
+            if (Test-Path $src) {
+              Copy-Item $src "$dst\main-${{ parameters.environment }}.tf" -Force
+              Write-Host ("Copied TF: {0} -> {1}" -f $src, $dst)
+            } else {
+              throw ("Expected TF file not found: {0}" -f $src)
+            }
+
+            # copy lock file (if exists) for provider consistency
+            $lock = "$(tfWorkingDirectory)\Project\${{ parameters.project }}\.terraform.lock.hcl"
+            if (Test-Path $lock) {
+              Copy-Item $lock "$dst\.terraform.lock.hcl" -Force
+              Write-Host "Copied .terraform.lock.hcl to state directory"
+            }
+
+      # =====================================================
+      # Terraform Plan (outputs saved directly to state folder)
+      # =====================================================
+      - task: PowerShell@2
+        displayName: "Terraform Validate + Plan (save plan to state folder)"
+        inputs:
+          targetType: inline
+          script: |
+            $tfProject = "$(tfWorkingDirectory)\Project\${{ parameters.project }}"
+            $tfState   = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
+
+            if (!(Test-Path $tfProject)) { throw ("Missing TF project folder: {0}" -f $tfProject) }
+            if (!(Test-Path $tfState))   { throw ("Missing TF state folder: {0}" -f $tfState) }
+
+            # Use state folder for init/plugins
+            Set-Location $tfState
+            terraform init
+
+            # Validate the TF project
+            Set-Location $tfProject
+            terraform validate
+
+            # Create plan and store in $tfState
+            $planPath = Join-Path $tfState "tfplan"
+            terraform plan -out "$planPath"
+            terraform show "$planPath" > (Join-Path $tfState "tfplan.txt")
+            Write-Host ("Plan written to: {0}" -f $tfState)
+
+      # Optional: show modify summary if requested
+      - ${{ if eq(parameters.action, 'modify') }}:
+        - task: PowerShell@2
+          displayName: "Show Modify Summary"
+          inputs:
+            targetType: inline
+            script: |
+              $path = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\tfplan.txt"
+              if (Test-Path $path) {
+                Write-Host "Terraform Modify Summary:"
+                Get-Content $path | Select-String -Pattern "Plan:" -Context 2,2
+              } else {
+                Write-Host "tfplan.txt not found at: $path"
+              }
+
+# ===================================================
+#  STAGE 2 — APPLY (included only at compile-time when action == 'apply')
+#  (Option A: Plan-only runs do NOT include this stage.)
+# ===================================================
+${{ if eq(parameters.action, 'apply') }}:
+- stage: TerraformApply
+  displayName: "Terraform Apply Stage (Requires Approval)"
+  dependsOn: TerraformPlan
+  condition: succeeded()
+  jobs:
+  - deployment: ApplyJob
+    displayName: "Run Terraform Apply After Approval"
+    environment: 'vm-deploy'
+    pool:
+      name: cloudops-agent
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - task: PowerShell@2
+              displayName: "Terraform Apply (backup + retry + summary)"
+              inputs:
+                targetType: inline
+                script: |
+                  $project = "${{ parameters.project }}"
+                  $envName = "${{ parameters.environment }}"
+                  $tfState = "$(tfStateDirectory)\$project\$envName"
+
+                  if (!(Test-Path $tfState)) { throw ("Missing TF state folder: {0}" -f $tfState) }
+
+                  $tfFile   = Join-Path $tfState ("main-{0}.tf" -f $envName)
+                  $planFile = Join-Path $tfState "tfplan"
+                  $stateFile= Join-Path $tfState "terraform.tfstate"
+                  $backupDir= Join-Path $tfState "backups"
+
+                  if (!(Test-Path $tfFile))  { throw ("Missing TF file: {0}" -f $tfFile) }
+                  if (!(Test-Path $planFile)) { throw ("Missing tfplan file: {0}" -f $planFile) }
+
+                  if (!(Test-Path $backupDir)) { New-Item -Path $backupDir -ItemType Directory -Force | Out-Null }
+
+                  # Backup existing state (if any)
+                  if (Test-Path $stateFile) {
+                    $timestamp = (Get-Date -Format 'yyyyMMdd-HHmmss')
+                    $backupFile = Join-Path $backupDir ("terraform-{0}.tfstate.bak" -f $timestamp)
+                    Copy-Item $stateFile $backupFile -Force
+                    Write-Host ("🟩 State backup created: {0}" -f $backupFile)
+                  } else {
+                    Write-Host "ℹ️ No existing tfstate to back up."
+                  }
+
+                  # Ensure plugins / init from state dir
+                  Set-Location $tfState
+                  terraform init
+
+                  # Retry logic for transient errors
+                  $maxRetries = 3
+                  $retry = 0
+                  $success = $false
+
+                  while ($retry -lt $maxRetries -and -not $success) {
+                    try {
+                      Write-Host ("Attempt {0}/{1}: terraform apply..." -f ($retry + 1), $maxRetries)
+                      terraform apply -auto-approve "$planFile"
+                      if ($LASTEXITCODE -eq 0) {
+                        $success = $true
+                        Write-Host "✔️ Terraform apply succeeded."
+                      } else {
+                        throw ("terraform apply returned exit code {0}" -f $LASTEXITCODE)
+                      }
+                    } catch {
+                      Write-Warning ("Terraform apply attempt {0} failed: {1}" -f ($retry + 1), $_)
+                      $retry++
+                      if ($retry -lt $maxRetries) {
+                        Write-Host "🔁 Retrying in 15 seconds..."
+                        Start-Sleep -Seconds 15
+                      }
+                    }
+                  }
+
+                  if (-not $success) { throw ("❌ Terraform apply failed after {0} attempts." -f $maxRetries) }
+
+                  # Apply summary (show resources from tfstate)
+                  if (Test-Path $stateFile) {
+                    Write-Host "📄 Terraform Apply Summary (from tfstate):"
+                    terraform show -json $stateFile | ConvertFrom-Json | Select-Object -ExpandProperty values | Select-Object -ExpandProperty resources | Out-String | Write-Host
+                    Write-Host ("✔️ tfstate located at: {0}" -f $stateFile)
+                  } else {
+                    Write-Warning "⚠️ tfstate file not found after apply at expected path: $stateFile"
+                  }
+
+                  Write-Host "🎉 Terraform Apply finished successfully."
