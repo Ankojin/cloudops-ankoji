@@ -353,7 +353,7 @@ stages:
 
                 while ($retry -lt $maxRetries -and -not $success) {
                   try {
-                    Write-Host "🚀 Attempt $(retry + 1)/$maxRetries: terraform apply tfplan"
+                    Write-Host "🚀 Attempt $(${retry} + 1)/${maxRetries}: terraform apply ..."
                     terraform apply -auto-approve "tfplan"
                     if ($LASTEXITCODE -eq 0) {
                       $success = $true
