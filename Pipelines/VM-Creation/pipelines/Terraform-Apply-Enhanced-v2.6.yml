@@ -244,7 +244,19 @@ stages:
 
           Set-Location $tfProjectPath
 
+          # Ensure provider lock file and plugins are initialized in state directory
+          Set-Location $tfStatePath
           terraform init
+
+          # Check if .terraform.lock.hcl exists in state directory
+          $lockFile = Join-Path $tfStatePath ".terraform.lock.hcl"
+          if (Test-Path $lockFile) {
+            Write-Host "✔️ .terraform.lock.hcl found in state directory."
+          } else {
+            Write-Warning "⚠️ .terraform.lock.hcl NOT found in state directory! Provider version consistency may be affected."
+          }
+
+          Set-Location $tfProjectPath
           terraform validate
 
           terraform plan -out "$tfStatePath\tfplan"
@@ -316,6 +328,8 @@ stages:
                 $tfStatePath = "$(tfStateDirectory)\$project\$envName"
 
                 Write-Host "📁 Using TF state path: $tfStatePath"
+                # Ensure provider plugins and lock file are initialized before apply
+                terraform init
 
                 if (!(Test-Path $tfStatePath)) {
                   throw "❌ Missing Terraform state directory: $tfStatePath"
