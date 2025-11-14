@@ -217,11 +217,24 @@ stages:
         inputs:
           targetType: inline
           script: |
-            $file = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\tfplan.txt"
-            if (Test-Path $file) {
-              Write-Host "MODIFY SUMMARY:"
-              Get-Content $file | Select-String "Plan:" -Context 2,2
-            }
+              $planFile = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\tfplan.txt"
+              $stateFile = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\terraform.tfstate"
+
+              if (Test-Path $planFile) {
+                Write-Host "MODIFY SUMMARY:"
+                Get-Content $planFile | Select-String "Plan:" -Context 2,2
+              } else {
+                Write-Warning "tfplan.txt not found."
+              }
+
+              if (Test-Path $stateFile) {
+                Write-Host "terraform.tfstate file exists."
+                # Optionally, show a summary of resources
+                $stateSummary = Get-Content $stateFile | Select-String '"type":' | Measure-Object
+                Write-Host "Resource count in state: $($stateSummary.Count)"
+              } else {
+                Write-Warning "terraform.tfstate file not found."
+              }
 
 # ===================================================
 #  STAGE 2 — MANUAL APPROVAL + APPLY
