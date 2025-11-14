@@ -21,7 +21,7 @@ parameters:
     displayName: "Project Name"
     type: string
     default: pilot-test
-    
+
   - name: tags_json_override
     displayName: "Tags (JSON Format)"
     type: string
@@ -263,55 +263,32 @@ stages:
       inputs:
         targetType: inline
         script: |
-          $project = "${{ parameters.project }}"
-          $envName = "${{ parameters.environment }}"
-          $tfState = "$(tfStateDirectory)\$project\$envName"
+            $project = "${{ parameters.project }}"
+            $envName = "${{ parameters.environment }}"
+            $tfState = "$(tfStateDirectory)\$project\$envName"
 
-          $tf       = "$tfState\main-$envName.tf"
-          $planFile = "$tfState\tfplan"
-          $state    = "$tfState\terraform.tfstate"
-          $backup   = "$tfState\backups"
+            $tf       = "$tfState\main-$envName.tf"
+            $planFile = "$tfState\tfplan"
+            $state    = "$tfState\terraform.tfstate"
+            $backup   = "$tfState\backups"
 
-          if (!(Test-Path $backup)) {
-            New-Item -Path $backup -ItemType Directory -Force | Out-Null
-          }
-
-          # Backup existing state
-          if (Test-Path $state) {
-            $b = "$backup\terraform-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfstate.bak"
-            Copy-Item $state $b -Force
-          }
-
-          Set-Location $tfState
-          terraform init
-
-          # Retry logic
-          $tries = 3
-          $attempt = 1
-          $done = $false
-
-          while ($attempt -le $tries -and -not $done) {
-            try {
-              Write-Host "Attempt $attempt/$tries..."
-              terraform apply -auto-approve "$planFile"
-              if ($LASTEXITCODE -eq 0) {
-                $done = $true
-                Write-Host "Apply succeeded!"
-              } else {
-                throw "Terraform failed."
-              }
+            if (!(Test-Path $backup)) {
+              New-Item -Path $backup -ItemType Directory -Force | Out-Null
             }
-            catch {
-              if ($attempt -lt $tries) {
-                Write-Warning "Retrying in 15 seconds..."
-                Start-Sleep -Seconds 15
-              }
-              $attempt++
+
+            # Backup existing state
+            if (Test-Path $state) {
+              $b = "$backup\terraform-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfstate.bak"
+              Copy-Item $state $b -Force
             }
-          }
 
-          if (-not $done) {
-            throw "Terraform Apply failed after retries."
-          }
+            Set-Location $tfState
+            terraform init
 
-          Write-Host "Terraform Apply Completed."
+            Write-Host "Running terraform apply..."
+            terraform apply -auto-approve "$planFile"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Terraform Apply failed."
+            }
+
+            Write-Host "Terraform Apply Completed."
