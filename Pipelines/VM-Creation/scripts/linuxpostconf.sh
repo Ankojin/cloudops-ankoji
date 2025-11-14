@@ -3,7 +3,7 @@
 
 # Output log file
 LOGFILE="/var/log/linuxpostconf.log"
-exec > >(tee -a "$LOGFILE") 2>&1
+exec >> "$LOGFILE" 2>&1
 
 # =========================================
 # System Configuration Script
