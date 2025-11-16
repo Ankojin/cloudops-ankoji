@@ -177,7 +177,7 @@ stages:
           $env:ENVIRONMENT = "${{ parameters.environment }}"
           $env:SAS_URL_WINDOWS = "$(SAS_URL_WINDOWS)"
           $env:SAS_URL_LINUX   = "$(SAS_URL_LINUX)"
-          $env:DEFAULT_TAGS_JSON = "${{ parameters.tags_json_override }}"
+          $env:DEFAULT_TAGS_JSON = '${{ parameters.tags_json_override }}'
 
           python "$(tfWorkingDirectory)\core\generate-tf-v2.6.py"
           if ($LASTEXITCODE -ne 0) { throw "Python failed" }
