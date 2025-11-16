@@ -2,8 +2,6 @@
 """
 generate-tf-v2.6.py
 
-FINAL VERSION (Stored in Memory)
-
 ✔ Supports Windows & Linux VMs
 ✔ Supports up to 10 data disks
 ✔ Custom Script Extension runs LAST (after AMA/DCR/Shutdown)
