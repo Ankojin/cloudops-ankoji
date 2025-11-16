@@ -48,14 +48,14 @@ variables:
 
 stages:
 # ===================================================
-#  STAGE 1 — PLAN (Always runs)
+#  STAGE 1 — LOCAL PLAN (Always runs)
 # ===================================================
-- stage: TerraformPlan
-  displayName: "Terraform Plan Stage"
+- stage: LocalTerraformPlan
+  displayName: "Local State: Generate, Validate, Plan"
 
   jobs:
-  - job: PlanJob
-    displayName: "Generate + Validate + Plan"
+  - job: LocalPlanJob
+    displayName: "Local State: Generate + Validate + Plan"
     pool:
       name: cloudops-agent
 
@@ -225,11 +225,11 @@ stages:
           targetType: inline
           script: |
               $planFile = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\tfplan.txt"
-$stateFile = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\terraform.tfstate"
-Write-Host "DEBUG: Looking for state file at: $stateFile"
-Write-Host "DEBUG: Directory contents:"
-Get-ChildItem -Path (Split-Path $stateFile) | Format-Table Name, Length, LastWriteTime
-if (Test-Path $planFile) {
+              $stateFile = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\terraform.tfstate"
+              Write-Host "DEBUG: Looking for state file at: $stateFile"
+              Write-Host "DEBUG: Directory contents:"
+              Get-ChildItem -Path (Split-Path $stateFile) | Format-Table Name, Length, LastWriteTime
+              if (Test-Path $planFile) {
                 Write-Host "MODIFY SUMMARY:"
                 $planContent = Get-Content $planFile
                 $planSummary = $planContent | Select-String "Plan:" -Context 2,2
@@ -259,10 +259,10 @@ if (Test-Path $planFile) {
 # ===================================================
 
     # ---------------------------------------------
-    # Terraform Apply (Backup + Retry)
+    # Terraform Apply
     # ---------------------------------------------
     - task: PowerShell@2
-      displayName: "Terraform Apply (Backup + Retry)"
+      displayName: "Terraform Apply"
       inputs:
         targetType: inline
         script: |
