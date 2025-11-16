@@ -254,22 +254,12 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 
             disk_name = f"{vm_name}_disk_{n}"
 
-            # Resource group dependency logic
-            create_rg = row.get("create_rg", "false").lower() == "true"
-            safe_rg = rg.replace("-", "_")
-            if create_rg:
-                rg_ref = f'azurerm_resource_group.{safe_rg}_rg.name'
-                depends_on_str = f'  depends_on = [azurerm_resource_group.{safe_rg}_rg]\n'
-            else:
-                rg_ref = f'"{rg}"'
-                depends_on_str = ""
-
             tf.write(f"""
 resource "azurerm_managed_disk" "{disk_name}" {{
   name                 = "{disk_name}"
   location             = var.location
-  resource_group_name  = {rg_ref}
-{depends_on_str}  storage_account_type = "StandardSSD_LRS"
+  resource_group_name  = "{rg}"
+  storage_account_type = "StandardSSD_LRS"
   create_option        = "Empty"
   disk_size_gb         = {size}
 
