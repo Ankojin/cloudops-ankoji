@@ -225,9 +225,11 @@ stages:
           targetType: inline
           script: |
               $planFile = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\tfplan.txt"
-              $stateFile = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\terraform.tfstate"
-
-              if (Test-Path $planFile) {
+$stateFile = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\terraform.tfstate"
+Write-Host "DEBUG: Looking for state file at: $stateFile"
+Write-Host "DEBUG: Directory contents:"
+Get-ChildItem -Path (Split-Path $stateFile) | Format-Table Name, Length, LastWriteTime
+if (Test-Path $planFile) {
                 Write-Host "MODIFY SUMMARY:"
                 $planContent = Get-Content $planFile
                 $planSummary = $planContent | Select-String "Plan:" -Context 2,2
