@@ -321,7 +321,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{vm_name}_{disk_name.re
 
     # ----- Windows VM block -----
     def _emit_windows_vm(self, tf, vm_name, size, rg_ref, tags_block):
-        tf.write(f"""
+        tf.write("""
 resource "azurerm_windows_virtual_machine" "{vm_name}" {{
   name                = "{vm_name}"
   location            = var.location
@@ -346,18 +346,24 @@ resource "azurerm_windows_virtual_machine" "{vm_name}" {{
   }}
 
   boot_diagnostics {{
-    storage_account_uri = "https://{self.config['diagnostics_storage']}.blob.core.windows.net/"
+    storage_account_uri = "https://{diagnostics_storage}.blob.core.windows.net/"
   }}
 
   tags = {{
     {tags_block}
   }}
 }}
-""")
+""".format(
+            vm_name=vm_name,
+            rg_ref=rg_ref,
+            size=size,
+            diagnostics_storage=self.config['diagnostics_storage'],
+            tags_block=tags_block
+        ))
 
     # ----- Linux VM block -----
     def _emit_linux_vm(self, tf, vm_name, size, rg_ref, tags_block):
-        tf.write(f"""
+        tf.write("""
 resource "azurerm_linux_virtual_machine" "{vm_name}" {{
   name                = "{vm_name}"
   location            = var.location
@@ -382,14 +388,20 @@ resource "azurerm_linux_virtual_machine" "{vm_name}" {{
   }}
 
   boot_diagnostics {{
-    storage_account_uri = "https://{self.config['diagnostics_storage']}.blob.core.windows.net/"
+    storage_account_uri = "https://{diagnostics_storage}.blob.core.windows.net/"
   }}
 
   tags = {{
     {tags_block}
   }}
 }}
-""")
+""".format(
+            vm_name=vm_name,
+            rg_ref=rg_ref,
+            size=size,
+            diagnostics_storage=self.config['diagnostics_storage'],
+            tags_block=tags_block
+        ))
 
     # ----- AMA + DCR + Shutdown -----
     def _emit_monitoring_and_shutdown(self, tf, vm_name, tags_block, is_linux):
