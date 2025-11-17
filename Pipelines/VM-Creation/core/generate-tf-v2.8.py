@@ -444,16 +444,16 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
         blob_file = os.path.basename(sas_url.split("?")[0])
         vm_type = "linux_virtual_machine" if is_linux else "windows_virtual_machine"
         publisher = "Microsoft.Azure.Extensions" if is_linux else "Microsoft.Compute"
-        # correct TF type name per publisher
-        type_name = "CustomScriptExtension" if not is_linux else "CustomScript"  # some providers differ; using common names
-        handler_version = "2.1" if not is_linux else "2.0"
+        handler_version = "2.0" if is_linux else "2.1"
 
-        # For linux use a shell command, for windows use powershell
-        command = f"sh {blob_file}" if is_linux else f"powershell -ExecutionPolicy Unrestricted -File {blob_file}"
+        # Command string (no f-string!)
+        if is_linux:
+            command = "sh {}".format(blob_file)
+        else:
+            command = "powershell -ExecutionPolicy Unrestricted -File {}".format(blob_file)
 
-        # Write extension block
-        # Note: using jsonencode to safely embed settings map
-        tf.write(f"""
+        # Write using .format() to avoid backslash escaping issues
+        tf.write("""
 # Custom Script Extension (LAST) for {vm_name}
 resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
   name                 = "CustomScriptExtension"
@@ -463,7 +463,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
   type_handler_version = "{handler_version}"
 
   settings = jsonencode({{
-    fileUris = ["{sas_url}"],
+    fileUris        = ["{sas_url}"],
     commandToExecute = "{command}"
   }})
 
@@ -471,8 +471,15 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
     {tags_block}
   }}
 }}
-""")
-
+""".format(
+    vm_name=vm_name,
+    vm_type=vm_type,
+    publisher=publisher,
+    handler_version=handler_version,
+    sas_url=sas_url,
+    command=command,
+    tags_block=tags_block
+))
     # ----- Outputs -----
     def _generate_outputs(self, tf, vm_names: List[str]):
         tf.write("\n# ==== Outputs ====\n")
