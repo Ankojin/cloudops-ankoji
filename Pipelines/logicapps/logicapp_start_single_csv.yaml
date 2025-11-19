@@ -207,7 +207,7 @@ steps:
     displayName: 'Deploy App/Web Logic App (Single Mode)'
     inputs:
       targetType: 'filePath'
-      filePath: 'Pipelines/logicapps/Deploy-LogicApp_start_enhanced.ps1'
+      filePath: 'Pipelines/logicapps/Deploy-LogicApp_start_single_csv.ps1'
       arguments: >
         -SubscriptionId "$(resolvedSubscriptionId)"
         -LogicAppResourceGroup "${{ parameters.logicAppResourceGroup }}"
