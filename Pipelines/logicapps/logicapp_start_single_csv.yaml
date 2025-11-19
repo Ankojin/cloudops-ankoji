@@ -1,0 +1,263 @@
+trigger: none
+
+pool:
+  name: cloudops-agent
+
+variables:
+- group: cloud-subs
+
+parameters:
+  # Deployment Mode Selection
+  - name: deploymentMode
+    displayName: 'Deployment Mode'
+    type: string
+    default: 'Single'
+    values:
+      - Single
+      - CSV
+
+  # Environment Selection
+  - name: subscriptionName
+    displayName: 'Environment (BAB_DEV or BAB_SIT)'
+    type: string
+    default: 'BAB_DEV'
+    values:
+      - BAB_DEV
+      - BAB_SIT
+
+  # CSV Mode Parameters
+  - name: csvFilePath
+    displayName: 'CSV File Path (for CSV mode - relative to repo root, e.g., Pipelines/logicapps/vm-deployments.csv)'
+    type: string
+    default: 'Pipelines/logicapps/vm-deployments.csv'
+
+  # Single Mode Parameters
+  - name: logicAppNamePrefix
+    displayName: 'Logic App Name Prefix (Single mode - e.g., bab_rg_env)'
+    type: string
+    default: 'Logic APP Name'
+
+  # DB Logic App parameters (Single mode)
+  - name: dbResourceGroup
+    displayName: 'Database Resource Group (Single mode - enter name or "none" to skip)'
+    type: string
+    default: 'none'
+
+  - name: dbVmNames
+    displayName: 'Database VM Names (Single mode - comma-separated, e.g., VM1,VM2 or "none" to skip)'
+    type: string
+    default: 'none'
+
+  - name: dbStartHour
+    displayName: 'DB Start Hour (Single mode - 0-23, only required if deploying DB)'
+    type: number
+    default: 7
+
+  - name: dbStartMinute
+    displayName: 'DB Start Minute (Single mode - 0-59, only required if deploying DB)'
+    type: number
+    default: 0
+
+  # App/Web Logic App parameters (Single mode)
+  - name: appWebResourceGroup
+    displayName: 'App/Web Resource Group (Single mode - enter name or "none" to skip)'
+    type: string
+    default: 'none'
+
+  - name: appWebVmNames
+    displayName: 'App/Web VM Names (Single mode - comma-separated, e.g., VM1,VM2 or "none" to skip)'
+    type: string
+    default: 'none'
+
+  - name: appWebStartHour
+    displayName: 'App/Web Start Hour (Single mode - 0-23, only required if deploying App/Web)'
+    type: number
+    default: 8
+
+  - name: appWebStartMinute
+    displayName: 'App/Web Start Minute (Single mode - 0-59, only required if deploying App/Web)'
+    type: number
+    default: 0
+
+  # Common parameters
+  - name: logicAppSubscription
+    displayName: 'Logic App Subscription'
+    type: string
+    default: 'BAB_CORE'
+    values:
+      - BAB_CORE
+
+  - name: weekDays
+    displayName: 'Days to Run (comma-separated: Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday)'
+    type: string
+    default: 'Sunday,Monday,Tuesday,Wednesday,Thursday'
+
+  - name: logicAppResourceGroup
+    displayName: 'Logic App Resource Group (where Logic Apps will be deployed)'
+    type: string
+    default: 'bab-core-auto-weeu-rg-01'
+
+steps:
+# Azure CLI Login (always to BAB_CORE for Logic Apps)
+- powershell: |
+    $ErrorActionPreference = "Stop"
+    $subscriptionId = $env:BAB_CORE_SUBSCRIPTION_ID
+    az login --service-principal `
+        -u $env:AZURE_CLIENT_ID `
+        -p $env:AZURE_CLIENT_SECRET `
+        --tenant $env:AZURE_TENANT_ID
+    az account set --subscription $subscriptionId
+    Write-Host "[$(Get-Date -Format o)] Azure CLI login successful. Using subscription $subscriptionId"
+    Write-Host "##vso[task.setvariable variable=resolvedSubscriptionId]$subscriptionId"
+  displayName: 'Azure CLI Login (Always BAB_CORE)'
+  env:
+    AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+    AZURE_CLIENT_SECRET: $(AZURE_CLIENT_SECRET)
+    AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+    BAB_CORE_SUBSCRIPTION_ID: $(BAB_CORE_SUBSCRIPTION_ID)
+
+# Set VM Subscription ID
+- powershell: |
+    $ErrorActionPreference = "Stop"
+    if ("${{ parameters.subscriptionName }}" -eq "BAB_DEV") {
+      Write-Host "##vso[task.setvariable variable=vmSubscriptionId]$env:BAB_DEV_SUBSCRIPTION_ID"
+    } elseif ("${{ parameters.subscriptionName }}" -eq "BAB_SIT") {
+      Write-Host "##vso[task.setvariable variable=vmSubscriptionId]$env:BAB_SIT_SUBSCRIPTION_ID"
+    } else {
+      Write-Error "Invalid subscription: ${{ parameters.subscriptionName }}"
+      exit 1
+    }
+  displayName: 'Set VM Subscription ID'
+  env:
+    BAB_DEV_SUBSCRIPTION_ID: $(BAB_DEV_SUBSCRIPTION_ID)
+    BAB_SIT_SUBSCRIPTION_ID: $(BAB_SIT_SUBSCRIPTION_ID)
+
+# Validate CSV file exists (CSV mode only)
+- ${{ if eq(parameters.deploymentMode, 'CSV') }}:
+  - powershell: |
+      $ErrorActionPreference = "Stop"
+      $csvPath = "${{ parameters.csvFilePath }}"
+      Write-Host "Validating CSV file: $csvPath"
+      
+      if (-not (Test-Path $csvPath)) {
+        Write-Error "CSV file not found: $csvPath"
+        exit 1
+      }
+      
+      # Validate CSV structure
+      try {
+        $csvData = Import-Csv -Path $csvPath
+        $requiredColumns = @('LogicAppType', 'LogicAppName', 'ResourceGroup', 'VmNames', 'StartHour', 'StartMinute')
+        $csvColumns = $csvData[0].PSObject.Properties.Name
+        
+        $missingColumns = $requiredColumns | Where-Object { $_ -notin $csvColumns }
+        if ($missingColumns.Count -gt 0) {
+          Write-Error "Missing required CSV columns: $($missingColumns -join ', '). Required: $($requiredColumns -join ', ')"
+          exit 1
+        }
+        
+        Write-Host "✅ CSV validation passed. Found $($csvData.Count) deployments."
+        foreach ($row in $csvData) {
+          Write-Host "  - $($row.LogicAppType): $($row.LogicAppName) ($($row.VmNames))"
+        }
+      } catch {
+        Write-Error "Failed to validate CSV file: $_"
+        exit 1
+      }
+    displayName: 'Validate CSV File'
+
+# Deploy Logic Apps from CSV (CSV mode only)
+- ${{ if eq(parameters.deploymentMode, 'CSV') }}:
+  - task: PowerShell@2
+    displayName: 'Deploy Logic Apps from CSV'
+    inputs:
+      targetType: 'filePath'
+      filePath: 'Pipelines/logicapps/Deploy-LogicApp_start_enhanced.ps1'
+      arguments: >
+        -SubscriptionId "$(resolvedSubscriptionId)"
+        -LogicAppResourceGroup "${{ parameters.logicAppResourceGroup }}"
+        -CsvFilePath "${{ parameters.csvFilePath }}"
+        -VMSubscriptionId "$(vmSubscriptionId)"
+        -WeekDays "${{ parameters.weekDays }}"
+        -DeploymentMode "CSV"
+
+# Deploy DB Logic App (Single mode only)
+- ${{ if and(eq(parameters.deploymentMode, 'Single'), and(ne(parameters.dbVmNames, ''), ne(parameters.dbVmNames, 'none'), ne(parameters.dbResourceGroup, ''), ne(parameters.dbResourceGroup, 'none'))) }}:
+  - task: PowerShell@2
+    displayName: 'Deploy Database Logic App (Single Mode)'
+    inputs:
+      targetType: 'filePath'
+      filePath: 'Pipelines/logicapps/Deploy-LogicApp_start_enhanced.ps1'
+      arguments: >
+        -SubscriptionId "$(resolvedSubscriptionId)"
+        -LogicAppResourceGroup "${{ parameters.logicAppResourceGroup }}"
+        -LogicAppName "${{ parameters.logicAppNamePrefix }}start_vms_Scheduled_db"
+        -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
+        -VMResourceGroup "${{ parameters.dbResourceGroup }}"
+        -VMNames "${{ parameters.dbVmNames }}"
+        -VMSubscriptionId "$(vmSubscriptionId)"
+        -StartHour ${{ parameters.dbStartHour }}
+        -StartMinute ${{ parameters.dbStartMinute }}
+        -WeekDays "${{ parameters.weekDays }}"
+        -DeploymentMode "Single"
+
+# Deploy App/Web Logic App (Single mode only)
+- ${{ if and(eq(parameters.deploymentMode, 'Single'), and(ne(parameters.appWebVmNames, ''), ne(parameters.appWebVmNames, 'none'), ne(parameters.appWebResourceGroup, ''), ne(parameters.appWebResourceGroup, 'none'))) }}:
+  - task: PowerShell@2
+    displayName: 'Deploy App/Web Logic App (Single Mode)'
+    inputs:
+      targetType: 'filePath'
+      filePath: 'Pipelines/logicapps/Deploy-LogicApp_start_enhanced.ps1'
+      arguments: >
+        -SubscriptionId "$(resolvedSubscriptionId)"
+        -LogicAppResourceGroup "${{ parameters.logicAppResourceGroup }}"
+        -LogicAppName "${{ parameters.logicAppNamePrefix }}start_vms_Scheduled_appweb"
+        -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
+        -VMResourceGroup "${{ parameters.appWebResourceGroup }}"
+        -VMNames "${{ parameters.appWebVmNames }}"
+        -VMSubscriptionId "$(vmSubscriptionId)"
+        -StartHour ${{ parameters.appWebStartHour }}
+        -StartMinute ${{ parameters.appWebStartMinute }}
+        -WeekDays "${{ parameters.weekDays }}"
+        -DeploymentMode "Single"
+
+# Summary step
+- powershell: |
+    $ErrorActionPreference = "Continue"
+    Write-Host "`n========================================="
+    Write-Host "Deployment Summary - ${{ parameters.deploymentMode }} Mode"
+    Write-Host "=========================================`n"
+    
+    if ("${{ parameters.deploymentMode }}" -eq "CSV") {
+      Write-Host "✅ CSV-based deployment completed"
+      Write-Host "   - CSV File: ${{ parameters.csvFilePath }}"
+      Write-Host "   - Target Environment: ${{ parameters.subscriptionName }}"
+      Write-Host "   - Logic App Resource Group: ${{ parameters.logicAppResourceGroup }}"
+    } else {
+      $dbDeployed = "${{ parameters.dbVmNames }}" -ne "" -and "${{ parameters.dbVmNames }}" -ne "none" -and "${{ parameters.dbResourceGroup }}" -ne "" -and "${{ parameters.dbResourceGroup }}" -ne "none"
+      $appWebDeployed = "${{ parameters.appWebVmNames }}" -ne "" -and "${{ parameters.appWebVmNames }}" -ne "none" -and "${{ parameters.appWebResourceGroup }}" -ne "" -and "${{ parameters.appWebResourceGroup }}" -ne "none"
+      
+      if ($dbDeployed) {
+        Write-Host "✅ Database Logic App Deployed"
+        Write-Host "   - Resource Group: ${{ parameters.dbResourceGroup }}"
+        Write-Host "   - VMs: ${{ parameters.dbVmNames }}"
+        Write-Host "   - Start Schedule: ${{ parameters.dbStartHour }}:${{ parameters.dbStartMinute }}"
+      } else {
+        Write-Host "⏭️  Database Logic App Skipped"
+      }
+      
+      Write-Host ""
+      
+      if ($appWebDeployed) {
+        Write-Host "✅ App/Web Logic App Deployed"
+        Write-Host "   - Resource Group: ${{ parameters.appWebResourceGroup }}"
+        Write-Host "   - VMs: ${{ parameters.appWebVmNames }}"
+        Write-Host "   - Start Schedule: ${{ parameters.appWebStartHour }}:${{ parameters.appWebStartMinute }}"
+      } else {
+        Write-Host "⏭️  App/Web Logic App Skipped"
+      }
+    }
+    
+    Write-Host "`nSchedule runs on: ${{ parameters.weekDays }}"
+    Write-Host "=========================================`n"
+  displayName: 'Deployment Summary'
