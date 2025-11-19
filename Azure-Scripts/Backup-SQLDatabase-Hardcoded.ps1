@@ -19,31 +19,28 @@
 # HARDCODED PARAMETERS - UPDATE BEFORE EXECUTION
 # ============================================================================
 
-$SubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
-$VaultName = "bab-dev-backup-vault-swec-01"
-$VaultResourceGroup = "bab-dev-backup-rsv-swec-rg-01"
-$VMName = "dadhbdbsqdwv1"
-$ServerName = "d2dhbdbsqdwv1.albtests.com"
-$SQLInstanceName = "d1etl2019v2"
+$SubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
+$VaultName = "bab-sit-backup-vault-swec-01"
+$VaultResourceGroup = "bab-sit-backup-rsv-swec-rg-01"
+$VMName = "dadhbdbsqiwv1"
+$ServerName = "d2dhbdbsqiwv1.albtests.com"
+$SQLInstanceName = "MSSQLSERVER"
 
 # Database Configuration
 # ----------------------
 # Option 1: Backup SPECIFIC databases (Recommended)
 # Uncomment and specify exact database names:
 $SpecificDatabases = @(
+    "db_info_dis_doc",
+    "db_info_dis_profile",
+    "db_info_dis_sql_ds",
+    "db_info_dis_wf",
+    "db_info_domain",
+    "db_info_mm",
+    "db_info_mr",
     "db_info_rep_etl",
-    "db_info_mrs",
-    "db_info_dis_doc"
-    # Add more database names as needed:
-    # "db_info_mrs_ms",
-    # "db_info_dis_wf",
-    # "db_info_rep_mm",
-    # "db_info_dis_sql_ds",
-    # "db_info_mrs_ms_1052",
-    # "db_info_exception_mgt",
-    # "db_info_domain",
-    # "db_info_mm",
-    # "db_info_dis_profile"
+    "db_info_rep_mm"
+    
 )
 
 # Option 2: Use WILDCARD pattern (Alternative approach)
@@ -54,7 +51,7 @@ $SpecificDatabases = @(
 
 # Backup Configuration
 $BackupType = "Full"          # Options: "Full" or "Log"
-$RetentionDays = 7           # Backup retention period (1-9999 days)
+$RetentionDays = 45           # Backup retention period (1-9999 days)
 
 # Execution Control
 $ConfirmBeforeExecute = $true # Set to $false to skip confirmation
