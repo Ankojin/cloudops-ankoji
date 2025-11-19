@@ -1,2 +1,2 @@
-LogicAppType,LogicAppName,ResourceGroup,VmNames,StartHour,StartMinute,WeekDays,DefinitionFile
-Application,bab_bo_dev,BAB-DEV-BO-SWEC-RG-01,"DABORAPXXDWV1DASAPAPBODWV1,DASAPAPDMDWV1,DASAPWBBODWV1",8,0,"Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday",.\logicapp_start.json
+LogicAppType,LogicAppName,ResourceGroup,VmNames,StartHour,StartMinute,WeekDays
+Application,bab_bo_dev,BAB-DEV-BO-SWEC-RG-01,"DABORAPXXDWV1DASAPAPBODWV1,DASAPAPDMDWV1,DASAPWBBODWV1",8,0,"Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday"

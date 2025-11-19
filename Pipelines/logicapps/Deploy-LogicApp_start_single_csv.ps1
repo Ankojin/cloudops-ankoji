@@ -35,7 +35,7 @@ function Deploy-LogicApp($name, $defFile, $vmRg, $vms, $hour, $min, $days) {
     
     # Build VM resource IDs
     $vmArray = @()
-    $vmList = $vms -split ',' | % { $_.Trim() }
+    $vmList = $vms -split ',' | ForEach-Object { $_.Trim() }
     foreach ($vm in $vmList) {
         if($vm) {  # skip empty entries
             $vmArray += "/subscriptions/$VMSubscriptionId/resourceGroups/$vmRg/providers/Microsoft.Compute/virtualMachines/$vm"
@@ -46,7 +46,7 @@ function Deploy-LogicApp($name, $defFile, $vmRg, $vms, $hour, $min, $days) {
     $definition = Get-Content $defFile -Raw | ConvertFrom-Json
     
     # Update schedule 
-    $weekDaysArray = $days -split ',' | % { $_.Trim() }
+    $weekDaysArray = $days -split ',' | ForEach-Object { $_.Trim() }
     $definition.definition.triggers.ScheduledStartTriggers.recurrence.schedule.hours = @($hour)
     $definition.definition.triggers.ScheduledStartTriggers.recurrence.schedule.minutes = @($min)
     $definition.definition.triggers.ScheduledStartTriggers.recurrence.schedule.weekDays = $weekDaysArray
@@ -90,7 +90,9 @@ if ($DeploymentMode -eq "CSV") {
                 Log "Skipping row $count - missing required fields" "WARN"
                 continue
             }
-            Deploy-LogicApp $row.LogicAppName $row.DefinitionFile $row.ResourceGroup $row.VmNames $row.StartHour $row.StartMinute $row.WeekDays
+                # Use hardcoded definition file path for all deployments
+                $hardCodedDefFile = "Pipelines/logicapps/logicapp_start.json"
+                Deploy-LogicApp $row.LogicAppName $hardCodedDefFile $row.ResourceGroup $row.VmNames $row.StartHour $row.StartMinute $row.WeekDays
         } catch {
             $errors++
             Log "Failed to deploy $($row.LogicAppName): $_" "ERROR"
