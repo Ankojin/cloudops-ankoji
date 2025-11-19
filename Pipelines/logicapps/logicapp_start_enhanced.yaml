@@ -191,7 +191,7 @@ steps:
       arguments: >
         -SubscriptionId "$(resolvedSubscriptionId)"
         -LogicAppResourceGroup "${{ parameters.logicAppResourceGroup }}"
-        -LogicAppName "${{ parameters.logicAppNamePrefix }}_vms_Scheduled_db"
+        -LogicAppName "${{ parameters.logicAppNamePrefix }}start_vms_Scheduled_db"
         -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
         -VMResourceGroup "${{ parameters.dbResourceGroup }}"
         -VMNames "${{ parameters.dbVmNames }}"
@@ -211,7 +211,7 @@ steps:
       arguments: >
         -SubscriptionId "$(resolvedSubscriptionId)"
         -LogicAppResourceGroup "${{ parameters.logicAppResourceGroup }}"
-        -LogicAppName "${{ parameters.logicAppNamePrefix }}_vms_Scheduled_appweb"
+        -LogicAppName "${{ parameters.logicAppNamePrefix }}start_vms_Scheduled_appweb"
         -DefinitionFile 'Pipelines/logicapps/logicapp_start.json'
         -VMResourceGroup "${{ parameters.appWebResourceGroup }}"
         -VMNames "${{ parameters.appWebVmNames }}"
