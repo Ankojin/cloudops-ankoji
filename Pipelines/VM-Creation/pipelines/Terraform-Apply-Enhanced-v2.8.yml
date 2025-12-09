@@ -421,19 +421,20 @@ stages:
           script: |
             $planFile = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}\tfplan.txt"
 
-            Write-Host "MODIFY SUMMARY:"
+            Write-Host "`n=== MODIFY MODE: CHANGE SUMMARY ===" -ForegroundColor Cyan
+            Write-Host "The following changes will be applied to existing infrastructure:" -ForegroundColor Yellow
             Get-Content $planFile | Select-String "Plan:" -Context 2,2
+            Write-Host ""
 
 
     # --------------------------
     # Terraform Apply (with Backup + Retry + Rollback)
     # --------------------------
-    - ${{ if eq(parameters.action, 'apply') }}:
-      - task: PowerShell@2
-        displayName: "Terraform Apply with Rollback Protection"
-        inputs:
-          targetType: inline
-          script: |
+    - task: PowerShell@2
+      displayName: "Terraform Apply with Rollback Protection"
+      inputs:
+        targetType: inline
+        script: |
             $tfState = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
             $stateFile = "$tfState\terraform.tfstate"
             $backupDir = "$tfState\backups"
@@ -510,12 +511,11 @@ stages:
     # --------------------------
     # Post-Apply Validation
     # --------------------------
-    - ${{ if eq(parameters.action, 'apply') }}:
-      - task: PowerShell@2
-        displayName: "Validate Deployed Resources"
-        inputs:
-          targetType: inline
-          script: |e: inline
+    - task: PowerShell@2
+      displayName: "Validate Deployed Resources"
+      inputs:
+        targetType: inline
+        script: |e: inline
         script: |
           $tfState = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
           Set-Location $tfState
@@ -541,19 +541,4 @@ stages:
           Write-Host "[OK] State file contains $resourceCount resources" -ForegroundColor Green
           
           Write-Host "`n##vso[task.complete result=Succeeded;]Deployment validated successfully"
-
-    # --------------------------
-    # Modify Mode - Plan Only Summary
-    # --------------------------
-    - ${{ if eq(parameters.action, 'modify') }}:
-      - task: PowerShell@2
-        displayName: "Modify Mode - Plan Review Complete"
-        inputs:
-          targetType: inline
-          script: |
-            Write-Host "`n=== MODIFY MODE: PLAN ONLY ===" -ForegroundColor Cyan
-            Write-Host "No changes were applied to infrastructure." -ForegroundColor Yellow
-            Write-Host "Review the plan above to see what would be changed." -ForegroundColor Yellow
-            Write-Host "`nTo apply these changes, re-run the pipeline with action='apply'" -ForegroundColor Green
-            Write-Host "`n##vso[task.complete result=Succeeded;]Plan review completed - no changes applied"
           Write-Host "`n##vso[task.complete result=Succeeded;]Deployment validated successfully"
