@@ -252,14 +252,33 @@ stages:
           # DEBUG: Check file integrity
           $pyFile = "$(tfWorkingDirectory)\core\generate-tf-v2.8.py"
           $lineCount = (Get-Content $pyFile).Count
-          Write-Host "🔍 DEBUG: Python file has $lineCount lines (expected: 621)" -ForegroundColor Yellow
+          Write-Host "🔍 DEBUG: Python file has $lineCount lines (expected: 625)" -ForegroundColor Yellow
           $line303 = (Get-Content $pyFile)[302]  # 0-indexed
           Write-Host "🔍 DEBUG: Line 303 content: $line303" -ForegroundColor Yellow
           
-          if ($lineCount -ne 621) {
+          if ($lineCount -ne 625) {
             Write-Host "##[warning]File line count mismatch - agent may have stale cached version"
             Write-Host "##[warning]Attempting syntax validation anyway..."
           }
+          
+          # Set environment variables for Python script
+          $env:PROJECT_NAME     = "${{ parameters.project }}"
+          $env:ENVIRONMENT      = "${{ parameters.environment }}"
+          $env:SUBSCRIPTION_ID = "$(subscription_id)"
+          $env:LOCATION = "$(location)"
+          $env:VNET_NAME = "$(vnet_name)"
+          $env:VNET_RG = "$(vnet_rg)"
+          $env:SUBNET_RG = "$(subnet_rg)"
+          $env:KEYVAULT_NAME = "$(keyvault_name)"
+          $env:KEYVAULT_RG = "$(keyvault_rg)"
+          $env:DCR_NAME = "$(dcr_name)"
+          $env:DCR_RG = "$(dcr_rg)"
+          $env:DIAGNOSTICS_STORAGE = "$(diagnostics_storage)"
+          $env:DIAGNOSTICS_STORAGE_RG = "$(diagnostics_storage_rg)"
+          $env:shutdown_enabled = "$(shutdown_enabled)"
+          $env:shutdown_time = "$(shutdown_time)"
+          $env:shutdown_timezone = "$(shutdown_timezone)"
+          $env:DEFAULT_TAGS_JSON = '${{ parameters.tags_json_override }}'
           
           # Capture both stdout and stderr
           $output = python "$(tfWorkingDirectory)\core\generate-tf-v2.8.py" 2>&1
