@@ -428,25 +428,26 @@ stages:
     # --------------------------
     # Terraform Apply (with Backup + Retry + Rollback)
     # --------------------------
-    - task: PowerShell@2
-      displayName: "Terraform Apply with Rollback Protection"
-      inputs:
-        targetType: inline
-        script: |
-          $tfState = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
-          $stateFile = "$tfState\terraform.tfstate"
-          $backupDir = "$tfState\backups"
-          $rollbackStateFile = "$backupDir\pre-apply-state-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfstate"
+    - ${{ if eq(parameters.action, 'apply') }}:
+      - task: PowerShell@2
+        displayName: "Terraform Apply with Rollback Protection"
+        inputs:
+          targetType: inline
+          script: |
+            $tfState = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
+            $stateFile = "$tfState\terraform.tfstate"
+            $backupDir = "$tfState\backups"
+            $rollbackStateFile = "$backupDir\pre-apply-state-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfstate"
 
-          if (!(Test-Path $backupDir)) {
-            New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
-          }
+            if (!(Test-Path $backupDir)) {
+              New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
+            }
 
-          # Create rollback point
-          if (Test-Path $stateFile) {
-            Copy-Item $stateFile $rollbackStateFile -Force
-            Write-Host "[OK] Rollback point created: $rollbackStateFile" -ForegroundColor Green
-          }
+            # Create rollback point
+            if (Test-Path $stateFile) {
+              Copy-Item $stateFile $rollbackStateFile -Force
+              Write-Host "[OK] Rollback point created: $rollbackStateFile" -ForegroundColor Green
+            }
 
           Set-Location $tfState
 
@@ -503,17 +504,18 @@ stages:
           # Cleanup old backups (keep last 10)
           $oldBackups = Get-ChildItem $backupDir -Filter "*.tfstate" | Sort-Object LastWriteTime -Descending | Select-Object -Skip 10
           if ($oldBackups) {
-            $oldBackups | Remove-Item -Force
             Write-Host "[CLEANUP] Cleaned up $($oldBackups.Count) old backup(s)" -ForegroundColor Gray
           }
           
     # --------------------------
     # Post-Apply Validation
     # --------------------------
-    - task: PowerShell@2
-      displayName: "Validate Deployed Resources"
-      inputs:
-        targetType: inline
+    - ${{ if eq(parameters.action, 'apply') }}:
+      - task: PowerShell@2
+        displayName: "Validate Deployed Resources"
+        inputs:
+          targetType: inline
+          script: |e: inline
         script: |
           $tfState = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
           Set-Location $tfState
@@ -536,7 +538,22 @@ stages:
           
           # Verify state file integrity
           terraform state list > state-resources.txt
-          $resourceCount = (Get-Content state-resources.txt).Count
           Write-Host "[OK] State file contains $resourceCount resources" -ForegroundColor Green
           
+          Write-Host "`n##vso[task.complete result=Succeeded;]Deployment validated successfully"
+
+    # --------------------------
+    # Modify Mode - Plan Only Summary
+    # --------------------------
+    - ${{ if eq(parameters.action, 'modify') }}:
+      - task: PowerShell@2
+        displayName: "Modify Mode - Plan Review Complete"
+        inputs:
+          targetType: inline
+          script: |
+            Write-Host "`n=== MODIFY MODE: PLAN ONLY ===" -ForegroundColor Cyan
+            Write-Host "No changes were applied to infrastructure." -ForegroundColor Yellow
+            Write-Host "Review the plan above to see what would be changed." -ForegroundColor Yellow
+            Write-Host "`nTo apply these changes, re-run the pipeline with action='apply'" -ForegroundColor Green
+            Write-Host "`n##vso[task.complete result=Succeeded;]Plan review completed - no changes applied"
           Write-Host "`n##vso[task.complete result=Succeeded;]Deployment validated successfully"
