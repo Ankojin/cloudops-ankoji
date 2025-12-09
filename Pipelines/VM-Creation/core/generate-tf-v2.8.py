@@ -607,23 +607,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
 
         print(f"[OK] Terraform file generated: {self.output_tf_file}")
         print(f"[INFO] VMs included: {len(vm_names)}")
-        print(f"[INFO] Unique IPs: {len(seen_ips)}")(tf, row)
-                except FileNotFoundError:
-                    print(f"[ERROR] CSV file not found: {self.csv_file_path}")
-                    sys.exit(1)
-                except Exception as e:
-                    print(f"[ERROR] Error reading CSV: {e}")
-                    sys.exit(2)
-
-                # Outputs
-                self._generate_outputs(tf, vm_names)
-
-        except Exception as e:
-            print(f"[ERROR] Failed to write TF file {self.output_tf_file}: {e}")
-            sys.exit(3)
-
-        print(f"[OK] Terraform file generated: {self.output_tf_file}")
-        print(f"[INFO] VMs included: {len(vm_names)}")
+        print(f"[INFO] Unique IPs: {len(seen_ips)}")
 
 # ---- Main ------------------------------------------------------------------
 
