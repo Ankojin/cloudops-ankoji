@@ -525,6 +525,23 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
   }}
 }}
 """.format(
+    vm_name=vm_name,
+    vm_type=vm_type,
+    publisher=publisher,
+    handler_version=handler_version,
+    sas_url=sas_url,
+    command=command,
+    tags_block=tags_block
+))
+    
+    # ----- Outputs -----
+    def _generate_outputs(self, tf, vm_names: List[str]):
+        tf.write("\n# ==== Outputs ====\n")
+        tf.write('output "vm_private_ips" {\n  value = {\n')
+        for vm in vm_names:
+            tf.write(f'    "{vm}" = azurerm_network_interface.{vm}_nic.private_ip_address\n')
+        tf.write("  }\n}\n")
+
     # ----- Main generate method -----
     def generate_terraform(self):
         # ensure output dir exists
