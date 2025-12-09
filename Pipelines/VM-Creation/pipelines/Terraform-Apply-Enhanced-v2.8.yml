@@ -426,7 +426,6 @@ stages:
             Get-Content $planFile | Select-String "Plan:" -Context 2,2
             Write-Host ""
 
-
     # --------------------------
     # Terraform Apply (with Backup + Retry + Rollback)
     # --------------------------
