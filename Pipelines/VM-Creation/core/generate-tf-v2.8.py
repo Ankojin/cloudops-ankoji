@@ -54,6 +54,90 @@ def validate_ip_address(ip: str) -> bool:
     octets = ip.split('.')
     return all(0 <= int(octet) <= 255 for octet in octets)
 
+def map_os_template(os_template: str) -> dict:
+    """Map CSV os_template to Azure image reference details"""
+    template = os_template.lower().strip()
+    
+    # OS template mappings
+    mappings = {
+        # RHEL
+        "rhel-9": {
+            "publisher": "RedHat",
+            "offer": "RHEL",
+            "sku": "9-lvm-gen2",
+            "version": "latest",
+            "is_linux": True
+        },
+        "rhel-8": {
+            "publisher": "RedHat",
+            "offer": "RHEL",
+            "sku": "8-lvm-gen2",
+            "version": "latest",
+            "is_linux": True
+        },
+        "rhel-7": {
+            "publisher": "RedHat",
+            "offer": "RHEL",
+            "sku": "7-LVM",
+            "version": "latest",
+            "is_linux": True
+        },
+        # Ubuntu
+        "ubuntu-22": {
+            "publisher": "Canonical",
+            "offer": "0001-com-ubuntu-server-jammy",
+            "sku": "22_04-lts-gen2",
+            "version": "latest",
+            "is_linux": True
+        },
+        "ubuntu-20": {
+            "publisher": "Canonical",
+            "offer": "0001-com-ubuntu-server-focal",
+            "sku": "20_04-lts-gen2",
+            "version": "latest",
+            "is_linux": True
+        },
+        # Windows Server
+        "windows-2022": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "2022-Datacenter",
+            "version": "latest",
+            "is_linux": False
+        },
+        "windows-2019": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "2019-Datacenter",
+            "version": "latest",
+            "is_linux": False
+        },
+        "windows-2016": {
+            "publisher": "MicrosoftWindowsServer",
+            "offer": "WindowsServer",
+            "sku": "2016-Datacenter",
+            "version": "latest",
+            "is_linux": False
+        }
+    }
+    
+    if template in mappings:
+        return mappings[template]
+    
+    # Fallback: Try to detect by prefix
+    if template.startswith("rhel"):
+        print(f"[WARN] Unknown RHEL version '{os_template}', defaulting to RHEL 9")
+        return mappings["rhel-9"]
+    elif template.startswith("ubuntu"):
+        print(f"[WARN] Unknown Ubuntu version '{os_template}', defaulting to Ubuntu 22.04")
+        return mappings["ubuntu-22"]
+    elif template.startswith("windows"):
+        print(f"[WARN] Unknown Windows version '{os_template}', defaulting to Windows Server 2022")
+        return mappings["windows-2022"]
+    else:
+        print(f"[WARN] Unknown os_template '{os_template}', defaulting to Windows Server 2022")
+        return mappings["windows-2022"]
+
 # ---- Generator Class -------------------------------------------------------
 
 class TerraformVMGenerator:
@@ -254,6 +338,12 @@ resource "azurerm_resource_group" "{safe_rg}_rg" {{
             print(f"[ERROR] VM {vm_name}: Invalid IP address format: {static_ip}")
             sys.exit(1)
 
+        # Map OS template to image details
+        image_details = map_os_template(os_template)
+        is_linux = image_details["is_linux"]
+        
+        print(f"[INFO] VM {vm_name}: Using {os_template} -> {image_details['publisher']}/{image_details['offer']}/{image_details['sku']}")
+
         tags = self.parse_tags()
         tags_block = ",\n    ".join([f'"{k}" = "{v}"' for k, v in tags.items()])
 
@@ -264,8 +354,6 @@ resource "azurerm_resource_group" "{safe_rg}_rg" {{
         else:
             rg_ref = f'"{resource_group}"'
             depends_on_rg = False
-
-        is_linux = os_template.lower().startswith("ubuntu") or os_template.lower().startswith("rhel")
 
         # Build depends_on line if needed
         depends_on_line = ""
@@ -308,9 +396,9 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
 
         # ----- VM resource (Linux or Windows) -----
         if is_linux:
-            self._emit_linux_vm(tf, vm_name, vm_size, rg_ref, tags_block)
+            self._emit_linux_vm(tf, vm_name, vm_size, rg_ref, tags_block, image_details)
         else:
-            self._emit_windows_vm(tf, vm_name, vm_size, rg_ref, tags_block)
+            self._emit_windows_vm(tf, vm_name, vm_size, rg_ref, tags_block, image_details)
 
         # ----- Managed disks & attachments (up to 10) -----
         # Accept CSV fields naming variations: disk_1_size, disk1_size, disk_size_1, disk_1_size_gb
@@ -365,7 +453,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "{vm_name}_{disk_name.re
         self._emit_custom_script_extension(tf, vm_name, tags_block, is_linux)
 
     # ----- Windows VM block -----
-    def _emit_windows_vm(self, tf, vm_name, size, rg_ref, tags_block):
+    def _emit_windows_vm(self, tf, vm_name, size, rg_ref, tags_block, image_details):
         tf.write("""
 resource "azurerm_windows_virtual_machine" "{vm_name}" {{
   name                = "{vm_name}"
@@ -384,10 +472,10 @@ resource "azurerm_windows_virtual_machine" "{vm_name}" {{
   }}
 
   source_image_reference {{
-    publisher = "MicrosoftWindowsServer"
-    offer     = "WindowsServer"
-    sku       = "2022-Datacenter"
-    version   = "latest"
+    publisher = "{publisher}"
+    offer     = "{offer}"
+    sku       = "{sku}"
+    version   = "{version}"
   }}
 
   boot_diagnostics {{
@@ -403,11 +491,15 @@ resource "azurerm_windows_virtual_machine" "{vm_name}" {{
             rg_ref=rg_ref,
             size=size,
             diagnostics_storage=self.config['diagnostics_storage'],
-            tags_block=tags_block
+            tags_block=tags_block,
+            publisher=image_details['publisher'],
+            offer=image_details['offer'],
+            sku=image_details['sku'],
+            version=image_details['version']
         ))
 
     # ----- Linux VM block -----
-    def _emit_linux_vm(self, tf, vm_name, size, rg_ref, tags_block):
+    def _emit_linux_vm(self, tf, vm_name, size, rg_ref, tags_block, image_details):
         tf.write("""
 resource "azurerm_linux_virtual_machine" "{vm_name}" {{
   name                = "{vm_name}"
@@ -426,10 +518,10 @@ resource "azurerm_linux_virtual_machine" "{vm_name}" {{
   }}
 
   source_image_reference {{
-    publisher = "Canonical"
-    offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts-gen2"
-    version   = "latest"
+    publisher = "{publisher}"
+    offer     = "{offer}"
+    sku       = "{sku}"
+    version   = "{version}"
   }}
 
   boot_diagnostics {{
@@ -445,10 +537,14 @@ resource "azurerm_linux_virtual_machine" "{vm_name}" {{
             rg_ref=rg_ref,
             size=size,
             diagnostics_storage=self.config['diagnostics_storage'],
-            tags_block=tags_block
+            tags_block=tags_block,
+            publisher=image_details['publisher'],
+            offer=image_details['offer'],
+            sku=image_details['sku'],
+            version=image_details['version']
         ))
 
-    # ----- AMA + DCR + Shutdown -----
+    # ----- Monitoring & Shutdown -----
     def _emit_monitoring_and_shutdown(self, tf, vm_name, tags_block, is_linux):
         vm_type = "linux_virtual_machine" if is_linux else "windows_virtual_machine"
         # choose publisher/type based on OS
