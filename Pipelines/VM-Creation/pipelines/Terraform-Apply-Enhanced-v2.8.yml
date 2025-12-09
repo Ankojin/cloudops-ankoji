@@ -449,7 +449,7 @@ stages:
           $max = 3
           
           for ($i=1; $i -le $max; $i++) {
-            Write-Host "`n=== Attempt $i/$max: Terraform Apply ===" -ForegroundColor Cyan
+            Write-Host "`n=== Attempt $i of ${max}: Terraform Apply ===" -ForegroundColor Cyan
             
             $applyStartTime = Get-Date
             terraform apply -auto-approve "$tfState\tfplan"
