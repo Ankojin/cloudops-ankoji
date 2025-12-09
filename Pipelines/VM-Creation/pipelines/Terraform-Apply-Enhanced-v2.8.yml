@@ -63,6 +63,12 @@ stages:
     timeoutInMinutes: 60
 
     steps:
+    
+    # Force clean checkout to avoid cached files
+    - checkout: self
+      clean: true
+      fetchDepth: 1
+      displayName: "Clean Checkout (Avoid Cache)"
 
     # Setup Python
     - task: UsePythonVersion@0
