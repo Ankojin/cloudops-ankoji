@@ -213,6 +213,23 @@ stages:
 
           $env:AZURE_STORAGE_KEY = $key
 
+          # Get blob names from variable group or use defaults
+          $blobWindows = "$(script_blob_name_windows)"
+          $blobLinux = "$(script_blob_name_linux)"
+          
+          # Validate blob names are set
+          if ([string]::IsNullOrWhiteSpace($blobLinux)) {
+            Write-Host "##vso[task.logissue type=warning]script_blob_name_linux not set in variable group, using default"
+            $blobLinux = "linuxpostconf.sh"
+          }
+          if ([string]::IsNullOrWhiteSpace($blobWindows)) {
+            Write-Host "##vso[task.logissue type=warning]script_blob_name_windows not set in variable group, using default"
+            $blobWindows = "windowspostconf.ps1"
+          }
+          
+          Write-Host "[INFO] Linux script blob: $blobLinux" -ForegroundColor Cyan
+          Write-Host "[INFO] Windows script blob: $blobWindows" -ForegroundColor Cyan
+
           function Make-SafeSas {
             param([string]$Blob)
             if (-not $Blob) { return $null }
@@ -228,11 +245,17 @@ stages:
             return "https://$account.blob.core.windows.net/$container/$Blob?$sas"
           }
 
-          $sasWin   = Make-SafeSas "$(script_blob_name_windows)"
-          $sasLinux = Make-SafeSas "$(script_blob_name_linux)"
+          $sasWin   = Make-SafeSas $blobWindows
+          $sasLinux = Make-SafeSas $blobLinux
 
-          if ($sasWin)   { Write-Host "##vso[task.setvariable variable=SAS_URL_WINDOWS;issecret=true]$sasWin" }
-          if ($sasLinux) { Write-Host "##vso[task.setvariable variable=SAS_URL_LINUX;issecret=true]$sasLinux" }
+          if ($sasWin)   { 
+            Write-Host "[OK] Windows SAS URL generated" -ForegroundColor Green
+            Write-Host "##vso[task.setvariable variable=SAS_URL_WINDOWS;issecret=true]$sasWin" 
+          }
+          if ($sasLinux) { 
+            Write-Host "[OK] Linux SAS URL generated" -ForegroundColor Green
+            Write-Host "##vso[task.setvariable variable=SAS_URL_LINUX;issecret=true]$sasLinux" 
+          }
 
     # --------------------------
     # Run Python Generator v2.8
