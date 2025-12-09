@@ -280,6 +280,13 @@ stages:
           $env:shutdown_timezone = "$(shutdown_timezone)"
           $env:DEFAULT_TAGS_JSON = '${{ parameters.tags_json_override }}'
           
+          # Pass SAS URLs generated in previous task
+          $env:SAS_URL_WINDOWS = "$(SAS_URL_WINDOWS)"
+          $env:SAS_URL_LINUX = "$(SAS_URL_LINUX)"
+          
+          Write-Host "[DEBUG] SAS_URL_WINDOWS set: $($env:SAS_URL_WINDOWS -ne $null -and $env:SAS_URL_WINDOWS -ne '')" -ForegroundColor Yellow
+          Write-Host "[DEBUG] SAS_URL_LINUX set: $($env:SAS_URL_LINUX -ne $null -and $env:SAS_URL_LINUX -ne '')" -ForegroundColor Yellow
+          
           # Capture both stdout and stderr
           $output = python "$(tfWorkingDirectory)\core\generate-tf-v2.8.py" 2>&1
           $exitCode = $LASTEXITCODE
