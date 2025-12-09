@@ -14,19 +14,60 @@ Define your VMs in `core/simplified-vms.csv`. Here's the format:
 
 ```csv
 vm_name,resource_group,vm_role,subnet_name,static_ip,vm_size,os_template,disk_1_size,disk_2_size,disk_3_size,create_rg
-web-01,my-rg,web_server,snet-sit-nonpci-web-01,10.189.59.100,Standard_B2s,ubuntu-22.04,32,100,,TRUE
+web-01,my-rg,web_server,snet-sit-nonpci-web-01,10.189.59.100,Standard_B2s,ubuntu-22,32,100,,TRUE
 app-01,my-rg,app_server,snet-sit-nonpci-app-02,10.189.57.100,Standard_B4ms,windows-2019,64,500,,TRUE
 db-01,my-rg,database,snet-sit-nonpci-db-02,10.189.58.100,Standard_D4s_v5,windows-2022,128,1000,2000,TRUE
 ```
 
 ## OS Templates
 
-Pick from these pre-configured templates:
+You can use these OS templates in your CSV file. The pipeline automatically maps them to the correct Azure marketplace images.
 
-**Windows:** windows-2016, windows-2019, windows-2022  
-**Ubuntu:** ubuntu-18.04, ubuntu-20.04, ubuntu-22.04  
-**Red Hat:** rhel-7, rhel-8, rhel-9  
-**Others:** centos-7, sles-15
+### Windows Server
+
+| CSV Value | OS Version | Publisher | SKU |
+|-----------|-----------|-----------|-----|
+| `windows-2022` | Windows Server 2022 Datacenter | MicrosoftWindowsServer | 2022-Datacenter |
+| `windows-2019` | Windows Server 2019 Datacenter | MicrosoftWindowsServer | 2019-Datacenter |
+| `windows-2016` | Windows Server 2016 Datacenter | MicrosoftWindowsServer | 2016-Datacenter |
+
+### Red Hat Enterprise Linux (RHEL)
+
+| CSV Value | OS Version | Publisher | SKU |
+|-----------|-----------|-----------|-----|
+| `rhel-9` | RHEL 9 (Gen2, LVM) | RedHat | 9-lvm-gen2 |
+| `rhel-8` | RHEL 8 (Gen2, LVM) | RedHat | 8-lvm-gen2 |
+| `rhel-7` | RHEL 7 (LVM) | RedHat | 7-LVM |
+
+### Ubuntu Server
+
+| CSV Value | OS Version | Publisher | SKU |
+|-----------|-----------|-----------|-----|
+| `ubuntu-22` | Ubuntu Server 22.04 LTS | Canonical | 22_04-lts-gen2 |
+| `ubuntu-20` | Ubuntu Server 20.04 LTS | Canonical | 20_04-lts-gen2 |
+
+**Note:** All images use the "latest" version available in Azure at deployment time.
+
+### Finding Other Images
+
+If you need a different OS version not listed above, you can query Azure to find available images:
+
+**List RHEL versions:**
+```bash
+az vm image list-skus --location swedencentral --publisher RedHat --offer RHEL --output table
+```
+
+**List Windows Server versions:**
+```bash
+az vm image list-skus --location swedencentral --publisher MicrosoftWindowsServer --offer WindowsServer --output table
+```
+
+**List Ubuntu versions:**
+```bash
+az vm image list-offers --location swedencentral --publisher Canonical --output table
+```
+
+Once you find the image you need, update the `map_os_template()` function in `core/generate-tf-v2.8.py` to add your custom mapping.
 
 ## Pipeline Options
 
@@ -110,8 +151,8 @@ shutdown_timezone = Arab Standard Time
 ## Behind the Scenes
 
 **For new deployments (apply):**
-1. Python script reads the CSV and converts OS templates to Azure marketplace images
-2. Terraform configuration gets generated
+1. Python script reads the CSV and maps OS templates to Azure marketplace images (e.g., rhel-9 → RedHat/RHEL/9-lvm-gen2)
+2. Terraform configuration gets generated with the correct image references
 3. Azure resources are created
 4. State files are saved to `C:/TerraformState/Project/{project}/{env}/`
 
@@ -164,7 +205,7 @@ VM-Creation/
 │   └── Terraform-Apply-Modify-Working.yml    # Main pipeline
 ├── core/
 │   ├── simplified-vms.csv                    # Your VM definitions
-│   ├── generate-tf-v2-enhanced.py           # Terraform generator
+│   ├── generate-tf-v2.8.py                   # Terraform generator with OS mapping
 │   └── Deployment-Cloud-init.yaml           # Linux startup config
 └── Project/
     └── {project}/
