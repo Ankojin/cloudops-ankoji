@@ -233,6 +233,9 @@ stages:
           function Make-SafeSas {
             param([string]$Blob)
             if (-not $Blob) { return $null }
+            
+            Write-Host "[DEBUG] Generating SAS for blob: $Blob" -ForegroundColor Yellow
+            
             $sas = az storage blob generate-sas `
               --account-name $account `
               --container-name $container `
@@ -241,8 +244,17 @@ stages:
               --expiry $expiry `
               --auth-mode key `
               --https-only -o tsv
-            if (!$sas) { return $null }
-            return "https://$account.blob.core.windows.net/$container/$Blob?$sas"
+              
+            if (!$sas) { 
+              Write-Host "[ERROR] Failed to generate SAS for blob: $Blob" -ForegroundColor Red
+              return $null 
+            }
+            
+            # Construct full URL: https://account.blob.core.windows.net/container/blobname?sas
+            $fullUrl = "https://$account.blob.core.windows.net/$container/$Blob`?$sas"
+            Write-Host "[DEBUG] Generated URL: $($fullUrl.Substring(0, [Math]::Min(100, $fullUrl.Length)))..." -ForegroundColor Yellow
+            
+            return $fullUrl
           }
 
           $sasWin   = Make-SafeSas $blobWindows

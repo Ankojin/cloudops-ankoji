@@ -520,6 +520,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
         
         vm_type = "linux_virtual_machine" if is_linux else "windows_virtual_machine"
         publisher = "Microsoft.Azure.Extensions" if is_linux else "Microsoft.Compute"
+        extension_type = "CustomScript" if is_linux else "CustomScriptExtension"
         handler_version = "2.0" if is_linux else "2.1"
 
         # Command string (no f-string!)
@@ -535,7 +536,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
   name                 = "CustomScriptExtension"
   virtual_machine_id   = azurerm_{vm_type}.{vm_name}.id
   publisher            = "{publisher}"
-  type                 = "CustomScriptExtension"
+  type                 = "{extension_type}"
   type_handler_version = "{handler_version}"
 
   settings = jsonencode({{
@@ -551,6 +552,7 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
     vm_name=vm_name,
     vm_type=vm_type,
     publisher=publisher,
+    extension_type=extension_type,
     handler_version=handler_version,
     sas_url=sas_url,
     command=command,
