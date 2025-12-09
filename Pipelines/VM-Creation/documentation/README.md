@@ -25,26 +25,45 @@ You can use these OS templates in your CSV file. The pipeline automatically maps
 
 ### Windows Server
 
-| CSV Value | OS Version | Publisher | SKU |
-|-----------|-----------|-----------|-----|
-| `windows-2022` | Windows Server 2022 Datacenter | MicrosoftWindowsServer | 2022-Datacenter |
-| `windows-2019` | Windows Server 2019 Datacenter | MicrosoftWindowsServer | 2019-Datacenter |
-| `windows-2016` | Windows Server 2016 Datacenter | MicrosoftWindowsServer | 2016-Datacenter |
+| CSV Value | OS Version | Publisher | SKU | Notes |
+|-----------|-----------|-----------|-----|-------|
+| `windows-2022` | Windows Server 2022 Datacenter | MicrosoftWindowsServer | 2022-Datacenter | Recommended for new deployments |
+| `windows-2019` | Windows Server 2019 Datacenter | MicrosoftWindowsServer | 2019-Datacenter | Widely used, stable |
+| `windows-2016` | Windows Server 2016 Datacenter | MicrosoftWindowsServer | 2016-Datacenter | Legacy support |
+
+**Other available Windows Server SKUs in Azure:**
+- Windows Server 2025: `2025-datacenter`, `2025-datacenter-core`, `2025-datacenter-azure-edition`
+- Windows Server 2022 variants: `2022-datacenter-azure-edition`, `2022-datacenter-core`, `2022-datacenter-smalldisk`
+- Windows Server 2019 variants: `2019-Datacenter-Core`, `2019-datacenter-with-containers`, `2019-datacenter-smalldisk`
+- Windows Server 2016 variants: `2016-Datacenter-Server-Core`, `2016-datacenter-with-containers`
+- Windows Server 2012 R2: `2012-R2-Datacenter`, `2012-r2-datacenter-gensecond`
 
 ### Red Hat Enterprise Linux (RHEL)
 
-| CSV Value | OS Version | Publisher | SKU |
-|-----------|-----------|-----------|-----|
-| `rhel-9` | RHEL 9 (Gen2, LVM) | RedHat | 9-lvm-gen2 |
-| `rhel-8` | RHEL 8 (Gen2, LVM) | RedHat | 8-lvm-gen2 |
-| `rhel-7` | RHEL 7 (LVM) | RedHat | 7-LVM |
+| CSV Value | OS Version | Publisher | SKU | Notes |
+|-----------|-----------|-----------|-----|-------|
+| `rhel-9` | RHEL 9 (Gen2, LVM) | RedHat | 9-lvm-gen2 | Recommended for new deployments |
+| `rhel-8` | RHEL 8 (Gen2, LVM) | RedHat | 8-lvm-gen2 | Stable, widely used |
+| `rhel-7` | RHEL 7 (LVM) | RedHat | 7-LVM | Legacy support |
+
+**Other available RHEL SKUs in Azure:**
+- RHEL 10: `10-lvm-gen2`, `100-gen2`, `101-gen2`
+- RHEL 9 minor versions: `90-gen2`, `91-gen2`, `92-gen2`, `93-gen2`, `94_gen2`, `95_gen2`, `96-gen2`, `97-gen2`
+- RHEL 8 minor versions: `81gen2`, `82gen2`, `83-gen2`, `84-gen2`, `85-gen2`, `86-gen2`, `87-gen2`, `88-gen2`, `89-gen2`
+- RHEL 7 minor versions: `74-gen2`, `75-gen2`, `76-gen2`, `77-gen2`, `78-gen2`, `79-gen2`
 
 ### Ubuntu Server
 
-| CSV Value | OS Version | Publisher | SKU |
-|-----------|-----------|-----------|-----|
-| `ubuntu-22` | Ubuntu Server 22.04 LTS | Canonical | 22_04-lts-gen2 |
-| `ubuntu-20` | Ubuntu Server 20.04 LTS | Canonical | 20_04-lts-gen2 |
+| CSV Value | OS Version | Publisher | SKU | Notes |
+|-----------|-----------|-----------|-----|-------|
+| `ubuntu-22` | Ubuntu Server 22.04 LTS | Canonical | 22_04-lts-gen2 | Recommended for new deployments |
+| `ubuntu-20` | Ubuntu Server 20.04 LTS | Canonical | 20_04-lts-gen2 | Stable, widely used |
+
+**Other available Ubuntu offers in Azure:**
+- Ubuntu 24.04 LTS: Offer `ubuntu-24_04-lts`
+- Ubuntu 24.10: Offer `ubuntu-24_10`
+- Ubuntu minimal images: Offer `0001-com-ubuntu-minimal-jammy` or `0001-com-ubuntu-minimal-focal`
+- Ubuntu Pro (commercial support): Offer `0001-com-ubuntu-pro-jammy` or `0001-com-ubuntu-pro-focal`
 
 **Note:** All images use the "latest" version available in Azure at deployment time.
 
