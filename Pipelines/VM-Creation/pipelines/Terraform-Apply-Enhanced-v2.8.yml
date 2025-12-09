@@ -238,17 +238,41 @@ stages:
         script: |
           Set-Location "$(tfWorkingDirectory)"
 
-          python "$(tfWorkingDirectory)\core\generate-tf-v2.8.py"
-          if ($LASTEXITCODE -ne 0) { throw "Python failed" }
+          Write-Host "=== Running Python Generator ===" -ForegroundColor Cyan
+          Write-Host "Working Directory: $(tfWorkingDirectory)"
+          Write-Host "Python Version: $(python --version)"
+          Write-Host "Generator Script: $(tfWorkingDirectory)\core\generate-tf-v2.8.py"
+          
+          # Capture both stdout and stderr
+          $output = python "$(tfWorkingDirectory)\core\generate-tf-v2.8.py" 2>&1
+          $exitCode = $LASTEXITCODE
+          
+          # Display output
+          $output | ForEach-Object { Write-Host $_ }
+          
+          if ($exitCode -ne 0) {
+            Write-Host "##vso[task.logissue type=error]Python generator failed with exit code: $exitCode"
+            Write-Host "`nPython Error Details:" -ForegroundColor Red
+            $output | Where-Object { $_ -match '\[ERROR\]' } | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+            throw "Python generator failed - check error messages above"
+          }
+
+          # Verify output file was created
+          $outputFile = "$(tfWorkingDirectory)\Project\${{ parameters.project }}\main-${{ parameters.environment }}.tf"
+          if (!(Test-Path $outputFile)) {
+            Write-Host "##vso[task.logissue type=error]Expected output file not found: $outputFile"
+            throw "Terraform file was not generated"
+          }
+          
+          Write-Host "✅ Python generator completed successfully" -ForegroundColor Green
 
           # Copy the output .tf into REPO TF folder
           $repoTF = "$(tfRepoDirectory)"
           if (!(Test-Path $repoTF)) { New-Item -Path $repoTF -ItemType Directory -Force }
 
-          Copy-Item "$(tfWorkingDirectory)\Project\${{ parameters.project }}\main-${{ parameters.environment }}.tf" `
-                    "$repoTF\main-${{ parameters.environment }}.tf" -Force
+          Copy-Item $outputFile "$repoTF\main-${{ parameters.environment }}.tf" -Force
 
-          Write-Host "Copied generated TF file → $repoTF"
+          Write-Host "✅ Copied generated TF file → $repoTF" -ForegroundColor Green
 
     # --------------------------
     # Copy TF → Persistent State
