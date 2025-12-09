@@ -5,7 +5,7 @@ This pipeline automates Azure VM deployment using CSV files and Terraform. You c
 ## Getting Started
 
 1. Edit the CSV file at `core/simplified-vms.csv` with your VM requirements
-2. Go to Azure DevOps Pipelines and run "Terraform-Apply-Modify-Working"
+2. Go to Azure DevOps Pipelines and run "Create VM"
 3. Set the pipeline parameters (action, environment, project, tags)
 
 ## CSV Configuration
@@ -43,6 +43,7 @@ You can use these OS templates in your CSV file. The pipeline automatically maps
 | CSV Value | OS Version | Publisher | SKU | Notes |
 |-----------|-----------|-----------|-----|-------|
 | `rhel-9` | RHEL 9 (Gen2, LVM) | RedHat | 9-lvm-gen2 | Recommended for new deployments |
+| `rhel-9.6` | RHEL 9.6 (Gen2) | RedHat | 96-gen2 | Specific minor version |
 | `rhel-8` | RHEL 8 (Gen2, LVM) | RedHat | 8-lvm-gen2 | Stable, widely used |
 | `rhel-7` | RHEL 7 (LVM) | RedHat | 7-LVM | Legacy support |
 
