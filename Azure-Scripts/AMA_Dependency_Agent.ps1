@@ -3,13 +3,13 @@ param(
     [string]$DcrName = "MSVMI-bab-dev-vm-monitoring-dcr",
     [string]$DcrResourceGroup = "bab-dev-wrkspace-swec-rg-01",
     [string[]]$ExcludedResourceGroups = @("aro-infra-lx29kz5c-bab-dev-aro-01"),
-    [string]$ErrorLogPath = ".\AgentInstallErrors.log"
+    [string]$ErrorLogPath = ".\AgentInstallErrors-devlog"
 )
 
 # Login to Azure if not already logged in
 if (-not (Get-AzContext)) {
     Write-Output "Logging in to Azure..."
-    Connect-AzAccount
+    #Connect-AzAccount
 }
 
 Set-AzContext -SubscriptionId $SubscriptionId

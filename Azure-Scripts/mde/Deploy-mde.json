@@ -1,0 +1,75 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+
+  "parameters": {
+    "vmList": {
+      "type": "array"
+    },
+    "extensionType": {
+      "type": "string",
+      "allowedValues": ["MDE.Linux", "MDE.Windows"]
+    }
+  },
+
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2021-04-01",
+      "name": "[concat('MDE-Bulk-', copyIndex())]",
+      "copy": {
+        "name": "vmLoop",
+        "count": "[length(parameters('vmList'))]"
+      },
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+          "scope": "Inner"
+        },
+        "parameters": {
+          "vmName": {
+            "value": "[parameters('vmList')[copyIndex()].vmName]"
+          },
+          "location": {
+            "value": "[parameters('vmList')[copyIndex()].location]"
+          },
+          "resourceGroup": {
+            "value": "[parameters('vmList')[copyIndex()].resourceGroup]"
+          },
+          "extensionType": {
+            "value": "[parameters('extensionType')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "vmName": { "type": "string" },
+            "location": { "type": "string" },
+            "resourceGroup": { "type": "string" },
+            "extensionType": { "type": "string" }
+          },
+          "variables": {
+            "vmId": "[resourceId(subscription().subscriptionId, parameters('resourceGroup'), 'Microsoft.Compute/virtualMachines', parameters('vmName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Compute/virtualMachines/extensions",
+              "apiVersion": "2022-11-01",
+              "name": "[concat(parameters('vmName'), '/', parameters('extensionType'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "publisher": "Microsoft.Azure.AzureDefenderForServers",
+                "type": "[parameters('extensionType')]",
+                "typeHandlerVersion": "1.0",
+                "autoUpgradeMinorVersion": true,
+                "settings": {},
+                "protectedSettings": {}
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

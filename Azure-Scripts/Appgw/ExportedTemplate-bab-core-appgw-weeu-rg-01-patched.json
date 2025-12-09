@@ -1,0 +1,1282 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "applicationGateways_bab_core_shared_appgw_weeu_01_name": {
+      "defaultValue": "bab-core-shared-appgw-weeu-01",
+      "type": "String"
+    },
+    "virtualNetworks_bab_core_nw_weeu_vnet_appgw_01_externalid": {
+      "defaultValue": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-nw-weeu-rg-01/providers/Microsoft.Network/virtualNetworks/bab-core-nw-weeu-vnet-appgw-01",
+      "type": "String"
+    },
+    "publicIPAddresses_bab_core_appgw_fe_pip_externalid": {
+      "defaultValue": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-appgw-weeu-rg-01/providers/Microsoft.Network/publicIPAddresses/bab-core-appgw-fe-pip",
+      "type": "String"
+    },
+    "ApplicationGatewayWebApplicationFirewallPolicies_bab_core_default_waf_policy_externalid": {
+      "defaultValue": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-appgw-weeu-rg-01/providers/Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies/bab-core-default-waf-policy",
+      "type": "String"
+    }
+  },
+  "variables": {},
+  "resources": [
+    {
+      "type": "Microsoft.Network/applicationGateways",
+      "apiVersion": "2024-07-01",
+      "name": "[parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')]",
+      "location": "westeurope",
+      "tags": {
+        "Company": "BAB",
+        "Env": "DEV",
+        "Application": "App gateway"
+      },
+      "zones": [
+        "1",
+        "2",
+        "3"
+      ],
+      "properties": {
+        "sku": {
+          "name": "WAF_v2",
+          "tier": "WAF_v2",
+          "family": "Generation_2"
+        },
+        "gatewayIPConfigurations": [
+          {
+            "name": "appGatewayIpConfig",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/gatewayIPConfigurations/appGatewayIpConfig')]",
+            "properties": {
+              "subnet": {
+                "id": "[concat(parameters('virtualNetworks_bab_core_nw_weeu_vnet_appgw_01_externalid'), '/subnets/snet-appgw-swec-01')]"
+              }
+            }
+          }
+        ],
+        "sslCertificates": [
+          {
+            "name": "devbibwc",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/devbibwc')]",
+            "properties": {}
+          },
+          {
+            "name": "bib-sit-wc-gd",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/bib-sit-wc-gd')]",
+            "properties": {}
+          },
+          {
+            "name": "avepoint-cert",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/avepoint-cert')]",
+            "properties": {}
+          },
+          {
+            "name": "test-appgw",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/test-appgw')]",
+            "properties": {}
+          },
+          {
+            "name": "hrmobile-cert",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/hrmobile-cert')]",
+            "properties": {}
+          },
+          {
+            "name": "albtestswc",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/albtestswc')]",
+            "properties": {}
+          },
+          {
+            "name": "rmbdev-cert",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/rmbdev-cert')]",
+            "properties": {}
+          },
+          {
+            "name": "rmbsit-cert",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/rmbsit-cert')]",
+            "properties": {}
+          },
+          {
+            "name": "baasapi",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/baasapi')]",
+            "properties": {}
+          }
+        ],
+        "trustedRootCertificates": [
+          {
+            "name": "albtests-rootca",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/trustedRootCertificates/albtests-rootca')]",
+            "properties": {
+              "data": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tDQpNSUlGRVRDQ0F2bWdBd0lCQWdJUUYrM3dycyswTjRaTGQ1Z3BpSDZoYlRBTkJna3Foa2lHOXcwQkFRc0ZBREFiDQpNUmt3RndZRFZRUURFeEJCYkdKMFpYTjBjeUJEUVNCU2IyOTBNQjRYRFRJME1EY3dOVEUwTURJek9Gb1hEVE0wDQpNRGN3TlRFME1USXpPRm93R3pFWk1CY0dBMVVFQXhNUVFXeGlkR1Z6ZEhNZ1EwRWdVbTl2ZERDQ0FpSXdEUVlKDQpLb1pJaHZjTkFRRUJCUUFEZ2dJUEFEQ0NBZ29DZ2dJQkFLaytGOXU1UnFzSnZqSFMvRlptRmRJQXEraVhtampWDQp4c3g1YXNTN0dqZjFqdm1GK1E5alpacStkNHU3ZC8zcjlBRlZvSjQvM3p5TzZVeWJwUE5ZUlBWNnJvOWl4WkJjDQpxakxlYnNQTVY5MndUSjU1eThBVExxaXJKT0cwTWdRd0FYY0QzTGdWdWxPQm5nbGY4bVVlY3dwQjhXUWhTU1VNDQpkV005cHlidzNXNzMxME1oeDJBUGFpS25iKzFMRUhVRTB0STFJZUQvKzJuVnhUaitOc1UvYnpFMUJ3eDJJL1J2DQpJdTVxMHlDdGNsTlZ2YnVwYTdzY0RtQ244ajdiNlZXeENzU1B5UEhhWm5hR2xyOGIzOE9FTXlYSXdIdnFNTGs4DQpDbGpMenhtZ0tzZTZ6YWlaaVR1K1dhK1BCV1dDQzlwclNXWjZ1VzRNWTFpbGROWjYwV0lPbVMyS1ZrS1JYTVFSDQpLbVpOL2tJbnFRaEtmMDJxYnVxLytlc1lHU2ZFUStTMlR6ZUcwNklBN3hMZU1JNkxCSG1uVHlDd3dJYXVJUnMzDQpUNHhBQSthWnBPS0NQeVhScW1MazBqL0VWYVRQM0diWHZITEJrVXZFcHhNbFFVelhSc21laWt3NWlWYXZteFpnDQo4QmRUbnd2WklhTUhXYXhyRndJaWt3THh4S0lQT0haN2tZdi9XMHN5dCtNVW5vNDJZdTdoMGZlbXVhS0d6cThmDQppVnBSY3hpM3FGbnpFUVZMaGdJOG9vWk5EYTBjNHJyWXFNaHN0THNXRnJLMXhIUkozVEszbXFYVkV1NGdjTTAvDQpBTWpjTXBOZVNuN3hmMkpMUEpLZFVqYzloVW9OdCtRaDlOekcyRHlIVkYwQjIxMVVET0RqR29SUWlnU0ZXM09jDQp4dzlUV0gvR2tPMWhBZ01CQUFHalVUQlBNQXNHQTFVZER3UUVBd0lCaGpBUEJnTlZIUk1CQWY4RUJUQURBUUgvDQpNQjBHQTFVZERnUVdCQlFBVXdnZnNCS1NzcDQzRlJ3MHI3Y2t6T3l4a2pBUUJna3JCZ0VFQVlJM0ZRRUVBd0lCDQpBREFOQmdrcWhraUc5dzBCQVFzRkFBT0NBZ0VBcDVCakZIZVZhRWtZWnU0d3dTM3lmSG1VK1IybFdQNG5GZUM4DQpja2tualFHc1lrRTlJSUYwSzJYRjU3TncvV2pVNGVDM1RyZ0k2aDFUd0QrbmJKc0JiZXVxa1JEcHdDQWZQNTZqDQp0Z3I0SldUKy9YeXI2d0ZsV29KOHdoR0FMWFROOEFJR0YrMkwxOHAxRlVzbitFWHgxVFpzYjdMa2gzblN5ZEdjDQpGeUJTc1piWnpMVUs0dGNURnFzYUQ4SjZJekdiWlJ6RkRoSmE2TmIvbXo2OHR1TTZaZlFBWm1vdjJ0R1RXbnU2DQpKM3ZGSzJqYVdjZTV2Y0tEbnNxcjBLaW9kbmViU1AySmdsTGJKcHprcitaN2dOMk1kRlg5RDAreGx5N1BjQkdHDQpGU2x0QmZldGFSUEhOQXJ1QmpDN01xZDMxay9uZWVnaDhjL2g4M05EWkU0U0RnZCtud0M3dWp2d1R5Y05RTUFmDQpFaXY3U29YY1BHbjhZc0pWcnVUdEViMFlFZ1hyS3IxbjFpMFdTRDRxVjhJZzNqS1hrZlQ5RUVCalNJYkQwZkFUDQpLYi9aOE1CY2tuR09uajBVcjZ3dGkxaC8yUU1tYVhXYkNabVZ1Nk9rQXJ2OXhqeXhQTCttRVV0OEpYa2src3gyDQpZNnVjK3YzTUE0czhaUVRCcWlKRzc1TldSckhlL0dROWNJZlFWMkZIM1lpazJyV0I2bGtlYWFpWi9yREd5YmZEDQowbmN6L0F0ME9UZkJtL1Y5em4xSElqZHppb1UwVURPZC9RL1ZGRWw3ZmtMR3VodzJlek1YTVZjWlNCa2hXSXpjDQoyYVA3RVhZcVZiMlUzNHE5MDRiUnlWWnp1U3FzUDJrYnptS3lmYTBkVW43VGJta1RYQ1FhaHRDVkFLN1AvQklEDQplYWpyVWZRPQ0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQ0K"
+            }
+          }
+        ],
+        "trustedClientCertificates": [],
+        "sslProfiles": [],
+        "frontendIPConfigurations": [
+          {
+            "name": "appGwPublicFrontendIpIPv4",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[parameters('publicIPAddresses_bab_core_appgw_fe_pip_externalid')]"
+              }
+            }
+          },
+          {
+            "name": "appGwPrivateFrontendIpIPv4",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPrivateFrontendIpIPv4')]",
+            "properties": {
+              "privateIPAddress": "10.189.62.5",
+              "privateIPAllocationMethod": "Static",
+              "subnet": {
+                "id": "[concat(parameters('virtualNetworks_bab_core_nw_weeu_vnet_appgw_01_externalid'), '/subnets/snet-appgw-swec-01')]"
+              }
+            }
+          }
+        ],
+        "frontendPorts": [
+          {
+            "name": "port_443",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_443')]",
+            "properties": {
+              "port": 443
+            }
+          },
+          {
+            "name": "port_16005",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_16005')]",
+            "properties": {
+              "port": 16005
+            }
+          },
+          {
+            "name": "port_445",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_445')]",
+            "properties": {
+              "port": 445
+            }
+          },
+          {
+            "name": "port_16000",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_16000')]",
+            "properties": {
+              "port": 16000
+            }
+          },
+          {
+            "name": "port_16003",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_16003')]",
+            "properties": {
+              "port": 16003
+            }
+          },
+          {
+            "name": "port_80",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_80')]",
+            "properties": {
+              "port": 80
+            }
+          },
+          {
+            "name": "port_8080",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_8080')]",
+            "properties": {
+              "port": 8080
+            }
+          },
+          {
+            "name": "port_8443",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_8443')]",
+            "properties": {
+              "port": 8443
+            }
+          },
+          {
+            "name": "port_444",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_444')]",
+            "properties": {
+              "port": 444
+            }
+          },
+          {
+            "name": "port_9580",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_9580')]",
+            "properties": {
+              "port": 9580
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "test-pool",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/test-pool')]",
+            "properties": {
+              "backendAddresses": [
+                {
+                  "ipAddress": "10.189.61.6"
+                }
+              ]
+            }
+          },
+          {
+            "name": "bab-dev-hrapp-bp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-dev-hrapp-bp-01')]",
+            "properties": {
+              "backendAddresses": [
+                {
+                  "ipAddress": "10.189.56.84"
+                }
+              ]
+            }
+          },
+          {
+            "name": "bab-dev-rmb-lb-bp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-dev-rmb-lb-bp-01')]",
+            "properties": {
+              "backendAddresses": [
+                {
+                  "ipAddress": "10.189.56.51"
+                }
+              ]
+            }
+          },
+          {
+            "name": "bab-sit-rmb-lb-bp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-sit-rmb-lb-bp-01')]",
+            "properties": {
+              "backendAddresses": [
+                {
+                  "ipAddress": "10.189.66.51"
+                }
+              ]
+            }
+          },
+          {
+            "name": "bab-uat-ai-bp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-uat-ai-bp-01')]",
+            "properties": {
+              "backendAddresses": [
+                {
+                  "ipAddress": "10.189.101.9"
+                }
+              ]
+            }
+          },
+          {
+            "name": "bab-live-ai-bp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-live-ai-bp-01')]",
+            "properties": {
+              "backendAddresses": [
+                {
+                  "ipAddress": "10.189.102.5"
+                }
+              ]
+            }
+          },
+          {
+            "name": "bab-baas-api-bp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-baas-api-bp-01')]",
+            "properties": {
+              "backendAddresses": [
+                {
+                  "ipAddress": "10.189.64.254"
+                }
+              ]
+            }
+          }
+        ],
+        "loadDistributionPolicies": [],
+        "backendHttpSettingsCollection": [
+          {
+            "name": "bab-dev-hr-auth-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-hr-auth-bs-01')]",
+            "properties": {
+              "port": 8443,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 20,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-hrauth-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-dev-hr-mobile-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-hr-mobile-bs-01')]",
+            "properties": {
+              "port": 443,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 20,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-hrauth-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-dev-hr-api-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-hr-api-bs-01')]",
+            "properties": {
+              "port": 444,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "hrmobile.albtests.com",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 20,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-hrapi-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "test-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/test-bs-01')]",
+            "properties": {
+              "port": 443,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 20,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/test-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-dev-rmb-bs-02",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-rmb-bs-02')]",
+            "properties": {
+              "port": 80,
+              "protocol": "Http",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "rmbdev.albtests.com",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 20,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-rmb-hp-02')]"
+              }
+            }
+          },
+          {
+            "name": "bab-sit-rmb-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-sit-rmb-bs-01')]",
+            "properties": {
+              "port": 80,
+              "protocol": "Http",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "rmbsit.albtests.com",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 20,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-sit-rmb-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-dev-rmb-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-rmb-bs-01')]",
+            "properties": {
+              "port": 443,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "rmbdev.albtests.com",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 300,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-rmb-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-sit-rmb-bs-02",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-sit-rmb-bs-02')]",
+            "properties": {
+              "port": 443,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "rmbsit.albtests.com",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 300,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-sit-rmb-hp-02')]"
+              }
+            }
+          },
+          {
+            "name": "test-app-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/test-app-bs-01')]",
+            "properties": {
+              "port": 80,
+              "protocol": "Http",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "bab-dev-ai-web-weeu-app-01.teamaz.co.in",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 20,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/test-app-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-uat-ai-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-uat-ai-bs-01')]",
+            "properties": {
+              "port": 443,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "bab-uat-ai-web-weeu-app-01.azurewebsites.net",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 600,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-uat-ai-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-uat-ai-api-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-uat-ai-api-bs-01')]",
+            "properties": {
+              "port": 443,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "bab-uat-ai-web-weeu-app-02.azurewebsites.net",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 600,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-uat-ai-api-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-live-ai-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-live-ai-bs-01')]",
+            "properties": {
+              "port": 443,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "bab-live-ai-web-weeu-app-01.azurewebsites.net",
+              "pickHostNameFromBackendAddress": false,
+              "affinityCookieName": "ApplicationGatewayAffinity",
+              "requestTimeout": 600,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-live-ai-hp-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-baas-api-bs-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-baas-api-bs-01')]",
+            "properties": {
+              "port": 443,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "baas-sit.albtests.com",
+              "pickHostNameFromBackendAddress": false,
+              "requestTimeout": 90,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-baas-api-hp-01')]"
+              },
+              "trustedRootCertificates": [
+                {
+                  "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/trustedRootCertificates/albtests-rootca')]"
+                }
+              ]
+            }
+          },
+          {
+            "name": "bab-rmb-preuat-bs-02",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-rmb-preuat-bs-02')]",
+            "properties": {
+              "port": 9580,
+              "protocol": "Https",
+              "cookieBasedAffinity": "Disabled",
+              "hostName": "rmb-preuat.albtests.com",
+              "pickHostNameFromBackendAddress": false,
+              "requestTimeout": 600,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-rmb-preuat-hp-01')]"
+              }
+            }
+          }
+        ],
+        "backendSettingsCollection": [],
+        "httpListeners": [
+          {
+            "name": "bab-dev-hrauth-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-hrauth-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_8443')]"
+              },
+              "protocol": "Https",
+              "sslCertificate": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/hrmobile-cert')]"
+              },
+              "hostName": "hrmobile.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": true,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-dev-hrapi-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-hrapi-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_444')]"
+              },
+              "protocol": "Https",
+              "sslCertificate": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/hrmobile-cert')]"
+              },
+              "hostName": "hrmobile.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": true,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-dev-rmb-ls-02",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-rmb-ls-02')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_80')]"
+              },
+              "protocol": "Http",
+              "hostName": "rmbdev.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": false,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-sit-rmb-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-sit-rmb-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_80')]"
+              },
+              "protocol": "Http",
+              "hostName": "rmbsit.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": false,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "test-app-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/test-app-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_80')]"
+              },
+              "protocol": "Http",
+              "hostName": "bab-dev-ai-web-weeu-app-01.teamaz.co.in",
+              "hostNames": [],
+              "requireServerNameIndication": false,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-uat-ai-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-uat-ai-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_443')]"
+              },
+              "protocol": "Https",
+              "sslCertificate": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/albtestswc')]"
+              },
+              "hostName": "bab-uat-ai.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": true,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-live-ai-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-live-ai-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_443')]"
+              },
+              "protocol": "Https",
+              "sslCertificate": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/albtestswc')]"
+              },
+              "hostName": "babot.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": true,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-sit-rmb-ls-02",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-sit-rmb-ls-02')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_443')]"
+              },
+              "protocol": "Https",
+              "sslCertificate": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/rmbsit-cert')]"
+              },
+              "hostName": "rmbsit.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": true,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-dev-rmb-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-rmb-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_443')]"
+              },
+              "protocol": "Https",
+              "sslCertificate": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/rmbdev-cert')]"
+              },
+              "hostName": "rmbdev.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": true,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-dev-hr-mobile-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-hr-mobile-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_443')]"
+              },
+              "protocol": "Https",
+              "sslCertificate": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/hrmobile-cert')]"
+              },
+              "hostName": "hrmobile.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": true,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-baas-api-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-baas-api-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_443')]"
+              },
+              "protocol": "Https",
+              "sslCertificate": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/baasapi')]"
+              },
+              "hostName": "baas-api.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": true,
+              "customErrorConfigurations": []
+            }
+          },
+          {
+            "name": "bab-rmb-preuat-ls-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-rmb-preuat-ls-01')]",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendIPConfigurations/appGwPublicFrontendIpIPv4')]"
+              },
+              "frontendPort": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/frontendPorts/port_443')]"
+              },
+              "protocol": "Https",
+              "sslCertificate": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/sslCertificates/albtestswc')]"
+              },
+              "hostName": "rmb-preuat.albtests.com",
+              "hostNames": [],
+              "requireServerNameIndication": true,
+              "customErrorConfigurations": []
+            }
+          }
+        ],
+        "listeners": [],
+        "urlPathMaps": [],
+        "requestRoutingRules": [
+          {
+            "name": "bab-uat-ai-rt-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-uat-ai-rt-01')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 1,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-uat-ai-ls-01')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-uat-ai-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-uat-ai-bs-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-dev-hr-mobile-rt-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-dev-hr-mobile-rt-01')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 3,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-hr-mobile-ls-01')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-dev-hrapp-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-hr-mobile-bs-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-dev-hrapi-rt-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-dev-hrapi-rt-01')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 4,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-hrapi-ls-01')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-dev-hrapp-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-hr-api-bs-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-live-ai-rt-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-live-ai-rt-01')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 6,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-live-ai-ls-01')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-live-ai-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-live-ai-bs-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-dev-hrauth-rt-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-dev-hrauth-rt-01')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 7,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-hrauth-ls-01')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-dev-hrapp-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-hr-auth-bs-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-rmbpreuat-rt-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-rmbpreuat-rt-01')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 8,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-rmb-preuat-ls-01')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-sit-rmb-lb-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-rmb-preuat-bs-02')]"
+              }
+            }
+          },
+          {
+            "name": "bab-sit-rmb-rt-02",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-sit-rmb-rt-02')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 13,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-sit-rmb-ls-02')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-sit-rmb-lb-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-sit-rmb-bs-02')]"
+              }
+            }
+          },
+          {
+            "name": "bab-sit-rmb-rt-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-sit-rmb-rt-01')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 14,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-sit-rmb-ls-01')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-sit-rmb-lb-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-sit-rmb-bs-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-dev-rmb-rt-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-dev-rmb-rt-01')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 15,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-rmb-ls-01')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-dev-rmb-lb-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-rmb-bs-01')]"
+              }
+            }
+          },
+          {
+            "name": "bab-dev-rmb-rt-02",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-dev-rmb-rt-02')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 16,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-dev-rmb-ls-02')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-dev-rmb-lb-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-dev-rmb-bs-02')]"
+              }
+            }
+          },
+          {
+            "name": "bab-baas-api-rt-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/requestRoutingRules/bab-baas-api-rt-01')]",
+            "properties": {
+              "ruleType": "Basic",
+              "priority": 17,
+              "httpListener": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/httpListeners/bab-baas-api-ls-01')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendAddressPools/bab-baas-api-bp-01')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/backendHttpSettingsCollection/bab-baas-api-bs-01')]"
+              }
+            }
+          }
+        ],
+        "routingRules": [],
+        "probes": [
+          {
+            "name": "bab-dev-bib-backbase-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-bib-backbase-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "dev.bib.albtests.com",
+              "path": "/*",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-sit-bib-backbase-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-sit-bib-backbase-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "path": "/*",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": true,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "test-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/test-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "test.sit.bib.albtests.com",
+              "path": "/test.html",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-dev-hrauth-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-hrauth-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "hrmobile.albtests.com",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-dev-hrapi-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-hrapi-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "hrmobile.albtests.com",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-sit-rmb-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-sit-rmb-hp-01')]",
+            "properties": {
+              "protocol": "Http",
+              "host": "rmbsit.abtests.com",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-sit-rmb-hp-02",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-sit-rmb-hp-02')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "rmbsit.albtests.com",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-dev-rmb-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-rmb-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": true,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-dev-rmb-hp-02",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-rmb-hp-02')]",
+            "properties": {
+              "protocol": "Http",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": true,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-dev-rmb-hp-03",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-rmb-hp-03')]",
+            "properties": {
+              "protocol": "Http",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": true,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-dev-rmb-hp-04",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-dev-rmb-hp-04')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "rmbdev.albtests.com",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "test-app-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/test-app-hp-01')]",
+            "properties": {
+              "protocol": "Http",
+              "host": "bab-dev-ai-web-weeu-app-01.teamaz.co.in",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-uat-ai-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-uat-ai-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "bab-uat-ai-web-weeu-app-01.azurewebsites.net",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-uat-ai-api-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-uat-ai-api-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "bab-uat-ai-web-weeu-app-02.azurewebsites.net",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-live-ai-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-live-ai-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "bab-live-ai-web-weeu-app-01.azurewebsites.net",
+              "path": "/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-rmb-preuat-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-rmb-preuat-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "rmb-preuat.albtests.com",
+              "port": 9580,
+              "path": "/",
+              "interval": 30,
+              "timeout": 90,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          },
+          {
+            "name": "bab-baas-api-hp-01",
+            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', parameters('applicationGateways_bab_core_shared_appgw_weeu_01_name')), '/probes/bab-baas-api-hp-01')]",
+            "properties": {
+              "protocol": "Https",
+              "host": "baas-sit.albtests.com",
+              "path": "/market-place/",
+              "interval": 30,
+              "timeout": 30,
+              "unhealthyThreshold": 3,
+              "pickHostNameFromBackendHttpSettings": false,
+              "minServers": 0,
+              "match": {
+                "statusCodes": [
+                  "200-399"
+                ]
+              }
+            }
+          }
+        ],
+        "rewriteRuleSets": [],
+        "redirectConfigurations": [],
+        "privateLinkConfigurations": [],
+        "enableHttp2": true,
+        "forceFirewallPolicyAssociation": true,
+        "autoscaleConfiguration": {
+          "minCapacity": 0,
+          "maxCapacity": 3
+        },
+        "globalConfiguration": {
+          "enableRequestBuffering": true
+        },
+        "customErrorConfigurations": [],
+        "firewallPolicy": {
+          "id": "[parameters('ApplicationGatewayWebApplicationFirewallPolicies_bab_core_default_waf_policy_externalid')]"
+        }
+      }
+    }
+  ]
+}

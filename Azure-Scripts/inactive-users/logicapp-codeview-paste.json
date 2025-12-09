@@ -1,0 +1,325 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "triggers": {
+    "Recurrence": {
+      "type": "Recurrence",
+      "recurrence": {
+        "frequency": "Month",
+        "interval": 1
+      }
+    }
+  },
+  "actions": {
+    "Get_Cloud_Users": {
+      "type": "Http",
+      "inputs": {
+        "method": "GET",
+        "uri": "https://graph.microsoft.com/v1.0/users?$select=displayName,userPrincipalName,signInActivity,onPremisesSyncEnabled,userType,createdDateTime,accountEnabled&$filter=onPremisesSyncEnabled eq null and endsWith(userPrincipalName,'albtests.com')&$count=true",
+        "headers": {
+          "ConsistencyLevel": "eventual",
+          "Prefer": "HonorNonIndexedQueriesWarningMayFailRandomly"
+        },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "audience": "https://graph.microsoft.com"
+        }
+      },
+      "runtimeConfiguration": {
+        "paginationPolicy": {
+          "minimumItemCount": 5000
+        }
+      }
+    },
+    "Init_CSV": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "CSV",
+            "type": "string",
+            "value": "DisplayName,UPN,CreatedDate,AccountEnabled,LastSignIn,DaysSinceLastSignIn,Status\n"
+          }
+        ]
+      },
+      "runAfter": {
+        "Get_Cloud_Users": ["Succeeded"]
+      }
+    },
+    "Init_TotalUsers": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "TotalUsers",
+            "type": "integer",
+            "value": 0
+          }
+        ]
+      },
+      "runAfter": {
+        "Init_CSV": ["Succeeded"]
+      }
+    },
+    "Init_UserCount": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "UserCount",
+            "type": "integer",
+            "value": 0
+          }
+        ]
+      },
+      "runAfter": {
+        "Init_TotalUsers": ["Succeeded"]
+      }
+    },
+    "Init_AllUsersCSV": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "AllUsersCSV",
+            "type": "string",
+            "value": "DisplayName,UPN,LastSignIn,DaysSinceSignIn\n"
+          }
+        ]
+      },
+      "runAfter": {
+        "Init_UserCount": ["Succeeded"]
+      }
+    },
+    "Set_TotalUsers": {
+      "type": "SetVariable",
+      "inputs": {
+        "name": "TotalUsers",
+        "value": "@length(body('Get_Cloud_Users')?['value'])"
+      },
+      "runAfter": {
+        "Init_AllUsersCSV": ["Succeeded"]
+      }
+    },
+    "ForEach_User": {
+      "type": "Foreach",
+      "foreach": "@body('Get_Cloud_Users')?['value']",
+      "runAfter": {
+        "Set_TotalUsers": ["Succeeded"]
+      },
+      "actions": {
+        "Append_All_Users": {
+          "type": "AppendToStringVariable",
+          "inputs": {
+            "name": "AllUsersCSV",
+            "value": "@{item()?['displayName']},@{item()?['userPrincipalName']},@{if(empty(item()?['signInActivity']?['lastSignInDateTime']),'Never',item()?['signInActivity']?['lastSignInDateTime'])},@{if(empty(item()?['signInActivity']?['lastSignInDateTime']),'Never',string(div(sub(ticks(utcNow()),ticks(item()?['signInActivity']?['lastSignInDateTime'])),864000000000)))}\n"
+          }
+        },
+        "If_Inactive": {
+          "type": "If",
+          "runAfter": {
+            "Append_All_Users": ["Succeeded"]
+          },
+          "expression": {
+            "and": [
+              {
+                "or": [
+                  {
+                    "equals": [
+                      "@item()?['signInActivity']?['lastSignInDateTime']",
+                      "@null"
+                    ]
+                  },
+                  {
+                    "lessOrEquals": [
+                      "@item()?['signInActivity']?['lastSignInDateTime']",
+                      "@addDays(utcNow(), -90)"
+                    ]
+                  }
+                ]
+              },
+              {
+                "lessOrEquals": [
+                  "@item()?['createdDateTime']",
+                  "@addDays(utcNow(), -15)"
+                ]
+              },
+              {
+                "not": {
+                  "startsWith": [
+                    "@toLower(item()?['userPrincipalName'])",
+                    "svc"
+                  ]
+                }
+              }
+            ]
+          },
+          "actions": {
+            "Append_CSV": {
+              "type": "AppendToStringVariable",
+              "inputs": {
+                "name": "CSV",
+                "value": "@{item()?['displayName']},@{item()?['userPrincipalName']},@{item()?['createdDateTime']},@{if(equals(item()?['accountEnabled'],true),'Enabled','Disabled')},@{if(empty(item()?['signInActivity']?['lastSignInDateTime']),'Never',item()?['signInActivity']?['lastSignInDateTime'])},@{if(empty(item()?['signInActivity']?['lastSignInDateTime']),'Never',string(div(sub(ticks(utcNow()),ticks(item()?['signInActivity']?['lastSignInDateTime'])),864000000000)))},Inactive\n"
+              }
+            },
+            "Increment_Count": {
+              "type": "IncrementVariable",
+              "inputs": {
+                "name": "UserCount",
+                "value": 1
+              },
+              "runAfter": {
+                "Append_CSV": ["Succeeded"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "Get_SendGrid_Key": {
+      "type": "Http",
+      "inputs": {
+        "method": "GET",
+        "uri": "https://bab-core-kv-swec-01.vault.azure.net/secrets/SendGridApiKey?api-version=7.4",
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "audience": "https://vault.azure.net"
+        }
+      },
+      "runAfter": {
+        "ForEach_User": ["Succeeded", "Failed", "Skipped", "TimedOut"]
+      }
+    },
+    "Check_Key_Retrieved": {
+      "type": "If",
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@outputs('Get_SendGrid_Key')['statusCode']",
+              200
+            ]
+          },
+          {
+            "not": {
+              "equals": [
+                "@body('Get_SendGrid_Key')?['value']",
+                "@null"
+              ]
+            }
+          }
+        ]
+      },
+      "actions": {
+        "Check_Before_Send": {
+          "type": "If",
+          "expression": {
+            "greater": [
+              "@variables('UserCount')",
+              0
+            ]
+          },
+          "actions": {
+            "Send_Email_SendGrid": {
+              "type": "Http",
+              "inputs": {
+                "method": "POST",
+                "uri": "https://api.sendgrid.com/v3/mail/send",
+                "headers": {
+                  "Authorization": "Bearer @{body('Get_SendGrid_Key')?['value']}",
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "personalizations": [
+                    {
+                      "to": [
+                        {
+                          "email": "anagisetty@bankalbilad.com.sa"
+                        }
+                      ],
+                      "subject": "Inactive cloud-only users report - @{variables('UserCount')} users found"
+                    }
+                  ],
+                  "from": {
+                    "email": "cloudops@albtests.com"
+                  },
+                  "content": [
+                    {
+                      "type": "text/html",
+                      "value": "<h3>Inactive Cloud-Only Users Report</h3><p>Total users retrieved: <b>@{variables('TotalUsers')}</b><br/>Inactive users found: <b>@{variables('UserCount')}</b></p><p>Domain filter: @albtests.com<br/>Inactivity threshold: 90 days<br/>Report generated: @{utcNow()}</p><p>Please find the detailed list of inactive users in the attached CSV file.</p><p><b>Note: No accounts were changed. This is a report only.</b></p>"
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "content": "@{base64(variables('CSV'))}",
+                      "filename": "InactiveCloudUsers.csv",
+                      "type": "text/csv",
+                      "disposition": "attachment"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "else": {
+            "actions": {
+              "Send_No_Users_Email": {
+                "type": "Http",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "https://api.sendgrid.com/v3/mail/send",
+                  "headers": {
+                    "Authorization": "Bearer @{body('Get_SendGrid_Key')?['value']}",
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "personalizations": [
+                      {
+                        "to": [
+                          {
+                            "email": "cloudops@albtests.com"
+                          }
+                        ],
+                        "subject": "Inactive cloud-only users report - No users found"
+                      }
+                    ],
+                    "from": {
+                      "email": "anagisetty@bankalbilad.com.sa"
+                    },
+                    "content": [
+                      {
+                        "type": "text/html",
+                        "value": "<h3>Inactive Cloud-Only Users Report</h3><p><b>No inactive users found</b> matching the criteria (90+ days without sign-in).</p><p>Domain filter: @albtests.com<br/>Report generated: @{utcNow()}</p>"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "actions": {
+          "Terminate_Key_Error": {
+            "type": "Terminate",
+            "inputs": {
+              "runStatus": "Failed",
+              "runError": {
+                "code": "KeyVaultError",
+                "message": "Failed to retrieve SendGrid API key from Key Vault. Status: @{outputs('Get_SendGrid_Key')['statusCode']}"
+              }
+            }
+          }
+        }
+      },
+      "runAfter": {
+        "Get_SendGrid_Key": ["Succeeded", "Failed", "Skipped", "TimedOut"]
+      }
+    }
+  }
+  },
+  "parameters": {}
+}

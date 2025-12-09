@@ -18,6 +18,7 @@ import csv
 import json
 import os
 import sys
+import re
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -35,6 +36,23 @@ def choose(*candidates):
         if c is not None and str(c).strip() != "":
             return str(c).strip()
     return None
+
+def validate_vm_name(name: str) -> bool:
+    """Validate VM name follows Azure naming conventions"""
+    if not name or len(name) > 64:
+        return False
+    # Azure VM names: alphanumeric and hyphens, can't start/end with hyphen
+    pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,62}[a-zA-Z0-9])?$'
+    return bool(re.match(pattern, name))
+
+def validate_ip_address(ip: str) -> bool:
+    """Validate IP address format"""
+    pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+    if not re.match(pattern, ip):
+        return False
+    # Check octets are 0-255
+    octets = ip.split('.')
+    return all(0 <= int(octet) <= 255 for octet in octets)
 
 # ---- Generator Class -------------------------------------------------------
 
@@ -96,6 +114,13 @@ class TerraformVMGenerator:
             json.loads(self.config["default_tags_json"])
         except Exception as e:
             print(f"[ERROR] DEFAULT_TAGS_JSON is not valid JSON: {e}")
+            sys.exit(1)
+        
+        # Validate subscription ID format (GUID)
+        sub_id = self.config.get("subscription_id", "")
+        guid_pattern = r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        if not re.match(guid_pattern, sub_id):
+            print(f"[ERROR] Invalid subscription_id format: {sub_id}")
             sys.exit(1)
 
         print(f"[OK] Generator configuration ready. Environment={self.environment}")
@@ -205,6 +230,12 @@ resource "azurerm_resource_group" "{safe_rg}_rg" {{
         vm_name = safe(row.get("vm_name"))
         if not vm_name:
             return
+        
+        # Validate VM name
+        if not validate_vm_name(vm_name):
+            print(f"[ERROR] Invalid VM name: {vm_name}")
+            print(f"[ERROR] VM names must be 1-64 chars, alphanumeric and hyphens only")
+            sys.exit(1)
 
         resource_group = safe(row.get("resource_group"))
         subnet_name = safe(row.get("subnet_name"))
@@ -212,6 +243,16 @@ resource "azurerm_resource_group" "{safe_rg}_rg" {{
         vm_size = safe(row.get("vm_size")) or "Standard_D4s_v5"
         os_template = safe(row.get("os_template")) or "windows-2022"
         create_rg = safe(row.get("create_rg")).lower() == "true"
+        
+        # Validate required fields
+        if not all([resource_group, subnet_name, static_ip]):
+            print(f"[ERROR] VM {vm_name}: Missing required fields (resource_group, subnet_name, or static_ip)")
+            sys.exit(1)
+        
+        # Validate IP address
+        if not validate_ip_address(static_ip):
+            print(f"[ERROR] VM {vm_name}: Invalid IP address format: {static_ip}")
+            sys.exit(1)
 
         tags = self.parse_tags()
         tags_block = ",\n    ".join([f'"{k}" = "{v}"' for k, v in tags.items()])
@@ -484,28 +525,14 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
   }}
 }}
 """.format(
-    vm_name=vm_name,
-    vm_type=vm_type,
-    publisher=publisher,
-    handler_version=handler_version,
-    sas_url=sas_url,
-    command=command,
-    tags_block=tags_block
-))
-    # ----- Outputs -----
-    def _generate_outputs(self, tf, vm_names: List[str]):
-        tf.write("\n# ==== Outputs ====\n")
-        tf.write('output "vm_private_ips" {\n  value = {\n')
-        for vm in vm_names:
-            tf.write(f'    "{vm}" = azurerm_network_interface.{vm}_nic.private_ip_address\n')
-        tf.write("  }\n}\n")
-
     # ----- Main generate method -----
     def generate_terraform(self):
         # ensure output dir exists
         os.makedirs(os.path.dirname(self.output_tf_file), exist_ok=True)
 
         vm_names = []
+        seen_ips = set()
+        validation_errors = []
 
         # Write TF
         try:
@@ -518,12 +545,52 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
                 try:
                     with open(self.csv_file_path, newline='', encoding='utf-8') as csvfile:
                         reader = csv.DictReader(csvfile)
-                        for row in reader:
+                        for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
                             if not row.get("vm_name") or not str(row.get("vm_name")).strip():
                                 continue
+                            
                             vm = safe(row.get("vm_name"))
-                            vm_names.append(vm)
+                            
+                            # Check for duplicate VM names
+                            if vm in vm_names:
+                                validation_errors.append(f"Row {row_num}: Duplicate VM name '{vm}'")
+                            else:
+                                vm_names.append(vm)
+                            
+                            # Check for duplicate IPs
+                            ip = safe(row.get("static_ip"))
+                            if ip in seen_ips:
+                                validation_errors.append(f"Row {row_num}: Duplicate IP address '{ip}' for VM '{vm}'")
+                            else:
+                                seen_ips.add(ip)
+                            
+                            # Generate VM resources
                             self._generate_vm_from_row(tf, row)
+                            
+                except FileNotFoundError:
+                    print(f"[ERROR] CSV file not found: {self.csv_file_path}")
+                    sys.exit(1)
+                except Exception as e:
+                    print(f"[ERROR] Error reading CSV: {e}")
+                    sys.exit(2)
+
+                # Report validation errors
+                if validation_errors:
+                    print(f"\n[ERROR] CSV Validation Failed:")
+                    for error in validation_errors:
+                        print(f"  - {error}")
+                    sys.exit(2)
+
+                # Outputs
+                self._generate_outputs(tf, vm_names)
+
+        except Exception as e:
+            print(f"[ERROR] Failed to write TF file {self.output_tf_file}: {e}")
+            sys.exit(3)
+
+        print(f"[OK] Terraform file generated: {self.output_tf_file}")
+        print(f"[INFO] VMs included: {len(vm_names)}")
+        print(f"[INFO] Unique IPs: {len(seen_ips)}")(tf, row)
                 except FileNotFoundError:
                     print(f"[ERROR] CSV file not found: {self.csv_file_path}")
                     sys.exit(1)

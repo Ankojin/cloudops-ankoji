@@ -1,4 +1,4 @@
-# Deploy-LogicApp_start_single_csv.ps1
+Deploy-LogicApp_start_single_csv.ps1
 
 ## Overview
 This PowerShell script automates the deployment of Azure Logic Apps for VM start operations. It supports both single deployments and bulk deployments from a CSV file, enabling flexible scheduling and resource management for Azure VMs.
@@ -33,6 +33,7 @@ Deploy a Logic App for a specific VM or set of VMs:
 ./Deploy-LogicApp_start_single_csv.ps1 -SubscriptionId <sub-id> -LogicAppResourceGroup <rg> -DeploymentMode 'Single' -VMSubscriptionId <vm-sub-id> -LogicAppName <name> -DefinitionFile <json> -VMResourceGroup <vm-rg> -VMNames "VM1,VM2" -StartHour 8 -StartMinute 0 -WeekDays "Monday,Tuesday"
 ```
 
+
 ### CSV Mode
 Bulk deploy Logic Apps using a CSV file:
 ```powershell
@@ -48,12 +49,13 @@ The CSV file should contain the following columns:
 - StartHour
 - StartMinute
 - WeekDays
-- DefinitionFile
+
+**Note:** The definition file path is now hardcoded in the script as `Pipelines/logicapps/logicapp_start.json` for all deployments in CSV mode. The `DefinitionFile` column in the CSV is ignored.
 
 Example:
 ```
-LogicAppType,LogicAppName,ResourceGroup,VmNames,StartHour,StartMinute,WeekDays,DefinitionFile
-Application,bab_bo_dev,BAB-DEV-BO-SWEC-RG-01,"DABORAPXXDWV1DASAPAPBODWV1,DASAPAPDMDWV1,DASAPWBBODWV1",8,0,"Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday",.\logicapp_start.json
+LogicAppType,LogicAppName,ResourceGroup,VmNames,StartHour,StartMinute,WeekDays
+Application,bab_bo_dev,BAB-DEV-BO-SWEC-RG-01,"DABORAPXXDWV1DASAPAPBODWV1,DASAPAPDMDWV1,DASAPWBBODWV1",8,0,"Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday"
 ```
 
 ## Logging

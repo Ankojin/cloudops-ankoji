@@ -5,7 +5,7 @@ param(
     [string[]]$ResourceGroupNames = @("bab-dev-apex-swec-rg-01"),
     
     [Parameter(Mandatory = $false)]
-    [string[]]$ExcludedVMNames = @(),
+    [string]$ExcludedVMName = "",
     
     [Parameter(Mandatory = $false)]
     [string]$SnapshotPrefix = "snapshot",
@@ -35,8 +35,8 @@ foreach ($ResourceGroupName in $ResourceGroupNames) {
         continue
     }
 
-    # Get all VMs in the RG, excluding the specified VMs
-    $VMs = Get-AzVM -ResourceGroupName $ResourceGroupName | Where-Object { $_.Name -notin $ExcludedVMNames }
+    # Get all VMs in the RG, excluding the specified VM
+    $VMs = Get-AzVM -ResourceGroupName $ResourceGroupName | Where-Object { $_.Name -ne $ExcludedVMName }
     
     if ($VMs.Count -eq 0) {
         Write-Host "⚠️ No VMs found in resource group '$ResourceGroupName'. Skipping..." -ForegroundColor Yellow

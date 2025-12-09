@@ -7,8 +7,8 @@ if (-not (Get-Module -ListAvailable -Name Microsoft.Graph)) {
 Connect-MgGraph -Scopes "User.ReadWrite.All Group.ReadWrite.All"
 
 # CSV and log paths
-$csvPath = "C:\Ankoji\scripts\serviceaccount_users.csv"
-$logPath = "C:\Ankoji\scripts\serviceaccount_user_creation.log"
+$csvPath = "C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\AVDusercreation\serviceaccount_users.csv"
+$logPath = "C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\AVDusercreation\serviceaccount_user_creation.log"
 $users   = Import-Csv -Path $csvPath
 
 # Define target groups
@@ -38,20 +38,39 @@ foreach ($user in $users) {
         # Get or create user
         $mgUser = Get-MgUser -UserId $upn -ErrorAction SilentlyContinue
         if (-not $mgUser) {
-            $userParams = @{
-                DisplayName       = $user.DisplayName
-                UserPrincipalName = $upn
-                MailNickName      = $user.MailNickName
-                AccountEnabled    = $true
-                PasswordProfile   = @{
-                    Password                      = $user.Password
-                    ForceChangePasswordNextSignIn = $false
+            # Ensure password is not empty
+            $password = $user.Password.Trim()
+            if ([string]::IsNullOrWhiteSpace($password)) {
+                Write-Host "❌ Password is missing for $upn. Skipping." -ForegroundColor Red
+                Add-Content -Path $logPath -Value "[$(Get-Date)] Password missing for $upn. Skipped."
+                continue
+            }
+
+            $displayName = if ($user.DisplayName) { $user.DisplayName.Trim() } else { $null }
+            $mailNickname = if ($user.MailNickName) { $user.MailNickName.Trim() } else { $null }
+
+            if ([string]::IsNullOrWhiteSpace($displayName)) {
+                Write-Host "❌ DisplayName is missing for $upn. Skipping." -ForegroundColor Red
+                Add-Content -Path $logPath -Value "[$(Get-Date)] DisplayName missing for $upn. Skipped."
+                continue
+            }
+
+            # Create user using direct Graph API call to bypass SDK issue
+            $userBodyHashtable = @{
+                displayName = $displayName
+                userPrincipalName = $upn
+                mailNickname = $mailNickname
+                accountEnabled = $true
+                passwordProfile = @{
+                    password = $password
+                    forceChangePasswordNextSignIn = $false
                 }
             }
-            $mgUser = New-MgUser @userParams
+
+            $mgUser = Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users" -Body $userBodyHashtable -OutputType PSObject
             Write-Host "✅ Created user: $upn" -ForegroundColor Green
             Add-Content -Path $logPath -Value "[$(Get-Date)] Created user: $upn"
-            Start-Sleep -Seconds 5  # ensure Graph has registered the new user
+            Start-Sleep -Seconds 10  # ensure Graph has registered the new user
         }
         else {
             Write-Host "⚠️ User already exists: $upn" -ForegroundColor Yellow
@@ -61,16 +80,30 @@ foreach ($user in $users) {
         # Add user to all target groups
         foreach ($groupName in $groups.Keys) {
             $groupId = $groups[$groupName]
+            
+            # Verify user object exists and has ID
+            if (-not $mgUser.Id) {
+                Write-Host "❌ User $upn does not have valid ID. Skipping group addition." -ForegroundColor Red
+                Add-Content -Path $logPath -Value "[$(Get-Date)] User $upn missing ID. Skipped group addition."
+                continue
+            }
+
             $groupMembers = Get-MgGroupMember -GroupId $groupId -All
             $isMember = $groupMembers | Where-Object { $_.Id -eq $mgUser.Id }
 
             if (-not $isMember) {
-                $params = @{
-                    "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($mgUser.Id)"
+                try {
+                    $params = @{
+                        "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($mgUser.Id)"
+                    }
+                    New-MgGroupMemberByRef -GroupId $groupId -BodyParameter $params -ErrorAction Stop
+                    Write-Host "➕ Added $upn to group '$groupName'" -ForegroundColor Cyan
+                    Add-Content -Path $logPath -Value "[$(Get-Date)] Added $upn to group '$groupName'"
                 }
-                New-MgGroupMemberByRef -GroupId $groupId -BodyParameter $params
-                Write-Host "➕ Added $upn to group '$groupName'" -ForegroundColor Cyan
-                Add-Content -Path $logPath -Value "[$(Get-Date)] Added $upn to group '$groupName'"
+                catch {
+                    Write-Host "❌ Failed to add $upn to group '$groupName': $($_.Exception.Message)" -ForegroundColor Red
+                    Add-Content -Path $logPath -Value "[$(Get-Date)] Failed to add $upn to group '$groupName': $($_.Exception.Message)"
+                }
             }
             else {
                 Write-Host "✔️ $upn already in group '$groupName'" -ForegroundColor Gray

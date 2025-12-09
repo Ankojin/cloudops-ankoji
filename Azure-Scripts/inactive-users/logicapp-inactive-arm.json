@@ -1,0 +1,188 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "keyVaultName": {
+      "type": "string"
+    },
+    "emailFrom": {
+      "type": "string",
+      "defaultValue": "automation@tests.com"
+    },
+    "emailTo": {
+      "type": "string",
+      "defaultValue": "admin@tests.com"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "report-inactive-cloudusers",
+      "location": "[resourceGroup().location]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+            "parameters": {
+              "emailTo": {
+                "type": "String"
+              },
+              "emailFrom": {
+                "type": "String"
+              }
+            },
+          "triggers": {
+            "Recurrence": {
+              "type": "Recurrence",
+              "recurrence": {
+                "frequency": "Week",
+                "interval": 1
+              }
+            }
+          },
+
+          "actions": {
+            "Get_Cloud_Users": {
+              "type": "Http",
+              "inputs": {
+                "method": "GET",
+                "uri": "https://graph.microsoft.com/v1.0/users?$select=displayName,userPrincipalName,signInActivity,onPremisesSyncEnabled,userType&$filter=userType eq 'Member' and onPremisesSyncEnabled eq false and endsWith(userPrincipalName,'@albtests.com')&$count=true",
+                "headers": {
+                  "ConsistencyLevel": "eventual",
+                  "Prefer": "HonorNonIndexedQueriesWarningMayFailRandomly"
+                },
+                "authentication": {
+                  "type": "ManagedServiceIdentity",
+                  "audience": "https://graph.microsoft.com"
+                }
+              },
+              "runtimeConfiguration": {
+                "paginationPolicy": {
+                  "minimumItemCount": 5000
+                }
+              }
+            },
+
+            "Init_CSV": {
+              "type": "InitializeVariable",
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "CSV",
+                    "type": "string",
+                    "value": "DisplayName,UPN,LastSignIn\n"
+                  }
+                ]
+              },
+              "runAfter": {
+                "Get_Cloud_Users": [ "Succeeded" ]
+              }
+            },
+
+            "ForEach_User": {
+              "type": "Foreach",
+              "foreach": "@body('Get_Cloud_Users')?['value']",
+              "runAfter": {
+                "Init_CSV": [ "Succeeded" ]
+              },
+              "actions": {
+                "If_Inactive": {
+                  "type": "If",
+                  "expression": {
+                    "or": [
+                      {
+                        "equals": [
+                          "@item()?['signInActivity']?['lastSignInDateTime']",
+                          null
+                        ]
+                      },
+                      {
+                        "less": [
+                          "@item()?['signInActivity']?['lastSignInDateTime']",
+                          "@addDays(utcNow(), -90)"
+                        ]
+                      }
+                    ]
+                  },
+                  "actions": {
+                    "Append_CSV": {
+                      "type": "AppendToStringVariable",
+                      "inputs": {
+                        "name": "CSV",
+                        "value": "@concat(item()?['displayName'], ',', item()?['userPrincipalName'], ',', coalesce(item()?['signInActivity']?['lastSignInDateTime'],'Never'), '\n')"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+
+            "Get_SendGrid_Key": {
+              "type": "Http",
+              "inputs": {
+                "method": "GET",
+                "uri": "[concat('https://', parameters('keyVaultName'), '.vault.azure.net/secrets/SendGridApiKey?api-version=7.4')]",
+                "authentication": {
+                  "type": "ManagedServiceIdentity",
+                  "audience": "https://vault.azure.net"
+                }
+              },
+              "runAfter": {
+                "ForEach_User": [ "Succeeded" ]
+              }
+            },
+
+            "Send_Email_SendGrid": {
+              "type": "Http",
+              "inputs": {
+                "method": "POST",
+                "uri": "https://api.sendgrid.com/v3/mail/send",
+                "headers": {
+                  "Authorization": "Bearer @{body('Get_SendGrid_Key')?['value']}",
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "personalizations": [
+                    {
+                      "to": [
+                        {
+                          "email": "@{parameters('emailTo')}"
+                        }
+                      ],
+                      "subject": "Inactive cloud-only users report"
+                    }
+                  ],
+                  "from": {
+                    "email": "@{parameters('emailFrom')}"
+                  },
+                  "content": [
+                    {
+                      "type": "text/html",
+                      "value": "<h3>Inactive Cloud-Only Users</h3><p>Attached CSV lists users inactive for 90+ days.<br/><b>No accounts were changed.</b></p>"
+                    }
+                  ],
+                  "attachments": [
+                    {
+                      "content": "@{base64(variables('CSV'))}",
+                      "filename": "InactiveCloudUsers.csv",
+                      "type": "text/csv",
+                      "disposition": "attachment"
+                    }
+                  ]
+                }
+              },
+              "runAfter": {
+                "Get_SendGrid_Key": [ "Succeeded" ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

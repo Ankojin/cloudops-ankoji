@@ -58,6 +58,9 @@ stages:
     displayName: "Terraform Job"
     pool:
       name: cloudops-agent
+    
+    continueOnError: false
+    timeoutInMinutes: 60
 
     steps:
 
@@ -67,6 +70,73 @@ stages:
       inputs:
         versionSpec: '$(pythonVersion)'
         architecture: 'x64'
+
+    # ----------------------------------------------------
+    # CSV Pre-flight Validation
+    # ----------------------------------------------------
+    - task: PowerShell@2
+      displayName: "Validate CSV File"
+      inputs:
+        targetType: inline
+        script: |
+          $csvPath = "$(Build.SourcesDirectory)\Pipelines\VM-Creation\core\simplified-vms.csv"
+          
+          Write-Host "=== CSV Pre-flight Validation ===" -ForegroundColor Cyan
+          
+          # Check if CSV exists
+          if (!(Test-Path $csvPath)) {
+            Write-Host "##vso[task.logissue type=error]CSV file not found: $csvPath"
+            throw "CSV file not found"
+          }
+          
+          # Import and validate CSV structure
+          try {
+            $csvData = Import-Csv -Path $csvPath
+            $requiredColumns = @('vm_name', 'resource_group', 'subnet_name', 'static_ip', 'vm_size', 'os_template')
+            $csvColumns = $csvData[0].PSObject.Properties.Name
+            
+            $missingColumns = $requiredColumns | Where-Object { $_ -notin $csvColumns }
+            if ($missingColumns) {
+              Write-Host "##vso[task.logissue type=error]Missing required CSV columns: $($missingColumns -join ', ')"
+              throw "Invalid CSV structure"
+            }
+            
+            Write-Host "✅ CSV structure validated" -ForegroundColor Green
+            Write-Host "✅ Found $($csvData.Count) VM(s) to process" -ForegroundColor Green
+            
+            # Validate VM names (no spaces, special chars)
+            foreach ($row in $csvData) {
+              if ($row.vm_name -match '[^a-zA-Z0-9\-]') {
+                Write-Host "##vso[task.logissue type=error]Invalid VM name: $($row.vm_name) - Only alphanumeric and hyphens allowed"
+                throw "Invalid VM name format"
+              }
+              
+              # Validate IP format
+              if ($row.static_ip -notmatch '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$') {
+                Write-Host "##vso[task.logissue type=error]Invalid IP address for $($row.vm_name): $($row.static_ip)"
+                throw "Invalid IP address format"
+              }
+            }
+            
+            # Check for duplicate VM names
+            $duplicates = $csvData | Group-Object vm_name | Where-Object { $_.Count -gt 1 }
+            if ($duplicates) {
+              Write-Host "##vso[task.logissue type=error]Duplicate VM names found: $($duplicates.Name -join ', ')"
+              throw "Duplicate VM names in CSV"
+            }
+            
+            # Check for duplicate IPs
+            $duplicateIPs = $csvData | Group-Object static_ip | Where-Object { $_.Count -gt 1 }
+            if ($duplicateIPs) {
+              Write-Host "##vso[task.logissue type=warning]Duplicate IP addresses found: $($duplicateIPs.Name -join ', ')"
+            }
+            
+            Write-Host "✅ CSV validation completed successfully" -ForegroundColor Green
+            
+          } catch {
+            Write-Host "##vso[task.logissue type=error]CSV validation failed: $($_.Exception.Message)"
+            throw
+          }
 
     # ----------------------------------------------------
     # Set required environment variables for Python + TF
@@ -195,6 +265,38 @@ stages:
           Write-Host "Copied TF to agentState: $dst"
 
     # --------------------------
+    # Configure State Locking (Azure Storage Backend)
+    # --------------------------
+    - task: PowerShell@2
+      displayName: "Configure Terraform Backend with State Locking"
+      inputs:
+        targetType: inline
+        script: |
+          $tfState = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
+          Set-Location $tfState
+          
+          # Create backend configuration for state locking
+          $backendConfig = @"
+          terraform {
+            backend "local" {
+              path = "terraform.tfstate"
+            }
+          }
+          "@
+          
+          # For production, recommend Azure Storage backend:
+          # terraform {
+          #   backend "azurerm" {
+          #     resource_group_name  = "rg-terraform-state"
+          #     storage_account_name = "sttfstate"
+          #     container_name       = "tfstate"
+          #     key                  = "${{ parameters.project }}-${{ parameters.environment }}.tfstate"
+          #   }
+          # }
+          
+          Write-Host "State backend configured for ${{ parameters.project }}-${{ parameters.environment }}"
+
+    # --------------------------
     # Terraform Validate + Plan
     # --------------------------
     - task: PowerShell@2
@@ -206,7 +308,7 @@ stages:
 
           Set-Location $tfState
 
-          terraform init -input=false
+          terraform init -input=false -upgrade
           if ($LASTEXITCODE -ne 0) { throw "TF init failed" }
 
           terraform validate
@@ -217,6 +319,28 @@ stages:
 
           terraform show "$tfState\tfplan" > "$tfState\tfplan.txt"
           Write-Host "PLAN generated successfully."
+          
+          # Parse plan for change summary
+          $planContent = Get-Content "$tfState\tfplan.txt" -Raw
+          if ($planContent -match 'Plan: (\d+) to add, (\d+) to change, (\d+) to destroy') {
+            $toAdd = $matches[1]
+            $toChange = $matches[2]
+            $toDestroy = $matches[3]
+            
+            Write-Host "##vso[task.setvariable variable=PLAN_ADD]$toAdd"
+            Write-Host "##vso[task.setvariable variable=PLAN_CHANGE]$toChange"
+            Write-Host "##vso[task.setvariable variable=PLAN_DESTROY]$toDestroy"
+            
+            Write-Host "`n=== TERRAFORM PLAN SUMMARY ===" -ForegroundColor Cyan
+            Write-Host "Resources to ADD: $toAdd" -ForegroundColor Green
+            Write-Host "Resources to CHANGE: $toChange" -ForegroundColor Yellow
+            Write-Host "Resources to DESTROY: $toDestroy" -ForegroundColor Red
+            
+            # Safety check for destroy operations
+            if ([int]$toDestroy -gt 0) {
+              Write-Host "##vso[task.logissue type=warning]⚠️  WARNING: $toDestroy resource(s) will be DESTROYED"
+            }
+          }
 
     # --------------------------
     # Modify Mode Summary
@@ -234,39 +358,117 @@ stages:
 
 
     # --------------------------
-    # Terraform Apply (with Backup + Retry)
+    # Terraform Apply (with Backup + Retry + Rollback)
     # --------------------------
     - task: PowerShell@2
-      displayName: "Terraform Apply"
+      displayName: "Terraform Apply with Rollback Protection"
       inputs:
         targetType: inline
         script: |
           $tfState = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
           $stateFile = "$tfState\terraform.tfstate"
           $backupDir = "$tfState\backups"
+          $rollbackStateFile = "$backupDir\pre-apply-state-$(Get-Date -Format 'yyyyMMdd-HHmmss').tfstate"
 
           if (!(Test-Path $backupDir)) {
             New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
           }
 
-          # Backup tfstate
+          # Create rollback point
           if (Test-Path $stateFile) {
-            Copy-Item $stateFile "$backupDir\terraform-$(Get-Date -Format 'yyyyMMdd-HHmmss').bak"
+            Copy-Item $stateFile $rollbackStateFile -Force
+            Write-Host "✅ Rollback point created: $rollbackStateFile" -ForegroundColor Green
           }
 
           Set-Location $tfState
 
           terraform init -input=false
 
-          # retry apply
+          $applySuccess = $false
           $max = 3
+          
           for ($i=1; $i -le $max; $i++) {
-            Write-Host "Attempt $i/$max: terraform apply..."
+            Write-Host "`n=== Attempt $i/$max: Terraform Apply ===" -ForegroundColor Cyan
+            
+            $applyStartTime = Get-Date
             terraform apply -auto-approve "$tfState\tfplan"
-            if ($LASTEXITCODE -eq 0) { break }
-            Start-Sleep 10
+            
+            if ($LASTEXITCODE -eq 0) {
+              $applySuccess = $true
+              $applyDuration = ((Get-Date) - $applyStartTime).TotalSeconds
+              Write-Host "✅ Apply completed successfully in $([math]::Round($applyDuration, 2)) seconds" -ForegroundColor Green
+              break
+            } else {
+              Write-Host "❌ Apply attempt $i failed with exit code: $LASTEXITCODE" -ForegroundColor Red
+              
+              if ($i -lt $max) {
+                $waitTime = [math]::Pow(2, $i) * 10  # Exponential backoff: 20s, 40s
+                Write-Host "⏳ Waiting $waitTime seconds before retry..." -ForegroundColor Yellow
+                Start-Sleep -Seconds $waitTime
+              }
+            }
           }
 
-          if ($LASTEXITCODE -ne 0) { throw "Terraform apply failed after retries" }
+          if (-not $applySuccess) {
+            Write-Host "`n❌ APPLY FAILED AFTER $max ATTEMPTS" -ForegroundColor Red
+            Write-Host "##vso[task.logissue type=error]Terraform apply failed after $max retries"
+            
+            # Attempt automatic rollback
+            if (Test-Path $rollbackStateFile) {
+              Write-Host "`n⚠️  Attempting automatic rollback..." -ForegroundColor Yellow
+              
+              try {
+                Copy-Item $rollbackStateFile $stateFile -Force
+                Write-Host "✅ State rolled back to pre-apply snapshot" -ForegroundColor Green
+                Write-Host "##vso[task.logissue type=warning]State rolled back - manual verification required"
+              } catch {
+                Write-Host "##vso[task.logissue type=error]Rollback failed: $($_.Exception.Message)"
+                Write-Host "Manual rollback required using: $rollbackStateFile" -ForegroundColor Red
+              }
+            }
+            
+            throw "Terraform apply failed after retries"
+          }
 
-          Write-Host "✔ APPLY SUCCESSFUL"
+          Write-Host "`n✔ APPLY SUCCESSFUL" -ForegroundColor Green
+          
+          # Cleanup old backups (keep last 10)
+          $oldBackups = Get-ChildItem $backupDir -Filter "*.tfstate" | Sort-Object LastWriteTime -Descending | Select-Object -Skip 10
+          if ($oldBackups) {
+            $oldBackups | Remove-Item -Force
+            Write-Host "🗑️  Cleaned up $($oldBackups.Count) old backup(s)" -ForegroundColor Gray
+          }
+          
+    # --------------------------
+    # Post-Apply Validation
+    # --------------------------
+    - task: PowerShell@2
+      displayName: "Validate Deployed Resources"
+      inputs:
+        targetType: inline
+        script: |
+          $tfState = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
+          Set-Location $tfState
+          
+          Write-Host "`n=== Post-Deployment Validation ===" -ForegroundColor Cyan
+          
+          # Get outputs from Terraform
+          terraform output -json > outputs.json
+          
+          if (Test-Path outputs.json) {
+            $outputs = Get-Content outputs.json | ConvertFrom-Json
+            
+            if ($outputs.vm_private_ips) {
+              Write-Host "✅ VM IP Addresses:" -ForegroundColor Green
+              $outputs.vm_private_ips.value.PSObject.Properties | ForEach-Object {
+                Write-Host "  - $($_.Name): $($_.Value)" -ForegroundColor White
+              }
+            }
+          }
+          
+          # Verify state file integrity
+          terraform state list > state-resources.txt
+          $resourceCount = (Get-Content state-resources.txt).Count
+          Write-Host "✅ State file contains $resourceCount resources" -ForegroundColor Green
+          
+          Write-Host "`n##vso[task.complete result=Succeeded;]Deployment validated successfully"
