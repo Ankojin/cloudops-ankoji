@@ -459,6 +459,16 @@ stages:
             for ($i=1; $i -le $max; $i++) {
               Write-Host "`n=== Attempt $i of ${max}: Terraform Apply ===" -ForegroundColor Cyan
               
+              # Regenerate plan for retry attempts (state may have changed)
+              if ($i -gt 1) {
+                Write-Host "[RETRY] Regenerating plan due to stale state..." -ForegroundColor Yellow
+                terraform plan -out "$tfState\tfplan" -input=false
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Host "[ERROR] Plan regeneration failed" -ForegroundColor Red
+                  continue
+                }
+              }
+              
               $applyStartTime = Get-Date
               terraform apply -auto-approve "$tfState\tfplan"
               

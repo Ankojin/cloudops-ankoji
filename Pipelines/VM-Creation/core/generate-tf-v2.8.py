@@ -498,7 +498,26 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
             tf.write(f"# [WARN] Custom Script skipped for {vm_name} — no SAS URL provided in pipeline env.\n")
             return
 
-        blob_file = os.path.basename(sas_url.split("?")[0])
+        # DEBUG: Print the actual SAS URL received
+        print(f"[DEBUG] SAS URL for {vm_name}: {sas_url[:100]}..." if len(sas_url) > 100 else f"[DEBUG] SAS URL for {vm_name}: {sas_url}")
+
+        # Extract blob filename: Split on ? first to remove query params, then get filename
+        # URL format: https://account.blob.core.windows.net/container/filename.sh?sas_params
+        try:
+            url_without_query = sas_url.split("?")[0]
+            print(f"[DEBUG] URL without query: {url_without_query}")
+            # Get everything after the last / (the filename)
+            blob_file = url_without_query.split("/")[-1]
+            print(f"[DEBUG] Extracted blob_file: {blob_file}")
+            
+            # Validate we got a filename with extension
+            if not blob_file or "." not in blob_file:
+                print(f"[WARN] Could not extract valid filename from SAS URL for {vm_name}")
+                blob_file = "script.sh" if is_linux else "script.ps1"
+        except Exception as e:
+            print(f"[ERROR] Failed to parse SAS URL for {vm_name}: {e}")
+            blob_file = "script.sh" if is_linux else "script.ps1"
+        
         vm_type = "linux_virtual_machine" if is_linux else "windows_virtual_machine"
         publisher = "Microsoft.Azure.Extensions" if is_linux else "Microsoft.Compute"
         handler_version = "2.0" if is_linux else "2.1"
