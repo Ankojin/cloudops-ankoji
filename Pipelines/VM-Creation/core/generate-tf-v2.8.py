@@ -267,6 +267,11 @@ resource "azurerm_resource_group" "{safe_rg}_rg" {{
 
         is_linux = os_template.lower().startswith("ubuntu") or os_template.lower().startswith("rhel")
 
+        # Build depends_on line if needed
+        depends_on_line = ""
+        if depends_on_rg:
+            depends_on_line = f'  depends_on = [azurerm_resource_group.{resource_group.replace("-", "_")}_rg]\n'
+
         # ----- NIC & supporting data sources -----
         tf.write(f"""
 # =====================================================
@@ -288,8 +293,7 @@ resource "azurerm_network_interface" "{vm_name}_nic" {{
   name                = "{vm_name}-nic"
   location            = var.location
   resource_group_name = {rg_ref}
-{('  depends_on = [azurerm_resource_group.' + resource_group.replace('-', '_') + '_rg]\n') if depends_on_rg else ''}
-  ip_configuration {{
+{depends_on_line}  ip_configuration {{
     name                          = "internal"
     subnet_id                     = data.azurerm_subnet.{vm_name}_subnet.id
     private_ip_address_allocation = "Static"
