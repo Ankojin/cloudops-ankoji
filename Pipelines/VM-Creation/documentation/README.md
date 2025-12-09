@@ -43,7 +43,9 @@ You can use these OS templates in your CSV file. The pipeline automatically maps
 | CSV Value | OS Version | Publisher | SKU | Notes |
 |-----------|-----------|-----------|-----|-------|
 | `rhel-9` | RHEL 9 (Gen2, LVM) | RedHat | 9-lvm-gen2 | Recommended for new deployments |
+| `rhel-9.7` | RHEL 9.7 (Gen2) | RedHat | 97-gen2 | Specific minor version |
 | `rhel-9.6` | RHEL 9.6 (Gen2) | RedHat | 96-gen2 | Specific minor version |
+| `rhel-9.5` | RHEL 9.5 (Gen2) | RedHat | 95_gen2 | Specific minor version |
 | `rhel-8` | RHEL 8 (Gen2, LVM) | RedHat | 8-lvm-gen2 | Stable, widely used |
 | `rhel-7` | RHEL 7 (LVM) | RedHat | 7-LVM | Legacy support |
 

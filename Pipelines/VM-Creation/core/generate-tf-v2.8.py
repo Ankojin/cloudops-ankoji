@@ -68,10 +68,24 @@ def map_os_template(os_template: str) -> dict:
             "version": "latest",
             "is_linux": True
         },
+        "rhel-9.7": {
+            "publisher": "RedHat",
+            "offer": "RHEL",
+            "sku": "97-gen2",
+            "version": "latest",
+            "is_linux": True
+        },
         "rhel-9.6": {
             "publisher": "RedHat",
             "offer": "RHEL",
             "sku": "96-gen2",
+            "version": "latest",
+            "is_linux": True
+        },
+        "rhel-9.5": {
+            "publisher": "RedHat",
+            "offer": "RHEL",
+            "sku": "95_gen2",
             "version": "latest",
             "is_linux": True
         },
