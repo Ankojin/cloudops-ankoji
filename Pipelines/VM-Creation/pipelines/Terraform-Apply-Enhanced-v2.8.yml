@@ -449,63 +449,63 @@ stages:
               Write-Host "[OK] Rollback point created: $rollbackStateFile" -ForegroundColor Green
             }
 
-          Set-Location $tfState
+            Set-Location $tfState
 
-          terraform init -input=false
+            terraform init -input=false
 
-          $applySuccess = $false
-          $max = 3
-          
-          for ($i=1; $i -le $max; $i++) {
-            Write-Host "`n=== Attempt $i of ${max}: Terraform Apply ===" -ForegroundColor Cyan
+            $applySuccess = $false
+            $max = 3
             
-            $applyStartTime = Get-Date
-            terraform apply -auto-approve "$tfState\tfplan"
-            
-            if ($LASTEXITCODE -eq 0) {
-              $applySuccess = $true
-              $applyDuration = ((Get-Date) - $applyStartTime).TotalSeconds
-              Write-Host "[OK] Apply completed successfully in $([math]::Round($applyDuration, 2)) seconds" -ForegroundColor Green
-              break
-            } else {
-              Write-Host "[ERROR] Apply attempt $i failed with exit code: $LASTEXITCODE" -ForegroundColor Red
+            for ($i=1; $i -le $max; $i++) {
+              Write-Host "`n=== Attempt $i of ${max}: Terraform Apply ===" -ForegroundColor Cyan
               
-              if ($i -lt $max) {
-                $waitTime = [math]::Pow(2, $i) * 10  # Exponential backoff: 20s, 40s
-                Write-Host "[WAIT] Waiting $waitTime seconds before retry..." -ForegroundColor Yellow
-                Start-Sleep -Seconds $waitTime
+              $applyStartTime = Get-Date
+              terraform apply -auto-approve "$tfState\tfplan"
+              
+              if ($LASTEXITCODE -eq 0) {
+                $applySuccess = $true
+                $applyDuration = ((Get-Date) - $applyStartTime).TotalSeconds
+                Write-Host "[OK] Apply completed successfully in $([math]::Round($applyDuration, 2)) seconds" -ForegroundColor Green
+                break
+              } else {
+                Write-Host "[ERROR] Apply attempt $i failed with exit code: $LASTEXITCODE" -ForegroundColor Red
+                
+                if ($i -lt $max) {
+                  $waitTime = [math]::Pow(2, $i) * 10  # Exponential backoff: 20s, 40s
+                  Write-Host "[WAIT] Waiting $waitTime seconds before retry..." -ForegroundColor Yellow
+                  Start-Sleep -Seconds $waitTime
+                }
               }
             }
-          }
 
-          if (-not $applySuccess) {
-            Write-Host "`n[ERROR] APPLY FAILED AFTER $max ATTEMPTS" -ForegroundColor Red
-            Write-Host "##vso[task.logissue type=error]Terraform apply failed after $max retries"
-            
-            # Attempt automatic rollback
-            if (Test-Path $rollbackStateFile) {
-              Write-Host "`n[ROLLBACK] Attempting automatic rollback..." -ForegroundColor Yellow
+            if (-not $applySuccess) {
+              Write-Host "`n[ERROR] APPLY FAILED AFTER $max ATTEMPTS" -ForegroundColor Red
+              Write-Host "##vso[task.logissue type=error]Terraform apply failed after $max retries"
               
-              try {
-                Copy-Item $rollbackStateFile $stateFile -Force
-                Write-Host "[OK] State rolled back to pre-apply snapshot" -ForegroundColor Green
-                Write-Host "##vso[task.logissue type=warning]State rolled back - manual verification required"
-              } catch {
-                Write-Host "##vso[task.logissue type=error]Rollback failed: $($_.Exception.Message)"
-                Write-Host "Manual rollback required using: $rollbackStateFile" -ForegroundColor Red
+              # Attempt automatic rollback
+              if (Test-Path $rollbackStateFile) {
+                Write-Host "`n[ROLLBACK] Attempting automatic rollback..." -ForegroundColor Yellow
+                
+                try {
+                  Copy-Item $rollbackStateFile $stateFile -Force
+                  Write-Host "[OK] State rolled back to pre-apply snapshot" -ForegroundColor Green
+                  Write-Host "##vso[task.logissue type=warning]State rolled back - manual verification required"
+                } catch {
+                  Write-Host "##vso[task.logissue type=error]Rollback failed: $($_.Exception.Message)"
+                  Write-Host "Manual rollback required using: $rollbackStateFile" -ForegroundColor Red
+                }
               }
+              
+              throw "Terraform apply failed after retries"
             }
-            
-            throw "Terraform apply failed after retries"
-          }
 
-          Write-Host "`n[SUCCESS] APPLY SUCCESSFUL" -ForegroundColor Green
-          
-          # Cleanup old backups (keep last 10)
-          $oldBackups = Get-ChildItem $backupDir -Filter "*.tfstate" | Sort-Object LastWriteTime -Descending | Select-Object -Skip 10
-          if ($oldBackups) {
-            Write-Host "[CLEANUP] Cleaned up $($oldBackups.Count) old backup(s)" -ForegroundColor Gray
-          }
+            Write-Host "`n[SUCCESS] APPLY SUCCESSFUL" -ForegroundColor Green
+            
+            # Cleanup old backups (keep last 10)
+            $oldBackups = Get-ChildItem $backupDir -Filter "*.tfstate" | Sort-Object LastWriteTime -Descending | Select-Object -Skip 10
+            if ($oldBackups) {
+              Write-Host "[CLEANUP] Cleaned up $($oldBackups.Count) old backup(s)" -ForegroundColor Gray
+            }
           
     # --------------------------
     # Post-Apply Validation
@@ -514,7 +514,6 @@ stages:
       displayName: "Validate Deployed Resources"
       inputs:
         targetType: inline
-        script: |e: inline
         script: |
           $tfState = "$(tfStateDirectory)\${{ parameters.project }}\${{ parameters.environment }}"
           Set-Location $tfState
@@ -536,8 +535,7 @@ stages:
           }
           
           # Verify state file integrity
-          terraform state list > state-resources.txt
+          $resourceCount = (terraform state list).Count
           Write-Host "[OK] State file contains $resourceCount resources" -ForegroundColor Green
           
-          Write-Host "`n##vso[task.complete result=Succeeded;]Deployment validated successfully"
           Write-Host "`n##vso[task.complete result=Succeeded;]Deployment validated successfully"
