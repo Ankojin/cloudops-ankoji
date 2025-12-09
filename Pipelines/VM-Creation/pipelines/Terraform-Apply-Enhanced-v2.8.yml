@@ -249,6 +249,18 @@ stages:
           Write-Host "Python Version: $(python --version)"
           Write-Host "Generator Script: $(tfWorkingDirectory)\core\generate-tf-v2.8.py"
           
+          # DEBUG: Check file integrity
+          $pyFile = "$(tfWorkingDirectory)\core\generate-tf-v2.8.py"
+          $lineCount = (Get-Content $pyFile).Count
+          Write-Host "🔍 DEBUG: Python file has $lineCount lines (expected: 621)" -ForegroundColor Yellow
+          $line303 = (Get-Content $pyFile)[302]  # 0-indexed
+          Write-Host "🔍 DEBUG: Line 303 content: $line303" -ForegroundColor Yellow
+          
+          if ($lineCount -ne 621) {
+            Write-Host "##[warning]File line count mismatch - agent may have stale cached version"
+            Write-Host "##[warning]Attempting syntax validation anyway..."
+          }
+          
           # Capture both stdout and stderr
           $output = python "$(tfWorkingDirectory)\core\generate-tf-v2.8.py" 2>&1
           $exitCode = $LASTEXITCODE
