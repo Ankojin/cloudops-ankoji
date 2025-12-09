@@ -107,8 +107,8 @@ stages:
               throw "Invalid CSV structure"
             }
             
-            Write-Host "✅ CSV structure validated" -ForegroundColor Green
-            Write-Host "✅ Found $($csvData.Count) VM(s) to process" -ForegroundColor Green
+            Write-Host "[OK] CSV structure validated" -ForegroundColor Green
+            Write-Host "[OK] Found $($csvData.Count) VM(s) to process" -ForegroundColor Green
             
             # Validate VM names (no spaces, special chars)
             foreach ($row in $csvData) {
@@ -137,7 +137,7 @@ stages:
               Write-Host "##vso[task.logissue type=warning]Duplicate IP addresses found: $($duplicateIPs.Name -join ', ')"
             }
             
-            Write-Host "✅ CSV validation completed successfully" -ForegroundColor Green
+            Write-Host "[OK] CSV validation completed successfully" -ForegroundColor Green
             
           } catch {
             Write-Host "##vso[task.logissue type=error]CSV validation failed: $($_.Exception.Message)"
@@ -252,9 +252,9 @@ stages:
           # DEBUG: Check file integrity
           $pyFile = "$(tfWorkingDirectory)\core\generate-tf-v2.8.py"
           $lineCount = (Get-Content $pyFile).Count
-          Write-Host "🔍 DEBUG: Python file has $lineCount lines (expected: 625)" -ForegroundColor Yellow
+          Write-Host "[DEBUG] Python file has $lineCount lines (expected: 625)" -ForegroundColor Yellow
           $line303 = (Get-Content $pyFile)[302]  # 0-indexed
-          Write-Host "🔍 DEBUG: Line 303 content: $line303" -ForegroundColor Yellow
+          Write-Host "[DEBUG] Line 303 content: $line303" -ForegroundColor Yellow
           
           if ($lineCount -ne 625) {
             Write-Host "##[warning]File line count mismatch - agent may have stale cached version"
@@ -301,7 +301,7 @@ stages:
             throw "Terraform file was not generated"
           }
           
-          Write-Host "✅ Python generator completed successfully" -ForegroundColor Green
+          Write-Host "[OK] Python generator completed successfully" -ForegroundColor Green
 
           # Copy the output .tf into REPO TF folder
           $repoTF = "$(tfRepoDirectory)"
@@ -309,7 +309,7 @@ stages:
 
           Copy-Item $outputFile "$repoTF\main-${{ parameters.environment }}.tf" -Force
 
-          Write-Host "✅ Copied generated TF file → $repoTF" -ForegroundColor Green
+          Write-Host "[OK] Copied generated TF file to $repoTF" -ForegroundColor Green
 
     # --------------------------
     # Copy TF → Persistent State
@@ -399,7 +399,7 @@ stages:
             
             # Safety check for destroy operations
             if ([int]$toDestroy -gt 0) {
-              Write-Host "##vso[task.logissue type=warning]⚠️  WARNING: $toDestroy resource(s) will be DESTROYED"
+              Write-Host "##vso[task.logissue type=warning]WARNING: $toDestroy resource(s) will be DESTROYED"
             }
           }
 
@@ -438,7 +438,7 @@ stages:
           # Create rollback point
           if (Test-Path $stateFile) {
             Copy-Item $stateFile $rollbackStateFile -Force
-            Write-Host "✅ Rollback point created: $rollbackStateFile" -ForegroundColor Green
+            Write-Host "[OK] Rollback point created: $rollbackStateFile" -ForegroundColor Green
           }
 
           Set-Location $tfState
@@ -457,30 +457,30 @@ stages:
             if ($LASTEXITCODE -eq 0) {
               $applySuccess = $true
               $applyDuration = ((Get-Date) - $applyStartTime).TotalSeconds
-              Write-Host "✅ Apply completed successfully in $([math]::Round($applyDuration, 2)) seconds" -ForegroundColor Green
+              Write-Host "[OK] Apply completed successfully in $([math]::Round($applyDuration, 2)) seconds" -ForegroundColor Green
               break
             } else {
-              Write-Host "❌ Apply attempt $i failed with exit code: $LASTEXITCODE" -ForegroundColor Red
+              Write-Host "[ERROR] Apply attempt $i failed with exit code: $LASTEXITCODE" -ForegroundColor Red
               
               if ($i -lt $max) {
                 $waitTime = [math]::Pow(2, $i) * 10  # Exponential backoff: 20s, 40s
-                Write-Host "⏳ Waiting $waitTime seconds before retry..." -ForegroundColor Yellow
+                Write-Host "[WAIT] Waiting $waitTime seconds before retry..." -ForegroundColor Yellow
                 Start-Sleep -Seconds $waitTime
               }
             }
           }
 
           if (-not $applySuccess) {
-            Write-Host "`n❌ APPLY FAILED AFTER $max ATTEMPTS" -ForegroundColor Red
+            Write-Host "`n[ERROR] APPLY FAILED AFTER $max ATTEMPTS" -ForegroundColor Red
             Write-Host "##vso[task.logissue type=error]Terraform apply failed after $max retries"
             
             # Attempt automatic rollback
             if (Test-Path $rollbackStateFile) {
-              Write-Host "`n⚠️  Attempting automatic rollback..." -ForegroundColor Yellow
+              Write-Host "`n[ROLLBACK] Attempting automatic rollback..." -ForegroundColor Yellow
               
               try {
                 Copy-Item $rollbackStateFile $stateFile -Force
-                Write-Host "✅ State rolled back to pre-apply snapshot" -ForegroundColor Green
+                Write-Host "[OK] State rolled back to pre-apply snapshot" -ForegroundColor Green
                 Write-Host "##vso[task.logissue type=warning]State rolled back - manual verification required"
               } catch {
                 Write-Host "##vso[task.logissue type=error]Rollback failed: $($_.Exception.Message)"
@@ -491,13 +491,13 @@ stages:
             throw "Terraform apply failed after retries"
           }
 
-          Write-Host "`n✔ APPLY SUCCESSFUL" -ForegroundColor Green
+          Write-Host "`n[SUCCESS] APPLY SUCCESSFUL" -ForegroundColor Green
           
           # Cleanup old backups (keep last 10)
           $oldBackups = Get-ChildItem $backupDir -Filter "*.tfstate" | Sort-Object LastWriteTime -Descending | Select-Object -Skip 10
           if ($oldBackups) {
             $oldBackups | Remove-Item -Force
-            Write-Host "🗑️  Cleaned up $($oldBackups.Count) old backup(s)" -ForegroundColor Gray
+            Write-Host "[CLEANUP] Cleaned up $($oldBackups.Count) old backup(s)" -ForegroundColor Gray
           }
           
     # --------------------------
@@ -520,7 +520,7 @@ stages:
             $outputs = Get-Content outputs.json | ConvertFrom-Json
             
             if ($outputs.vm_private_ips) {
-              Write-Host "✅ VM IP Addresses:" -ForegroundColor Green
+              Write-Host "[OK] VM IP Addresses:" -ForegroundColor Green
               $outputs.vm_private_ips.value.PSObject.Properties | ForEach-Object {
                 Write-Host "  - $($_.Name): $($_.Value)" -ForegroundColor White
               }
@@ -530,6 +530,6 @@ stages:
           # Verify state file integrity
           terraform state list > state-resources.txt
           $resourceCount = (Get-Content state-resources.txt).Count
-          Write-Host "✅ State file contains $resourceCount resources" -ForegroundColor Green
+          Write-Host "[OK] State file contains $resourceCount resources" -ForegroundColor Green
           
           Write-Host "`n##vso[task.complete result=Succeeded;]Deployment validated successfully"
