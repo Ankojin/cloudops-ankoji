@@ -213,24 +213,25 @@ function Test-NicConnectivity {
         return $false
     }
     
-    return $true
-}
+        # Validate NSG only if not DMZ
+        if (-not $skipNsg) {
+            $nsgId = az network nsg show -g $NsgRg -n $NsgName --query id -o tsv 2>$null
+            if (-not $nsgId) {
+                Log-Error "NSG '$NsgName' not found in resource group '$NsgRg'"
+                continue
+            }
+            Log-Info "✅ Validated NSG: $NsgName"
 
-function Invoke-AzCommand {
-    param(
-        [Parameter(Mandatory=$true)]
-        [string]$Command,
-        
-        [Parameter(Mandatory=$false)]
-        [string]$ErrorMessage = "Azure CLI command failed"
-    )
-    
-    $output = Invoke-Expression $Command 2>&1
-    $exitCode = $LASTEXITCODE
-    
-    # Check for errors in output or exit code
-    $hasError = ($exitCode -ne 0) -or ($output -match "ERROR|Error|error" -and $output -notmatch "No error")
-    
+            # Test network connectivity
+            if (-not (Test-NicConnectivity -SubnetId $subnetId -NsgId $nsgId)) {
+                Log-Error "Network connectivity validation failed for subnet '$subnetName'"
+                continue
+            }
+        } else {
+            # For DMZ, always set nsgId to $null and skip NSG validation
+            $nsgId = $null
+            Log-Info "Skipping NSG assignment and validation for DMZ subnet: $subnetName"
+        }
     if ($hasError) {
         Log-Error "$ErrorMessage : $output"
         return $null
