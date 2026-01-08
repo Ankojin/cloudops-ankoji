@@ -272,18 +272,20 @@ foreach ($vm in $vmList) {
     $privateIp = $null
     $snapshotsToCleanup = @()
 
-    # Dynamic VNET/RG selection for BAB_CORE
+    # Dynamic VNET/RG/NSG selection for BAB_CORE
     if ($TargetEnvironment -eq 'BAB_CORE') {
         if ($vm.SubnetName -match '(?i)dmz') {
             $VnetName = $env:DmzVnetName
             $VnetRg = $env:DmzVnetRg
-            $skipNsg = $true
+            $NsgName = $env:DmzNsgName
+            $NsgRg = $env:DmzNsgRg
         } else {
             $VnetName = $env:CoreVnetName
             $VnetRg = $env:CoreVnetRg
-            $skipNsg = $false
+            $NsgName = $env:NsgName
+            $NsgRg = $env:NsgRg
         }
-        Log-Info "Selected VNET: $VnetName, RG: $VnetRg for subnet $($vm.SubnetName)"
+        Log-Info "Selected VNET: $VnetName, RG: $VnetRg, NSG: $NsgName, NSG RG: $NsgRg for subnet $($vm.SubnetName)"
     }
     
     try {
@@ -468,22 +470,17 @@ foreach ($vm in $vmList) {
         
 
         # Validate NSG only if not DMZ
-        if (-not $skipNsg) {
-            $nsgId = az network nsg show -g $NsgRg -n $NsgName --query id -o tsv 2>$null
-            if (-not $nsgId) {
-                Log-Error "NSG '$NsgName' not found in resource group '$NsgRg'"
-                continue
-            }
-            Log-Info "✅ Validated NSG: $NsgName"
+        $nsgId = az network nsg show -g $NsgRg -n $NsgName --query id -o tsv 2>$null
+        if (-not $nsgId) {
+            Log-Error "NSG '$NsgName' not found in resource group '$NsgRg'"
+            continue
+        }
+        Log-Info "✅ Validated NSG: $NsgName"
 
-            # Test network connectivity
-            if (-not (Test-NicConnectivity -SubnetId $subnetId -NsgId $nsgId)) {
-                Log-Error "Network connectivity validation failed for subnet '$subnetName'"
-                continue
-            }
-        } else {
-            $nsgId = $null
-            Log-Info "Skipping NSG assignment for DMZ subnet: $subnetName"
+        # Test network connectivity
+        if (-not (Test-NicConnectivity -SubnetId $subnetId -NsgId $nsgId)) {
+            Log-Error "Network connectivity validation failed for subnet '$subnetName'"
+            continue
         }
 
         # Check if NIC already exists
