@@ -190,3 +190,6 @@ steps:
       -CsvPath "$(Build.SourcesDirectory)\Pipelines\vm-clone\vms-to-clone.csv"
       -TargetEnvironment "${{ parameters.targetSubscriptionName }}"
     pwsh: true
+  env:
+    DmzNsgName: $(DmzNsgName)
+    DmzNsgRg: $(DmzNsgRg)
