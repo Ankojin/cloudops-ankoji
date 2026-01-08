@@ -144,6 +144,11 @@ steps:
               # Default to core VNET for main pipeline variables
               $vnetName = $coreVnetName
               $vnetRg = $coreVnetRg
+            Write-Host "BAB_CORE VNETs:"
+            Write-Host "  CORE_VNETName: $coreVnetName"
+            Write-Host "  CORE_VNETRG: $coreVnetRg"
+            Write-Host "  CORE_DMZ_VNETName: $dmzVnetName"
+            Write-Host "  CORE_DMZ_VNETRG: $dmzVnetRg"
           }
           default { Write-Error "Invalid target subscription"; exit 1 }
              # Both VNETs are now available for BAB_CORE
@@ -152,10 +157,10 @@ steps:
       # Store as pipeline variables
       Write-Host "##vso[task.setvariable variable=VnetName]$vnetName"
       Write-Host "##vso[task.setvariable variable=VnetRg]$vnetRg"
-         Write-Host "##vso[task.setvariable variable=CoreVnetName]$coreVnetName"
-         Write-Host "##vso[task.setvariable variable=CoreVnetRg]$coreVnetRg"
-         Write-Host "##vso[task.setvariable variable=DmzVnetName]$dmzVnetName"
-         Write-Host "##vso[task.setvariable variable=DmzVnetRg]$dmzVnetRg"
+      Write-Host "##vso[task.setvariable variable=CoreVnetName]$coreVnetName"
+      Write-Host "##vso[task.setvariable variable=CoreVnetRg]$coreVnetRg"
+      Write-Host "##vso[task.setvariable variable=DmzVnetName]$dmzVnetName"
+      Write-Host "##vso[task.setvariable variable=DmzVnetRg]$dmzVnetRg"
       Write-Host "##vso[task.setvariable variable=NsgName]$nsgName"
       Write-Host "##vso[task.setvariable variable=NsgRg]$nsgRg"
       Write-Host "##vso[task.setvariable variable=BootDiagStorage]$bootDiagStorage"

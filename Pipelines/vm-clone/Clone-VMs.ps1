@@ -270,6 +270,18 @@ foreach ($vm in $vmList) {
     $nicId = $null
     $privateIp = $null
     $snapshotsToCleanup = @()
+
+    # Dynamic VNET/RG selection for BAB_CORE
+    if ($TargetEnvironment -eq 'BAB_CORE') {
+        if ($vm.SubnetName -match '(?i)dmz') {
+            $VnetName = $env:DmzVnetName
+            $VnetRg = $env:DmzVnetRg
+        } else {
+            $VnetName = $env:CoreVnetName
+            $VnetRg = $env:CoreVnetRg
+        }
+        Log-Info "Selected VNET: $VnetName, RG: $VnetRg for subnet $($vm.SubnetName)"
+    }
     
     try {
         "=" * 80 | Tee-Object -FilePath $LogFile -Append
