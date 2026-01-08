@@ -1,2 +1,2 @@
 ﻿SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
-DAAZPRXYDLV01,DAADOPXYDLV0,10.189.60.8,snet-dmz-shared-app-01,Standard_D2s_v5
+DAAZPRXYDLV01,DAADOPXYDLV01,10.189.60.8,snet-dmz-shared-app-01,Standard_D2s_v5
