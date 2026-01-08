@@ -276,9 +276,11 @@ foreach ($vm in $vmList) {
         if ($vm.SubnetName -match '(?i)dmz') {
             $VnetName = $env:DmzVnetName
             $VnetRg = $env:DmzVnetRg
+            $skipNsg = $true
         } else {
             $VnetName = $env:CoreVnetName
             $VnetRg = $env:CoreVnetRg
+            $skipNsg = $false
         }
         Log-Info "Selected VNET: $VnetName, RG: $VnetRg for subnet $($vm.SubnetName)"
     }
@@ -463,18 +465,24 @@ foreach ($vm in $vmList) {
         }
         Log-Info "✅ Validated subnet: $subnetName"
         
-        # Validate NSG
-        $nsgId = az network nsg show -g $NsgRg -n $NsgName --query id -o tsv 2>$null
-        if (-not $nsgId) {
-            Log-Error "NSG '$NsgName' not found in resource group '$NsgRg'"
-            continue
-        }
-        Log-Info "✅ Validated NSG: $NsgName"
 
-        # Test network connectivity
-        if (-not (Test-NicConnectivity -SubnetId $subnetId -NsgId $nsgId)) {
-            Log-Error "Network connectivity validation failed for subnet '$subnetName'"
-            continue
+        # Validate NSG only if not DMZ
+        if (-not $skipNsg) {
+            $nsgId = az network nsg show -g $NsgRg -n $NsgName --query id -o tsv 2>$null
+            if (-not $nsgId) {
+                Log-Error "NSG '$NsgName' not found in resource group '$NsgRg'"
+                continue
+            }
+            Log-Info "✅ Validated NSG: $NsgName"
+
+            # Test network connectivity
+            if (-not (Test-NicConnectivity -SubnetId $subnetId -NsgId $nsgId)) {
+                Log-Error "Network connectivity validation failed for subnet '$subnetName'"
+                continue
+            }
+        } else {
+            $nsgId = $null
+            Log-Info "Skipping NSG assignment for DMZ subnet: $subnetName"
         }
 
         # Check if NIC already exists
@@ -489,26 +497,28 @@ foreach ($vm in $vmList) {
             $nicCreatedInThisRun = $false
         } else {
             Log-Info "Creating new NIC: $nicName"
-            
             if ($staticIp) {
                 $subnetPrefix = az network vnet subnet show -g $VnetRg --vnet-name $VnetName -n $subnetName --query "addressPrefix" -o tsv
                 Log-Info "Attempting static IP: $staticIp in subnet: $subnetPrefix"
-                
                 # Try static IP first
-                $nicCreateOutput = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --private-ip-address $staticIp --tags $tags --query 'NewNIC.id' -o tsv 2>&1
+                if (-not $skipNsg) {
+                    $nicCreateOutput = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --private-ip-address $staticIp --tags $tags --query 'NewNIC.id' -o tsv 2>&1
+                } else {
+                    $nicCreateOutput = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --private-ip-address $staticIp --tags $tags --query 'NewNIC.id' -o tsv 2>&1
+                }
                 $createExitCode = $LASTEXITCODE
-                
                 # Check for errors
                 $hasError = ($createExitCode -ne 0) -or ($nicCreateOutput -match "ERROR|Error|error" -and $nicCreateOutput -notmatch "No error")
-                
                 if ($hasError) {
                     Log-Error "Static IP $staticIp assignment failed: $nicCreateOutput"
                     Log-Info "Retrying NIC creation with dynamic IP allocation..."
-                    
                     # Retry with dynamic IP
-                    $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
+                    if (-not $skipNsg) {
+                        $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
+                    } else {
+                        $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
+                    }
                     $retryExitCode = $LASTEXITCODE
-                    
                     if ($retryExitCode -ne 0 -or ($nicId -match "ERROR|Error|error")) {
                         Log-Error "NIC creation with dynamic IP also failed: $nicId"
                         continue
@@ -518,29 +528,28 @@ foreach ($vm in $vmList) {
                 }
             } else {
                 Log-Info "Creating NIC with dynamic IP allocation"
-                $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
-                
+                if (-not $skipNsg) {
+                    $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
+                } else {
+                    $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
+                }
                 if ($LASTEXITCODE -ne 0 -or ($nicId -match "ERROR|Error|error")) {
                     Log-Error "NIC creation failed: $nicId"
                     continue
                 }
             }
-            
             if (-not $nicId -or $nicId.Trim() -eq "") {
                 Log-Error "NIC creation returned empty ID"
                 continue
             }
-            
             $nicId = $nicId.Trim()
             $nicCreatedInThisRun = $true
-            
             # Validate NIC creation
             $nicValidation = az network nic show --ids $nicId -o json 2>$null
             if (-not $nicValidation) {
                 Log-Error "NIC creation succeeded but NIC not found in Azure"
                 continue
             }
-            
             $privateIp = az network nic show --ids $nicId --query "ipConfigurations[0].privateIpAddress" -o tsv
             $ipAllocation = az network nic show --ids $nicId --query "ipConfigurations[0].privateIpAllocationMethod" -o tsv
             Log-Info "✅ Created NIC successfully | Name: $nicName | IP: $privateIp | Allocation: $ipAllocation"
