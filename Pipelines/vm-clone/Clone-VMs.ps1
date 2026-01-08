@@ -63,6 +63,35 @@ param(
     [string]$TargetEnvironment
 )
 
+    # Helper: Deterministic VNET/NSG selection
+    function Get-NetworkConfig {
+        param (
+            [string]$TargetEnvironment,
+            [string]$SubnetName
+        )
+
+        if ($TargetEnvironment -eq 'BAB_CORE') {
+            if ($SubnetName -match '(?i)dmz') {
+                return @{
+                    VnetName = $env:CORE_DMZ_VNETName
+                    VnetRg   = $env:CORE_DMZ_VNETRG
+                    NsgName  = $env:CORE_DMZ_NSGName
+                    NsgRg    = $env:CORE_DMZ_NSGRG
+                }
+            }
+            else {
+                return @{
+                    VnetName = $env:CORE_VNETName
+                    VnetRg   = $env:CORE_VNETRG
+                    NsgName  = $env:CORE_NSGName
+                    NsgRg    = $env:CORE_NSGRG
+                }
+            }
+        }
+
+        throw "Unsupported TargetEnvironment: $TargetEnvironment"
+    }
+
 #Requires -Version 7.0
 
 $ErrorActionPreference = "Continue"
@@ -205,39 +234,16 @@ function Test-NicConnectivity {
         Log-Error "Subnet validation failed. Subnet ID: $SubnetId not found or inaccessible."
         return $false
     }
-    
-    # Validate NSG exists
+
+    # Validate NSG exists and is accessible
     $nsg = az network nsg show --ids $NsgId -o json 2>$null
     if (-not $nsg) {
         Log-Error "NSG validation failed. NSG ID: $NsgId not found or inaccessible."
         return $false
     }
-    
-        # Validate NSG only if not DMZ
-        if (-not $skipNsg) {
-            $nsgId = az network nsg show -g $NsgRg -n $NsgName --query id -o tsv 2>$null
-            if (-not $nsgId) {
-                Log-Error "NSG '$NsgName' not found in resource group '$NsgRg'"
-                continue
-            }
-            Log-Info "✅ Validated NSG: $NsgName"
 
-            # Test network connectivity
-            if (-not (Test-NicConnectivity -SubnetId $subnetId -NsgId $nsgId)) {
-                Log-Error "Network connectivity validation failed for subnet '$subnetName'"
-                continue
-            }
-        } else {
-            # For DMZ, always set nsgId to $null and skip NSG validation
-            $nsgId = $null
-            Log-Info "Skipping NSG assignment and validation for DMZ subnet: $subnetName"
-        }
-    if ($hasError) {
-        Log-Error "$ErrorMessage : $output"
-        return $null
-    }
-    
-    return $output
+    # Additional connectivity checks can be added here if needed
+    return $true
 }
 
 #endregion
@@ -272,21 +278,17 @@ foreach ($vm in $vmList) {
     $privateIp = $null
     $snapshotsToCleanup = @()
 
-    # Dynamic VNET/RG/NSG selection for BAB_CORE
-    if ($TargetEnvironment -eq 'BAB_CORE') {
-        if ($vm.SubnetName -match '(?i)dmz') {
-            $VnetName = $env:DmzVnetName
-            $VnetRg = $env:DmzVnetRg
-            $NsgName = $env:DmzNsgName
-            $NsgRg = $env:DmzNsgRg
-        } else {
-            $VnetName = $env:CoreVnetName
-            $VnetRg = $env:CoreVnetRg
-            $NsgName = $env:NsgName
-            $NsgRg = $env:NsgRg
-        }
-        Log-Info "Selected VNET: $VnetName, RG: $VnetRg, NSG: $NsgName, NSG RG: $NsgRg for subnet $($vm.SubnetName)"
-    }
+    # Deterministic VNET/NSG selection
+    $netConfig = Get-NetworkConfig `
+        -TargetEnvironment $TargetEnvironment `
+        -SubnetName $vm.SubnetName
+
+    $VnetName = $netConfig.VnetName
+    $VnetRg   = $netConfig.VnetRg
+    $NsgName  = $netConfig.NsgName
+    $NsgRg    = $netConfig.NsgRg
+
+    Log-Info "Selected VNET: $VnetName, RG: $VnetRg, NSG: $NsgName, NSG RG: $NsgRg for subnet $($vm.SubnetName)"
     
     try {
         "=" * 80 | Tee-Object -FilePath $LogFile -Append
@@ -467,6 +469,12 @@ foreach ($vm in $vmList) {
             continue
         }
         Log-Info "✅ Validated subnet: $subnetName"
+        # Optional: fail fast on region mismatch
+        $Location = $location  # $location is set earlier from the RG
+        $nsgLocation = az network nsg show -g $NsgRg -n $NsgName --query location -o tsv
+        if ($nsgLocation -ne $Location) {
+            throw "NSG '$NsgName' is in '$nsgLocation' but NIC is in '$Location'"
+        }
         
 
         # Validate NSG only if not DMZ
@@ -496,14 +504,9 @@ foreach ($vm in $vmList) {
         } else {
             Log-Info "Creating new NIC: $nicName"
             if ($staticIp) {
-                $subnetPrefix = az network vnet subnet show -g $VnetRg --vnet-name $VnetName -n $subnetName --query "addressPrefix" -o tsv
-                Log-Info "Attempting static IP: $staticIp in subnet: $subnetPrefix"
+                Log-Info "Attempting static IP: $staticIp"
                 # Try static IP first
-                if (-not $skipNsg) {
-                    $nicCreateOutput = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --private-ip-address $staticIp --tags $tags --query 'NewNIC.id' -o tsv 2>&1
-                } else {
-                    $nicCreateOutput = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --private-ip-address $staticIp --tags $tags --query 'NewNIC.id' -o tsv 2>&1
-                }
+                $nicCreateOutput = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --private-ip-address $staticIp --tags $tags --query 'NewNIC.id' -o tsv 2>&1
                 $createExitCode = $LASTEXITCODE
                 # Check for errors
                 $hasError = ($createExitCode -ne 0) -or ($nicCreateOutput -match "ERROR|Error|error" -and $nicCreateOutput -notmatch "No error")
@@ -511,11 +514,7 @@ foreach ($vm in $vmList) {
                     Log-Error "Static IP $staticIp assignment failed: $nicCreateOutput"
                     Log-Info "Retrying NIC creation with dynamic IP allocation..."
                     # Retry with dynamic IP
-                    if (-not $skipNsg) {
-                        $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
-                    } else {
-                        $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
-                    }
+                    $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
                     $retryExitCode = $LASTEXITCODE
                     if ($retryExitCode -ne 0 -or ($nicId -match "ERROR|Error|error")) {
                         Log-Error "NIC creation with dynamic IP also failed: $nicId"
@@ -526,11 +525,7 @@ foreach ($vm in $vmList) {
                 }
             } else {
                 Log-Info "Creating NIC with dynamic IP allocation"
-                if (-not $skipNsg) {
-                    $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
-                } else {
-                    $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
-                }
+                $nicId = az network nic create -g $TargetResourceGroup -n $nicName --subnet $subnetId --network-security-group $nsgId --tags $tags --query 'NewNIC.id' -o tsv 2>&1
                 if ($LASTEXITCODE -ne 0 -or ($nicId -match "ERROR|Error|error")) {
                     Log-Error "NIC creation failed: $nicId"
                     continue
