@@ -1,3 +1,2 @@
 ﻿SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
-DARMBDOPLDLV3,DARMBDOPLDLV1,10.189.61.11,snet-core-shared-app-01,Standard_D2s_v5
-DARMBDOPLDLV3,DARMBDOPLDLV2,10.189.61.12,snet-core-shared-app-01,Standard_D2s_v5
+DAAZPRXYDLV01,DAADOPXYDLV0,10.189.60.8,snet-dmz-shared-app-01,Standard_D2s_v5
