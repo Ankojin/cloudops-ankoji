@@ -137,16 +137,25 @@ steps:
               $bootDiagStorage = '$(SIT_BootDiagStorage)'
           }
           'BAB_CORE' {
-              $vnetName = '$(CORE_VNETName)'; $vnetRg = '$(CORE_VNETRG)'
+              $coreVnetName = '$(CORE_VNETName)'; $coreVnetRg = '$(CORE_VNETRG)'
+              $dmzVnetName = '$(CORE_DMZ_VNETName)'; $dmzVnetRg = '$(CORE_DMZ_VNETRG)'
               $nsgName = '$(CORE_NSGName)'; $nsgRg = '$(CORE_NSGRG)'
               $bootDiagStorage = '$(CORE_BootDiagStorage)'
+              # Default to core VNET for main pipeline variables
+              $vnetName = $coreVnetName
+              $vnetRg = $coreVnetRg
           }
           default { Write-Error "Invalid target subscription"; exit 1 }
+             # Both VNETs are now available for BAB_CORE
       }
 
       # Store as pipeline variables
       Write-Host "##vso[task.setvariable variable=VnetName]$vnetName"
       Write-Host "##vso[task.setvariable variable=VnetRg]$vnetRg"
+         Write-Host "##vso[task.setvariable variable=CoreVnetName]$coreVnetName"
+         Write-Host "##vso[task.setvariable variable=CoreVnetRg]$coreVnetRg"
+         Write-Host "##vso[task.setvariable variable=DmzVnetName]$dmzVnetName"
+         Write-Host "##vso[task.setvariable variable=DmzVnetRg]$dmzVnetRg"
       Write-Host "##vso[task.setvariable variable=NsgName]$nsgName"
       Write-Host "##vso[task.setvariable variable=NsgRg]$nsgRg"
       Write-Host "##vso[task.setvariable variable=BootDiagStorage]$bootDiagStorage"
