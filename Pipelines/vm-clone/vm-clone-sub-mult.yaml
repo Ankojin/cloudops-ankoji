@@ -141,7 +141,12 @@ steps:
               $dmzVnetName = '$(CORE_DMZ_VNETName)'; $dmzVnetRg = '$(CORE_DMZ_VNETRG)'
               $nsgName = '$(CORE_NSGName)'; $nsgRg = '$(CORE_NSGRG)'
               $dmzNsgName = '$(CORE_DMZ_NSGName)'; $dmzNsgRg = $dmzVnetRg
-              $bootDiagStorage = '$(CORE_BootDiagStorage)'
+              # Use WEEU-specific BootDiagStorage if region is WEEU
+              if ('$(CORE_REGION)' -eq 'westeurope' -or $coreVnetRg -match '(?i)weeu') {
+                $bootDiagStorage = '$(CORE_BootDiagStorage_weeu)'
+              } else {
+                $bootDiagStorage = '$(CORE_BootDiagStorage)'
+              }
               # Default to core VNET for main pipeline variables
               $vnetName = $coreVnetName
               $vnetRg = $coreVnetRg
@@ -193,3 +198,4 @@ steps:
   env:
     DmzNsgName: $(DmzNsgName)
     DmzNsgRg: $(DmzNsgRg)
+    CORE_BootDiagStorage_weeu: 'babcorevmbootdiag02'

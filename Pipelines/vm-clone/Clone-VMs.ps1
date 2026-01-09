@@ -288,6 +288,15 @@ foreach ($vm in $vmList) {
     $NsgName  = $netConfig.NsgName
     $NsgRg    = $netConfig.NsgRg
 
+    # Boot diagnostics storage selection: prefer WEEU env var if present and region matches
+    $bootDiagStorageFinal = $BootDiagStorage
+    if ($env:CORE_BootDiagStorage_weeu -and ($VnetRg -match '(?i)weeu' -or $TargetResourceGroup -match '(?i)weeu')) {
+        $bootDiagStorageFinal = $env:CORE_BootDiagStorage_weeu
+        Log-Info "Using WEEU-specific BootDiagStorage: $bootDiagStorageFinal"
+    } else {
+        Log-Info "Using default BootDiagStorage: $bootDiagStorageFinal"
+    }
+
     Log-Info "Selected VNET: $VnetName, RG: $VnetRg, NSG: $NsgName, NSG RG: $NsgRg for subnet $($vm.SubnetName)"
     
     try {
@@ -339,9 +348,9 @@ foreach ($vm in $vmList) {
         }
 
         # Validate boot diagnostics storage
-        $storageExists = az storage account show --name $BootDiagStorage -o json 2>$null
+        $storageExists = az storage account show --name $bootDiagStorageFinal -o json 2>$null
         if (-not $storageExists) {
-            Log-Error "Boot diagnostics storage account '$BootDiagStorage' not found in target subscription"
+            Log-Error "Boot diagnostics storage account '$bootDiagStorageFinal' not found in target subscription"
             continue
         }
 
@@ -586,7 +595,7 @@ foreach ($vm in $vmList) {
         } else {
             Log-Info "Creating VM: $($vm.NewVMName) | Size: $($vm.VMSize) | OS: $osType"
             
-            $vmCreateResult = az vm create -g $TargetResourceGroup -n $vm.NewVMName --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osType --size $vm.VMSize --boot-diagnostics-storage "https://$BootDiagStorage.blob.core.windows.net/" --tags $tags 2>&1
+            $vmCreateResult = az vm create -g $TargetResourceGroup -n $vm.NewVMName --nics $nicId --attach-os-disk $osDiskIdNew --os-type $osType --size $vm.VMSize --boot-diagnostics-storage "https://$bootDiagStorageFinal.blob.core.windows.net/" --tags $tags 2>&1
             $vmCreateExitCode = $LASTEXITCODE
             
             if ($vmCreateExitCode -ne 0 -or ($vmCreateResult -match "ERROR|Error|error")) {
