@@ -198,4 +198,4 @@ steps:
   env:
     DmzNsgName: $(DmzNsgName)
     DmzNsgRg: $(DmzNsgRg)
-    CORE_BootDiagStorage_weeu: 'babcorevmbootdiag02'
+    CORE_BootDiagStorage_weeu: 'babcorevmbootdiag01'
