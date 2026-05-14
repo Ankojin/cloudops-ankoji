@@ -1,0 +1,11 @@
+{
+  "SubscriptionId": "43cc4f11-ffb1-4a0d-8420-0ba3746b4248",
+  "WorkspaceId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourcegroups/bab-dev-wrkspace-swec-rg-01/providers/microsoft.monitor/accounts/vminsights-bab-dev-awm-workspace",
+  "WorkspaceName": "vminsights-bab-dev-awm-workspace",
+  "Location": "swedencentral",
+  "CreatedDate": "2026-02-03 11:17:42",
+  "DcrName": "MSVMOtel-swedencentral-20260203",
+  "CustomMetricsEnabled": true,
+  "ResourceGroup": "bab-dev-wrkspace-swec-rg-01",
+  "DcrId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.Insights/dataCollectionRules/MSVMOtel-swedencentral-20260203"
+}

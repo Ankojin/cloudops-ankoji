@@ -5,7 +5,7 @@ Signature="$Windows NT$"
 Subject = "CN=%FQDN%"
 KeySpec = 1
 KeyLength = 2048
-Exportable = TRUE
+Exportable = FALSE
 MachineKeySet = TRUE
 SMIME = FALSE
 PrivateKeyArchive = FALSE

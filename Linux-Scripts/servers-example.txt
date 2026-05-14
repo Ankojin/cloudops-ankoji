@@ -1,0 +1,19 @@
+# Chrony NTP Deployment - Server List
+# Format: One server per line (IP address or hostname)
+# Lines starting with # are comments and will be ignored
+
+# Example servers (uncomment and modify for your environment):
+# 192.168.1.10
+# 192.168.1.11
+# 192.168.1.12
+# server1.example.com
+# server2.example.com
+
+# Production servers
+# 10.189.61.10
+# 10.189.61.11
+# 10.189.61.12
+
+# Development servers
+# 192.168.100.10
+# 192.168.100.11

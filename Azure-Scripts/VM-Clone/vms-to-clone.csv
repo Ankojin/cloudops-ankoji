@@ -1,2 +1,2 @@
 ﻿SourceVMName,NewVMName,StaticIp,SubnetName,VMSize
-DASDEDBSQDWV1,DASDESDBSQSWV1,10.189.66.198,snet-sit-nonpci-db-01,Standard_D4ls_v5
+BABAVDSHDTA-2,BABAVDSHDTA-3,10.189.50.134,snet-vdi-avd-01,Standard_E8s_v5

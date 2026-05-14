@@ -1,0 +1,8 @@
+#Chrony NTP Deployment - Server List
+# Format: One server per line (IP address or hostname)
+# Lines starting with # are comments and will be ignored
+
+# Example servers (uncomment and modify for your environment):
+
+# Servers
+10.189.66.11

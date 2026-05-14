@@ -1,0 +1,131 @@
+{
+  "ProcessedVMs": {
+    "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFAPLV01": {
+      "Status": "Success",
+      "Timestamp": "2026-02-03T11:25:53.4064374+03:00",
+      "Details": {
+        "ResourceGroup": "bab-dev-dgpdpl-swec-rg-01",
+        "Details": "VM migrated to OpenTelemetry successfully",
+        "Status": "Success",
+        "Location": "swedencentral",
+        "VMId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFAPLV01",
+        "OSType": "Linux",
+        "Timestamp": "2026-02-03T11:25:49.3510818+03:00",
+        "VMName": "DADGINFAPLV01"
+      }
+    },
+    "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGERMDBLV01": {
+      "Status": "Success",
+      "Timestamp": "2026-02-03T11:25:45.2525275+03:00",
+      "Details": {
+        "ResourceGroup": "bab-dev-dgpdpl-swec-rg-01",
+        "Details": "VM migrated to OpenTelemetry successfully",
+        "Status": "Success",
+        "Location": "swedencentral",
+        "VMId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGERMDBLV01",
+        "OSType": "Linux",
+        "Timestamp": "2026-02-03T11:25:41.4507909+03:00",
+        "VMName": "DADGERMDBLV01"
+      }
+    },
+    "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFDBWV01": {
+      "Status": "Success",
+      "Timestamp": "2026-02-03T11:26:01.3765822+03:00",
+      "Details": {
+        "ResourceGroup": "bab-dev-dgpdpl-swec-rg-01",
+        "Details": "VM migrated to OpenTelemetry successfully",
+        "Status": "Success",
+        "Location": "swedencentral",
+        "VMId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFDBWV01",
+        "OSType": "Windows",
+        "Timestamp": "2026-02-03T11:25:57.6038125+03:00",
+        "VMName": "DADGINFDBWV01"
+      }
+    },
+    "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFDQLV01": {
+      "Status": "Success",
+      "Timestamp": "2026-02-03T11:26:05.5561323+03:00",
+      "Details": {
+        "ResourceGroup": "bab-dev-dgpdpl-swec-rg-01",
+        "Details": "VM migrated to OpenTelemetry successfully",
+        "Status": "Success",
+        "Location": "swedencentral",
+        "VMId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFDQLV01",
+        "OSType": "Linux",
+        "Timestamp": "2026-02-03T11:26:01.4085322+03:00",
+        "VMName": "DADGINFDQLV01"
+      }
+    },
+    "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGBMNDBLV01": {
+      "Status": "Success",
+      "Timestamp": "2026-02-03T11:25:37.3158581+03:00",
+      "Details": {
+        "ResourceGroup": "bab-dev-dgpdpl-swec-rg-01",
+        "Details": "VM migrated to OpenTelemetry successfully",
+        "Status": "Success",
+        "Location": "swedencentral",
+        "VMId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGBMNDBLV01",
+        "OSType": "Linux",
+        "Timestamp": "2026-02-03T11:25:33.4195287+03:00",
+        "VMName": "DADGBMNDBLV01"
+      }
+    },
+    "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGERMAPWV01": {
+      "Status": "Success",
+      "Timestamp": "2026-02-03T11:25:41.4065342+03:00",
+      "Details": {
+        "ResourceGroup": "bab-dev-dgpdpl-swec-rg-01",
+        "Details": "VM migrated to OpenTelemetry successfully",
+        "Status": "Success",
+        "Location": "swedencentral",
+        "VMId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGERMAPWV01",
+        "OSType": "Windows",
+        "Timestamp": "2026-02-03T11:25:37.3535553+03:00",
+        "VMName": "DADGERMAPWV01"
+      }
+    },
+    "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFAXLV01": {
+      "Status": "Success",
+      "Timestamp": "2026-02-03T11:25:57.571836+03:00",
+      "Details": {
+        "ResourceGroup": "bab-dev-dgpdpl-swec-rg-01",
+        "Details": "VM migrated to OpenTelemetry successfully",
+        "Status": "Success",
+        "Location": "swedencentral",
+        "VMId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFAXLV01",
+        "OSType": "Linux",
+        "Timestamp": "2026-02-03T11:25:53.4536307+03:00",
+        "VMName": "DADGINFAXLV01"
+      }
+    },
+    "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFAGWV01": {
+      "Status": "Success",
+      "Timestamp": "2026-02-03T11:25:49.2884779+03:00",
+      "Details": {
+        "ResourceGroup": "bab-dev-dgpdpl-swec-rg-01",
+        "Details": "VM migrated to OpenTelemetry successfully",
+        "Status": "Success",
+        "Location": "swedencentral",
+        "VMId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFAGWV01",
+        "OSType": "Windows",
+        "Timestamp": "2026-02-03T11:25:45.2736047+03:00",
+        "VMName": "DADGINFAGWV01"
+      }
+    },
+    "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFIELV01": {
+      "Status": "Success",
+      "Timestamp": "2026-02-03T11:26:08.9144490+03:00",
+      "Details": {
+        "ResourceGroup": "bab-dev-dgpdpl-swec-rg-01",
+        "Details": "VM migrated to OpenTelemetry successfully",
+        "Status": "Success",
+        "Location": "swedencentral",
+        "VMId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-dgpdpl-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DADGINFIELV01",
+        "OSType": "Linux",
+        "Timestamp": "2026-02-03T11:26:05.5947312+03:00",
+        "VMName": "DADGINFIELV01"
+      }
+    }
+  },
+  "LastUpdated": "2026-02-03T11:26:08.9143108+03:00"
+}

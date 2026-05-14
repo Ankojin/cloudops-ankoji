@@ -1,16 +1,19 @@
 # Enroll-WebServerCert.ps1
 # Auto-enrolls a WebServer cert on a standalone CA with logging, dry-run, and event logging
+[CmdletBinding()]
+param(
+    [switch]$DryRun
+)
 
 # Configuration
-$workDir = "C:\CertEnroll"
-$logFile = "$workDir\cert-enroll.log"
+$workDir     = "C:\CertEnroll"
+$logFile     = "$workDir\cert-enroll.log"
 $eventSource = "CertEnrollScript"
 $infTemplate = "$workDir\request.inf"
-$infFile = "$workDir\request_expanded.inf"
-$reqFile = "$workDir\certreq.req"
-$certFile = "$workDir\certnew.cer"
-$caConfig = "DAPKIAPISCWV1.albtests.com\Albtests CA Issuer"
-$DryRun = $false
+$infFile     = "$workDir\request_expanded.inf"
+$reqFile     = "$workDir\certreq.req"
+$certFile    = "$workDir\certnew.cer"
+$caConfig    = "DAPKIAPISCWV1.albtests.com\Albtests CA Issuer"
 
 # Create working dir if missing
 if (-not (Test-Path $workDir)) { New-Item -ItemType Directory -Path $workDir -Force | Out-Null }
@@ -47,7 +50,7 @@ function Write-EventLogEntry {
 
 # Start
 $hostname = $env:COMPUTERNAME
-$domain = (Get-WmiObject Win32_ComputerSystem).Domain
+$domain = (Get-CimInstance Win32_ComputerSystem).Domain
 $fqdn = "$hostname.$domain"
 
 Write-Log "Preparing certificate request for $fqdn"
@@ -80,7 +83,7 @@ if (-not (Get-Command certreq.exe -ErrorAction SilentlyContinue)) {
     $msg = "'certreq.exe' not found in PATH."
     Write-Log $msg "ERROR"
     Write-EventLogEntry $msg "Error"
-    exit 1
+    throw $msg
 }
 
 # Generate CSR
@@ -92,7 +95,7 @@ try {
     $msg = "CSR generation failed: $_"
     Write-Log $msg "ERROR"
     Write-EventLogEntry $msg "Error"
-    exit 1
+    throw $msg
 }
 
 # Submit
@@ -104,7 +107,7 @@ try {
     $msg = "Certificate submission failed: $_"
     Write-Log $msg "ERROR"
     Write-EventLogEntry $msg "Error"
-    exit 1
+    throw $msg
 }
 
 # Accept cert
@@ -121,5 +124,5 @@ try {
     $msg = "Certificate installation failed: $_"
     Write-Log $msg "ERROR"
     Write-EventLogEntry $msg "Error"
-    exit 1
+    throw $msg
 }

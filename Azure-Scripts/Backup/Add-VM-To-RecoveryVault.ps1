@@ -9,14 +9,14 @@ $DryRun = $false   # SET TO $true FOR DRY RUN
 # =========================
 # Paths
 # =========================
-$CsvPath = "C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\Azure-Scripts\Backup\vms-backup.csv"
+$CsvPath = "C:\On-Prem-to-cloud-migration\New-Repo\BAB_CloudOps\BAB_CloudOps-Ankoji\Azure-Scripts\Backup\vms-backup.csv"
 $LogPath = Join-Path $PSScriptRoot ("Backup-Enable-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 
 # =========================
 # Azure Settings
 # =========================
-$SubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
-$VaultName      = "bab-dev-backup-vault-swec-01"
+$SubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
+$VaultName      = "bab-sit-backup-vault-swec-01"
 $PolicyName     = "Daily-Backup-policy-Ret-7days"
 
 # =========================

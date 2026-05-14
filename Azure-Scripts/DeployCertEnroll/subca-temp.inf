@@ -1,0 +1,31 @@
+; INF file for generating a TLS server certificate request
+; Subject: CN=GTO-DEXIS-TLS.albtests.com, OU=DEXIS, O=BAB-IT, L=RIYADH, ST=CENTRAL_REGION, C=SA
+
+[Version]
+Signature="$Windows NT$"
+
+[NewRequest]
+Subject = "CN=GTO-DEXIS-TLS.albtests.com, OU=DEXIS, O=BAB-IT, L=RIYADH, ST=CENTRAL_REGION, C=SA"
+KeyLength = 2048
+KeySpec = 1                  ; AT_KEYEXCHANGE
+Exportable = TRUE
+MachineKeySet = TRUE
+SMIME = FALSE
+PrivateKeyArchive = FALSE
+UserProtected = FALSE
+UseExistingKeySet = FALSE
+ProviderName = "Microsoft RSA SChannel Cryptographic Provider"
+ProviderType = 12
+RequestType = PKCS10
+KeyUsage = 0xA0              ; digitalSignature + keyEncipherment
+
+[EnhancedKeyUsageExtension]
+OID=1.3.6.1.5.5.7.3.1        ; Server Authentication
+
+[Extensions]
+2.5.29.17 = "{text}"
+    _continue_ = "dns=GTO-DEXIS-TLS.albtests.com&"
+    _continue_ = "dns=*.albtests.com"
+
+[RequestAttributes]
+CertificateTemplate = Sub-CA

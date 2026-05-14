@@ -1,5 +1,4 @@
 variable "subscription_id" {
-  description = "Default subscription_id."
+  description = "Azure subscription ID (must be supplied at runtime — no default)."
   type        = string
-  default     = "d88f0b5b-6660-4607-8c6a-395820400912"
 }

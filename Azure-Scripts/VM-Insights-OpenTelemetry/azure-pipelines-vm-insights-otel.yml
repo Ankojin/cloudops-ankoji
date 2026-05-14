@@ -1,0 +1,285 @@
+trigger: none
+
+parameters:
+- name: subscriptionId
+  displayName: 'Target Subscription ID'
+  type: string
+  
+- name: resourceGroupName
+  displayName: 'Resource Group Name (leave blank for all VMs)'
+  type: string
+  default: ''
+  
+- name: location
+  displayName: 'Azure Region'
+  type: string
+  default: 'uaenorth'
+  values:
+  - uaenorth
+  - uaecentral
+  - eastus
+  - westeurope
+  - southeastasia
+  
+- name: enableCustomMetrics
+  displayName: 'Enable Custom Metrics (per-process monitoring, additional cost)'
+  type: boolean
+  default: false
+  
+- name: enableClassicMetrics
+  displayName: 'Keep Classic Log Analytics Metrics (dual monitoring)'
+  type: boolean
+  default: false
+  
+- name: logAnalyticsWorkspaceId
+  displayName: 'Log Analytics Workspace ID (only if enableClassicMetrics=true)'
+  type: string
+  default: ''
+  
+- name: azureMonitorWorkspaceName
+  displayName: 'Azure Monitor Workspace Name (leave blank for auto-generated)'
+  type: string
+  default: ''
+  
+- name: parallelBatchSize
+  displayName: 'Parallel Processing Batch Size (1-10 VMs)'
+  type: number
+  default: 5
+  values:
+  - 1
+  - 3
+  - 5
+  - 10
+  
+- name: resumeFromCheckpoint
+  displayName: 'Resume from Previous Run (uses checkpoint file)'
+  type: boolean
+  default: false
+  
+- name: excludeVMsWithTag
+  displayName: 'Exclude VMs with Tag Name (e.g., ExcludeFromMonitoring)'
+  type: string
+  default: ''
+  
+- name: whatIf
+  displayName: 'Dry-Run Mode (preview changes without applying)'
+  type: boolean
+  default: false
+
+variables:
+  azureServiceConnection: 'Azure-ServiceConnection'  # Update with your service connection name
+  
+pool:
+  vmImage: 'windows-latest'
+
+stages:
+- stage: ValidatePrerequisites
+  displayName: 'Validate Prerequisites'
+  jobs:
+  - job: ValidateAzureAccess
+    displayName: 'Validate Azure Access and Permissions'
+    steps:
+    - task: AzurePowerShell@5
+      displayName: 'Check Azure Permissions'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'inlineScript'
+        inline: |
+          Write-Host "Testing Azure connectivity and permissions..."
+          $context = Get-AzContext
+          Write-Host "✅ Authenticated as: $($context.Account.Id)"
+          Write-Host "✅ Subscription: $($context.Subscription.Name) ($($context.Subscription.Id))"
+          
+          # Test VM access
+          try {
+              $vms = Get-AzVM -Status | Select-Object -First 1
+              Write-Host "✅ Can read VMs in subscription"
+          } catch {
+              Write-Error "❌ Cannot access VMs. Check permissions."
+              exit 1
+          }
+          
+          # Test resource creation permissions
+          try {
+              $testRG = "rg-test-permissions-temp"
+              $testRGCheck = Get-AzResourceGroup -Name $testRG -ErrorAction SilentlyContinue
+              if ($testRGCheck) {
+                  Write-Host "✅ Resource creation permissions verified (test RG exists)"
+              }
+          } catch {
+              Write-Warning "⚠️ May not have permissions to create resources. Migration might fail."
+          }
+        azurePowerShellVersion: 'LatestVersion'
+        pwsh: true
+
+- stage: MigrateVMs
+  displayName: 'Migrate VMs to OpenTelemetry'
+  dependsOn: ValidatePrerequisites
+  condition: succeeded()
+  jobs:
+  - job: RunMigration
+    displayName: 'Execute VM Insights OTel Migration'
+    timeoutInMinutes: 360  # 6 hours for large environments
+    steps:
+    - task: AzurePowerShell@5
+      displayName: 'Migrate VMs to VM Insights OpenTelemetry'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'FilePath'
+        scriptPath: '$(Build.SourcesDirectory)/BAB_CloudOps-pipeline/Pipelines/VM-Insights-OpenTelemetry/Migrate-VMInsights-OpenTelemetry.ps1'
+        scriptArguments: |
+          -SubscriptionId "${{ parameters.subscriptionId }}" `
+          $(if ("${{ parameters.resourceGroupName }}" -ne "") { "-ResourceGroupName `"${{ parameters.resourceGroupName }}`"" }) `
+          -Location "${{ parameters.location }}" `
+          $(if ("${{ parameters.azureMonitorWorkspaceName }}" -ne "") { "-AzureMonitorWorkspaceName `"${{ parameters.azureMonitorWorkspaceName }}`"" }) `
+          -CustomMetricsEnabled:$${{ parameters.enableCustomMetrics }} `
+          -EnableClassicMetrics:$${{ parameters.enableClassicMetrics }} `
+          $(if ("${{ parameters.logAnalyticsWorkspaceId }}" -ne "") { "-LogAnalyticsWorkspaceId `"${{ parameters.logAnalyticsWorkspaceId }}`"" }) `
+          -ParallelBatchSize ${{ parameters.parallelBatchSize }} `
+          $(if (${{ parameters.resumeFromCheckpoint }}) { "-ResumeFromCheckpoint" }) `
+          $(if ("${{ parameters.excludeVMsWithTag }}" -ne "") { "-ExcludeVMsWithTag `"${{ parameters.excludeVMsWithTag }}`"" }) `
+          $(if (${{ parameters.whatIf }}) { "-WhatIf" }) `
+          -Verbose
+        azurePowerShellVersion: 'LatestVersion'
+        pwsh: true
+      continueOnError: false
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Migration Logs'
+      inputs:
+        pathToPublish: '$(Build.SourcesDirectory)/BAB_CloudOps-pipeline/Pipelines/VM-Insights-OpenTelemetry/Logs'
+        artifactName: 'VMInsights-OTel-Migration-Logs'
+      condition: always()
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Checkpoint File'
+      inputs:
+        pathToPublish: '$(Build.SourcesDirectory)/BAB_CloudOps-pipeline/Pipelines/VM-Insights-OpenTelemetry/Checkpoints'
+        artifactName: 'Migration-Checkpoints'
+      condition: always()
+
+- stage: ValidationReport
+  displayName: 'Generate Validation Report'
+  dependsOn: MigrateVMs
+  condition: succeeded()
+  jobs:
+  - job: GenerateReport
+    displayName: 'Analyze Migration Results'
+    steps:
+    - task: DownloadBuildArtifacts@0
+      displayName: 'Download Migration Logs'
+      inputs:
+        artifactName: 'VMInsights-OTel-Migration-Logs'
+        downloadPath: '$(System.ArtifactsDirectory)'
+    
+    - task: AzurePowerShell@5
+      displayName: 'Generate Summary Report'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'inlineScript'
+        inline: |
+          Write-Host "========================================"
+          Write-Host "VM Insights OTel Migration Report"
+          Write-Host "========================================"
+          
+          $resultsFile = Get-ChildItem -Path "$(System.ArtifactsDirectory)/VMInsights-OTel-Migration-Logs" -Filter "VMInsights-OTel-Results-*.csv" | Select-Object -First 1
+          
+          if ($resultsFile) {
+              $results = Import-Csv $resultsFile.FullName
+              
+              $totalVMs = $results.Count
+              $successful = ($results | Where-Object {$_.Status -eq 'Success'}).Count
+              $failed = ($results | Where-Object {$_.Status -eq 'Failed'}).Count
+              $skipped = ($results | Where-Object {$_.Status -like 'Skipped*'}).Count
+              
+              Write-Host ""
+              Write-Host "📊 Summary Statistics:"
+              Write-Host "  Total VMs Processed: $totalVMs"
+              Write-Host "  ✅ Successful: $successful"
+              Write-Host "  ❌ Failed: $failed"
+              Write-Host "  ⏭️ Skipped: $skipped"
+              Write-Host "  Success Rate: $([math]::Round(($successful/$totalVMs)*100, 1))%"
+              Write-Host ""
+              
+              if ($failed -gt 0) {
+                  Write-Host "❌ Failed VMs:"
+                  $results | Where-Object {$_.Status -eq 'Failed'} | Select-Object VMName, ResourceGroup, Details | Format-Table -AutoSize
+                  Write-Warning "⚠️ Migration completed with errors. Review failed VMs above."
+              } else {
+                  Write-Host "✅ All VMs migrated successfully!"
+              }
+              
+              Write-Host ""
+              Write-Host "📁 Full results available in pipeline artifacts"
+          } else {
+              Write-Warning "⚠️ No results CSV found. Migration may have failed early."
+              exit 1
+          }
+        azurePowerShellVersion: 'LatestVersion'
+        pwsh: true
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Final Report'
+      inputs:
+        pathToPublish: '$(System.ArtifactsDirectory)/VMInsights-OTel-Migration-Logs'
+        artifactName: 'Final-Migration-Report'
+      condition: always()
+
+- stage: PostMigrationValidation
+  displayName: 'Post-Migration Validation'
+  dependsOn: MigrateVMs
+  condition: and(succeeded(), eq('${{ parameters.whatIf }}', false))
+  jobs:
+  - job: ValidateMetrics
+    displayName: 'Validate OTel Metrics Collection'
+    steps:
+    - task: AzurePowerShell@5
+      displayName: 'Check Azure Monitor Agent Status'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'inlineScript'
+        inline: |
+          Write-Host "Validating Azure Monitor Agent deployment..."
+          
+          Set-AzContext -SubscriptionId "${{ parameters.subscriptionId }}"
+          
+          $vms = if ("${{ parameters.resourceGroupName }}" -ne "") {
+              Get-AzVM -ResourceGroupName "${{ parameters.resourceGroupName }}"
+          } else {
+              Get-AzVM
+          }
+          
+          $amaStatus = @()
+          foreach ($vm in $vms) {
+              $windowsExt = Get-AzVMExtension -ResourceGroupName $vm.ResourceGroupName -VMName $vm.Name -Name "AzureMonitorWindowsAgent" -ErrorAction SilentlyContinue
+              $linuxExt = Get-AzVMExtension -ResourceGroupName $vm.ResourceGroupName -VMName $vm.Name -Name "AzureMonitorLinuxAgent" -ErrorAction SilentlyContinue
+              
+              $ext = if ($windowsExt) { $windowsExt } else { $linuxExt }
+              
+              if ($ext) {
+                  $amaStatus += [PSCustomObject]@{
+                      VMName = $vm.Name
+                      ResourceGroup = $vm.ResourceGroupName
+                      AMAInstalled = $true
+                      ProvisioningState = $ext.ProvisioningState
+                      Version = $ext.TypeHandlerVersion
+                  }
+              }
+          }
+          
+          Write-Host ""
+          Write-Host "📊 Azure Monitor Agent Deployment Status:"
+          $amaStatus | Format-Table -AutoSize
+          
+          $installedCount = ($amaStatus | Where-Object {$_.AMAInstalled}).Count
+          $succeededCount = ($amaStatus | Where-Object {$_.ProvisioningState -eq 'Succeeded'}).Count
+          
+          Write-Host ""
+          Write-Host "✅ AMA installed on $installedCount VMs"
+          Write-Host "✅ Successfully provisioned on $succeededCount VMs"
+          
+          if ($installedCount -ne $vms.Count) {
+              Write-Warning "⚠️ Not all VMs have Azure Monitor Agent installed"
+          }
+        azurePowerShellVersion: 'LatestVersion'
+        pwsh: true

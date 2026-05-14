@@ -1,7 +1,7 @@
 #!/bin/bash
 
-USERS=("mohnaz-b" "mahsha-b" "abdanw-b")
-DEFAULT_PASS="ChangeMe123!"
+USERS=("abdanw-b" "mahsha-b" "mohnaz-b")
+DEFAULT_PASS="ChangeMe@123!"
 
 for USER in "${USERS[@]}"; do
     if id "$USER" &>/dev/null; then

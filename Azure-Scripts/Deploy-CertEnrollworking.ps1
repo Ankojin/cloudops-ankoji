@@ -1,14 +1,4 @@
-# ------------------------------------------------------------------------------------
 # Deploy-CertEnroll.ps1
-# 
-# Summary:
-#   This script automates deployment of the CertEnroll folder and a certificate
-#   enrollment PowerShell script to a list of remote Windows servers. It:
-#     - Reads server names from a text file.
-#     - Copies the CertEnroll folder to each server.
-#     - Creates a scheduled task on each server to run the enrollment script.
-#     - Logs all actions and errors to a log file.
-# ------------------------------------------------------------------------------------
 $sourceFolder = "C:\DeployCertEnroll\CertEnroll"
 $remoteFolder = "C:\CertEnroll"
 $scriptName = "Enroll-WebServerCert.ps1"
@@ -22,9 +12,6 @@ function Write-Log {
     Write-Host $entry
     Add-Content -Path $logFile -Value $entry
 }
-
-$successList = @()
-$failList = @()
 
 foreach ($server in $serverList) {
     Write-Log "`n[+] Processing $server..."
@@ -96,22 +83,9 @@ foreach ($server in $serverList) {
         } -ErrorAction Stop
 
         Write-Log "✔ Scheduled task created and triggered on $server"
-        $successList += $server
 
     } catch {
         Write-Log "❌ Error on {$server}: $($_.Exception.Message)" "ERROR"
-        $failList += $server
         continue
     }
-}
-
-Write-Host "`nDeployment Summary:"
-Write-Host "-------------------"
-Write-Host "Successful: $($successList.Count)"
-if ($successList.Count -gt 0) {
-    Write-Host "  - $($successList -join "`n  - ")"
-}
-Write-Host "Failed: $($failList.Count)"
-if ($failList.Count -gt 0) {
-    Write-Host "  - $($failList -join "`n  - ")"
 }

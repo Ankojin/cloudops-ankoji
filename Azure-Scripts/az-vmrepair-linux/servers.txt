@@ -1,0 +1,17 @@
+# RHEL Server List for Boot Verification
+# Format: hostname or IP address (one per line)
+# Lines starting with # are comments
+
+# Production Database Servers
+dadexordbslv01
+DAFISDBORILV3
+
+# Application Servers
+# app-server-01.example.com
+# app-server-02.example.com
+
+# Web Servers
+# 10.189.66.100
+# 10.189.66.101
+
+# Add your servers below:
