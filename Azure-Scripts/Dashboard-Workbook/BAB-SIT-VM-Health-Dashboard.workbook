@@ -1,0 +1,892 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "sub",
+            "version": "KqlParameterItem/1.0",
+            "name": "Subscription",
+            "type": 6,
+            "multiSelect": true,
+            "value": [
+              "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+            ]
+          },
+          {
+            "id": "rg",
+            "version": "KqlParameterItem/1.0",
+            "name": "ResourceGroup",
+            "type": 5,
+            "multiSelect": true
+          },
+          {
+            "id": "vm",
+            "version": "KqlParameterItem/1.0",
+            "name": "VM",
+            "type": 1
+          },
+          {
+            "id": "time",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "value": {
+              "durationMs": 900000
+            }
+          },
+          {
+            "id": "ExcludedRG",
+            "version": "KqlParameterItem/1.0",
+            "name": "ExcludedRG",
+            "type": 1,
+            "value": "aro-infra-lybja3b0-bab-sit-aro-01"
+          },
+          {
+            "id": "drill-tile-param",
+            "version": "KqlParameterItem/1.0",
+            "name": "DrillTile",
+            "type": 1,
+            "value": ""
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "Parameters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "<div style=\"background:linear-gradient(135deg,#0078d4 0%,#005a9e 100%);padding:16px 24px;border-radius:6px;margin-bottom:4px\"><span style=\"color:#ffffff;font-size:22px;font-weight:700;font-family:'Segoe UI',sans-serif;letter-spacing:0.3px\">🖥️ BAB SIT — VM Health Dashboard</span></div>"
+      },
+      "name": "title"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "<h3 style=\"color:#0078d4;border-left:4px solid #0078d4;padding-left:12px;font-family:'Segoe UI',sans-serif;margin:16px 0 4px 0\">📊 VM Summary</h3>"
+      },
+      "name": "section-summary"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| summarize TotalVMs=count()",
+        "size": 4,
+        "title": "Total VMs",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ]
+      },
+      "customWidth": "14",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "TotalVMs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend powerState = tostring(properties.extended.instanceView.powerState.code)\n| where powerState =~ 'PowerState/running'\n| summarize RunningVMs=count()",
+        "size": 4,
+        "title": "Running VMs",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ]
+      },
+      "customWidth": "14",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "OnlineVMs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend powerState = tostring(properties.extended.instanceView.powerState.code)\n| where powerState !in~ ('PowerState/running','PowerState/deallocated')\n| summarize StoppedVMs=count()",
+        "size": 4,
+        "title": "Stopped VMs",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ]
+      },
+      "customWidth": "14",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "OfflineVMs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend powerState = tostring(properties.extended.instanceView.powerState.code)\n| where powerState =~ 'PowerState/deallocated'\n| summarize DeallocatedVMs=count()",
+        "size": 4,
+        "title": "Deallocated VMs",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ]
+      },
+      "customWidth": "14",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "DeallocatedVMs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let Windows = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'Logical Disk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=avg(CounterValue) by Computer, InstanceName\n| where FreePct < 10\n| project Computer;\nlet Linux = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'LogicalDisk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=avg(CounterValue) by Computer, InstanceName\n| where FreePct < 10\n| project Computer;\nunion Windows, Linux\n| summarize CriticalServers=dcount(Computer)",
+        "size": 4,
+        "title": "Critical Disk Servers (<10%)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ]
+      },
+      "customWidth": "14",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "CriticalDiskAlerts"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where CounterName == '% Processor Time'\n| where InstanceName == '_Total'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize AvgCPU=avg(CounterValue) by Computer\n| where AvgCPU > 90\n| summarize VMsHighCPU=count()",
+        "size": 4,
+        "title": "CPU > 90%",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ]
+      },
+      "customWidth": "14",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "HighCPUVMs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where CounterName in ('% Committed Bytes In Use','% Used Memory')\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize AvgMemory=avg(CounterValue) by Computer\n| where AvgMemory > 90\n| summarize VMsHighMemory=count()",
+        "size": 4,
+        "title": "Memory > 90%",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ]
+      },
+      "customWidth": "14",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "HighMemoryVMs"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "<div style=\"background:#fff3cd;border:1px solid #ffc107;padding:10px 14px;border-radius:4px;margin:8px 0 4px 0;font-family:'Segoe UI',sans-serif;color:#333;font-size:13px\">⬇️ <strong>Drill-down navigation:</strong> Click a category tab below — the filtered VM list appears directly beneath the tab bar. Scroll down if needed to see results.</div>"
+      },
+      "name": "DrillTileHint"
+    },
+    {
+      "type": 11,
+      "content": {
+        "version": "LinkItem/1.0",
+        "style": "tabs",
+        "links": [
+          {
+            "id": "lnk-hide",
+            "cellValue": "",
+            "linkTarget": "parameter",
+            "linkLabel": "✕ Close",
+            "parameterName": "DrillTile",
+            "parameterType": 1,
+            "style": "secondary"
+          },
+          {
+            "id": "lnk-total",
+            "cellValue": "total",
+            "linkTarget": "parameter",
+            "linkLabel": "All VMs",
+            "parameterName": "DrillTile",
+            "parameterType": 1
+          },
+          {
+            "id": "lnk-running",
+            "cellValue": "running",
+            "linkTarget": "parameter",
+            "linkLabel": "Running VMs",
+            "parameterName": "DrillTile",
+            "parameterType": 1
+          },
+          {
+            "id": "lnk-stopped",
+            "cellValue": "stopped",
+            "linkTarget": "parameter",
+            "linkLabel": "Stopped VMs",
+            "parameterName": "DrillTile",
+            "parameterType": 1
+          },
+          {
+            "id": "lnk-deallocated",
+            "cellValue": "deallocated",
+            "linkTarget": "parameter",
+            "linkLabel": "Deallocated VMs",
+            "parameterName": "DrillTile",
+            "parameterType": 1
+          },
+          {
+            "id": "lnk-critical-disk",
+            "cellValue": "critical_disk",
+            "linkTarget": "parameter",
+            "linkLabel": "Critical Disk (<10%)",
+            "parameterName": "DrillTile",
+            "parameterType": 1
+          },
+          {
+            "id": "lnk-cpu",
+            "cellValue": "cpu_high",
+            "linkTarget": "parameter",
+            "linkLabel": "CPU >90%",
+            "parameterName": "DrillTile",
+            "parameterType": 1
+          },
+          {
+            "id": "lnk-mem",
+            "cellValue": "mem_high",
+            "linkTarget": "parameter",
+            "linkLabel": "Memory >90%",
+            "parameterName": "DrillTile",
+            "parameterType": 1
+          }
+        ]
+      },
+      "name": "DrillTileLinks"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend PowerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n| extend OSType = tostring(properties.storageProfile.osDisk.osType)\n| extend VMSize = tostring(properties.hardwareProfile.vmSize)\n| project VMName=name, ResourceGroup=resourceGroup, Location=location, OSType, VMSize, PowerState\n| order by VMName asc",
+        "size": 0,
+        "title": "All VMs",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"]
+      },
+      "conditionalVisibility": {
+        "parameterName": "DrillTile",
+        "comparison": "isEqualTo",
+        "value": "total"
+      },
+      "styleSettings": { "showBorder": true },
+      "name": "DrillTotal"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend powerState = tostring(properties.extended.instanceView.powerState.code)\n| where powerState =~ 'PowerState/running'\n| extend OSType = tostring(properties.storageProfile.osDisk.osType)\n| extend VMSize = tostring(properties.hardwareProfile.vmSize)\n| project VMName=name, ResourceGroup=resourceGroup, Location=location, OSType, VMSize\n| order by VMName asc",
+        "size": 0,
+        "title": "Running VMs",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"]
+      },
+      "conditionalVisibility": {
+        "parameterName": "DrillTile",
+        "comparison": "isEqualTo",
+        "value": "running"
+      },
+      "styleSettings": { "showBorder": true },
+      "name": "DrillRunning"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend powerState = tostring(properties.extended.instanceView.powerState.code)\n| where powerState !in~ ('PowerState/running','PowerState/deallocated')\n| extend OSType = tostring(properties.storageProfile.osDisk.osType)\n| extend VMSize = tostring(properties.hardwareProfile.vmSize)\n| project VMName=name, ResourceGroup=resourceGroup, Location=location, OSType, VMSize\n| order by VMName asc",
+        "size": 0,
+        "title": "Stopped VMs",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"]
+      },
+      "conditionalVisibility": {
+        "parameterName": "DrillTile",
+        "comparison": "isEqualTo",
+        "value": "stopped"
+      },
+      "styleSettings": { "showBorder": true },
+      "name": "DrillStopped"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend powerState = tostring(properties.extended.instanceView.powerState.code)\n| where powerState =~ 'PowerState/deallocated'\n| extend OSType = tostring(properties.storageProfile.osDisk.osType)\n| extend VMSize = tostring(properties.hardwareProfile.vmSize)\n| project VMName=name, ResourceGroup=resourceGroup, Location=location, OSType, VMSize\n| order by VMName asc",
+        "size": 0,
+        "title": "Deallocated VMs",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"]
+      },
+      "conditionalVisibility": {
+        "parameterName": "DrillTile",
+        "comparison": "isEqualTo",
+        "value": "deallocated"
+      },
+      "styleSettings": { "showBorder": true },
+      "name": "DrillDeallocated"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let Windows = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'Logical Disk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=round(avg(CounterValue),1) by Computer, Disk=InstanceName\n| where FreePct < 10;\nlet Linux = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'LogicalDisk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=round(avg(CounterValue),1) by Computer, Disk=InstanceName\n| where FreePct < 10;\nunion Windows, Linux\n| summarize FreePct=min(FreePct) by Computer, Disk\n| order by FreePct asc",
+        "size": 0,
+        "title": "Critical Disk — Disks with <10% Free Space",
+        "noDataMessage": "No critical disk alerts.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "FreePct",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "DrillTile",
+        "comparison": "isEqualTo",
+        "value": "critical_disk"
+      },
+      "styleSettings": { "showBorder": true },
+      "name": "DrillCriticalDisk"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where CounterName == '% Processor Time'\n| where InstanceName == '_Total'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where TimeGenerated > ago(1h)\n| summarize AvgCPU=round(avg(CounterValue),1) by Computer\n| where AvgCPU > 90\n| order by AvgCPU desc",
+        "size": 0,
+        "title": "VMs with CPU >90% (last 1h avg)",
+        "noDataMessage": "No VMs with CPU above 90%.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "AvgCPU",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "DrillTile",
+        "comparison": "isEqualTo",
+        "value": "cpu_high"
+      },
+      "styleSettings": { "showBorder": true },
+      "name": "DrillHighCPU"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where CounterName in ('% Committed Bytes In Use','% Used Memory')\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where TimeGenerated > ago(1h)\n| summarize AvgMemory=round(avg(CounterValue),1) by Computer\n| where AvgMemory > 90\n| order by AvgMemory desc",
+        "size": 0,
+        "title": "VMs with Memory >90% (last 1h avg)",
+        "noDataMessage": "No VMs with memory usage above 90%.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "AvgMemory",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "conditionalVisibility": {
+        "parameterName": "DrillTile",
+        "comparison": "isEqualTo",
+        "value": "mem_high"
+      },
+      "styleSettings": { "showBorder": true },
+      "name": "DrillHighMemory"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "<h3 style=\"color:#0078d4;border-left:4px solid #0078d4;padding-left:12px;font-family:'Segoe UI',sans-serif;margin:24px 0 4px 0\">📈 Performance Charts</h3>"
+      },
+      "name": "section-charts"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where CounterName == '% Processor Time'\n| where InstanceName == '_Total'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize AvgCPU=avg(CounterValue) by bin(TimeGenerated,5m), Computer\n| order by TimeGenerated asc",
+        "size": 0,
+        "title": "CPU Trends",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "CPUTrends"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where CounterName in ('% Committed Bytes In Use','% Used Memory')\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize AvgMemory=avg(CounterValue) by bin(TimeGenerated,5m), Computer\n| order by TimeGenerated asc",
+        "size": 0,
+        "title": "Memory Trends",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "MemoryTrends"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where (ObjectName == 'Network' and CounterName in ('Total Bytes Transmitted','Total Bytes Received','Total Bytes'))\n    or (ObjectName == 'Network Adapter' and CounterName in ('Bytes Received/sec','Bytes Sent/sec','Bytes Total/sec'))\n| summarize AvgBytes=avg(CounterValue) by bin(TimeGenerated,5m), Computer, CounterName\n| order by TimeGenerated asc",
+        "size": 0,
+        "title": "Network Trends (Bytes/sec)",
+        "noDataMessage": "No network counter data. Run: Perf | where CounterName contains 'Byte' | distinct ObjectName, CounterName | take 20",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "NetworkTrends"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let WinDisk = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where ObjectName == 'Logical Disk'\n| where CounterName == '% Free Space'\n| where InstanceName == '_Total'\n| summarize AvgFree=avg(CounterValue) by bin(TimeGenerated,5m), Computer;\nlet LinuxDisk = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where ObjectName == 'LogicalDisk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize AvgFree=avg(CounterValue) by bin(TimeGenerated,5m), Computer;\nunion WinDisk, LinuxDisk\n| summarize AvgFree=avg(AvgFree) by TimeGenerated, Computer\n| extend DiskUsedPct=round(100 - AvgFree, 1)\n| project TimeGenerated, Computer, DiskUsedPct\n| order by TimeGenerated asc",
+        "size": 0,
+        "title": "Disk Utilization % Used (avg across all mounts)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
+        "visualization": "timechart",
+        "chartSettings": {
+          "ySettings": {
+            "min": 0,
+            "max": 100
+          },
+          "hideLegend": true
+        }
+      },
+      "customWidth": "50",
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "DiskUtilization"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let Windows = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'Logical Disk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=round(avg(CounterValue),1) by Computer, Disk=InstanceName\n| where FreePct < 20;\nlet Linux = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'LogicalDisk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=round(avg(CounterValue),1) by Computer, Disk=InstanceName\n| where FreePct < 20;\nunion Windows, Linux\n| summarize FreePct=min(FreePct) by Computer, Disk\n| extend DiskStatus = iff(FreePct < 10, 'Critical', 'Warning')\n| order by FreePct asc",
+        "size": 0,
+        "title": "Disk Space Alerts (<20% Free) — avg last 1h, one row per disk",
+        "noDataMessage": "No disk space alerts.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "DiskStatus",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "error",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Warning",
+                    "representation": "warning",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true,
+          "rowLimit": 2000
+        }
+      },
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "DiskAlerts"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "<h3 style=\"color:#0078d4;border-left:4px solid #0078d4;padding-left:12px;font-family:'Segoe UI',sans-serif;margin:24px 0 4px 0\">🔍 Operational Views</h3>"
+      },
+      "name": "section-operational"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where isempty(\"{VM}\") or name =~ \"{VM}\"\n| extend PowerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n| extend OSType = tostring(properties.storageProfile.osDisk.osType)\n| extend VMSize = tostring(properties.hardwareProfile.vmSize)\n| extend VMInsightsUrl = strcat('https://portal.azure.com/#resource', id, '/insights/performance')\n| project VMName=name, ResourceGroup=resourceGroup, Location=location, OSType, VMSize, PowerState, id, VMInsightsUrl\n| order by VMName asc",
+        "size": 0,
+        "title": "VM Inventory",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "PowerState",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "VM running",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "VM deallocated",
+                    "representation": "stopped",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "warning",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "id",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": "Resource",
+                "showIcon": true,
+                "linkLabel": "Open VM"
+              }
+            },
+            {
+              "columnMatch": "VMInsightsUrl",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": "VM Insights"
+              }
+            }
+          ],
+          "filter": true,
+          "rowLimit": 1000,
+          "labelSettings": [
+            {
+              "columnId": "id",
+              "label": "Azure VM Blade"
+            },
+            {
+              "columnId": "VMInsightsUrl",
+              "label": "VM Insights"
+            }
+          ]
+        }
+      },
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "VMInventory"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Heartbeat\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize LastHeartbeat=max(TimeGenerated) by Computer\n| extend Status=iff(LastHeartbeat > ago(15m),'Online','Offline')\n| extend MinutesSinceHeartbeat = datetime_diff('minute', now(), LastHeartbeat)\n| project Computer, Status, LastHeartbeat, MinutesSinceHeartbeat\n| order by Computer asc",
+        "size": 0,
+        "title": "VM Status Grid",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "Status",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Online",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "error",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "StatusGrid"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Heartbeat\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer\n| where LastHeartbeat <= ago(15m)\n| extend MinutesSinceHeartbeat = datetime_diff('minute', now(), LastHeartbeat)\n| project Computer, LastHeartbeat, MinutesSinceHeartbeat, HeartbeatCount\n| order by MinutesSinceHeartbeat desc",
+        "size": 0,
+        "title": "Failed Heartbeats (>15 min)",
+        "noDataMessage": "No failed heartbeats detected.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "filter": true
+        }
+      },
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "FailedHeartbeats"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name in~ ('AzureMonitorWindowsAgent','AzureMonitorLinuxAgent')\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
+        "size": 0,
+        "title": "AMA Extension Health",
+        "noDataMessage": "No AMA extensions found. Ensure Azure Monitor Agent is deployed to VMs.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "ProvisioningState",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Succeeded",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Failed",
+                    "representation": "error",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "warning",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "AMAExtensionHealth"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name startswith 'DependencyAgent'\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
+        "size": 0,
+        "title": "Dependency Agent Health",
+        "noDataMessage": "No Dependency Agent extensions found.",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "ProvisioningState",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Succeeded",
+                    "representation": "success",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Failed",
+                    "representation": "error",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "warning",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "styleSettings": {
+        "showBorder": true
+      },
+      "name": "DependencyAgentHealth"
+    }
+  ],
+  "fallbackResourceIds": [
+    "Azure Monitor"
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

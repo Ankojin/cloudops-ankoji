@@ -1,0 +1,282 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "sub",
+            "version": "KqlParameterItem/1.0",
+            "name": "Subscription",
+            "type": 6,
+            "multiSelect": true,
+            "value": [
+              "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
+            ]
+          },
+          {
+            "id": "rg",
+            "version": "KqlParameterItem/1.0",
+            "name": "ResourceGroup",
+            "type": 5,
+            "multiSelect": true,
+            "value": [
+              "Azure Monitor"
+            ]
+          },
+          {
+            "id": "time",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "value": {
+              "durationMs": 3600000
+            }
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters - 0"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "# BAB DEV VM Dependency Map\nIncludes VMConnection, VMBoundPort, VMComputer and VMProcess queries.\n**Excluded RG:** `aro-infra-lx29kz5c-bab-dev-aro-01`\n**Scope:** Private IPs only (10.0.0.0/8) for source and destination."
+      },
+      "name": "text - 1"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "VMConnection\n| where _ResourceId !contains 'aro-infra-lx29kz5c-bab-dev-aro-01'\n| where TimeGenerated {TimeRange}\n| where ipv4_is_in_range(SourceIp, '10.0.0.0/8')\n| where ipv4_is_in_range(DestinationIp, '10.0.0.0/8')\n| where SourceIp !in ('10.189.250.5', '10.189.250.4') and DestinationIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| summarize\n    Connections = count(),\n    BytesSent = sum(BytesSent),\n    BytesReceived = sum(BytesReceived),\n    LastSeen = max(TimeGenerated)\n    by Computer, SourceIp, DestinationIp, DestinationPort, Protocol, Direction\n| sort by Connections desc",
+        "size": 0,
+        "title": "VM Connections (Private IPs only — summarised)",
+        "showOpenInBlade": true,
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "rowLimit": 10000,
+          "exportToExcelOptions": "all",
+          "filter": true
+        }
+      },
+      "name": "query - 2"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "VMBoundPort\n| where _ResourceId !contains 'aro-infra-lx29kz5c-bab-dev-aro-01'\n| where TimeGenerated {TimeRange}\n| where ipv4_is_in_range(Ip, '10.0.0.0/8')\n| where Ip !in ('10.189.250.5', '10.189.250.4')\n| summarize\n    Samples = count(),\n    LastSeen = max(TimeGenerated)\n    by Computer, Ip, Port, Protocol, ProcessName\n| sort by Computer asc, Port asc",
+        "size": 0,
+        "title": "VM Bound Ports (Private IPs only — summarised)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "rowLimit": 10000,
+          "exportToExcelOptions": "all",
+          "filter": true
+        }
+      },
+      "name": "query - 3"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "VMConnection\n| where _ResourceId !contains 'aro-infra-lx29kz5c-bab-dev-aro-01'\n| where TimeGenerated {TimeRange}\n| where ipv4_is_in_range(SourceIp, '10.0.0.0/8')\n| where SourceIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| summarize\n    Connections = count(),\n    LastSeen = max(TimeGenerated)\n    by Computer, _ResourceId\n| where isnotempty(_ResourceId) and isnotempty(Computer)\n| extend\n    subId  = extract('/subscriptions/([^/]+)', 1, _ResourceId),\n    rgName = extract('/resourcegroups/([^/]+)', 1, _ResourceId),\n    vmName = extract('/virtualmachines/([^/]+)', 1, _ResourceId)\n| extend resourceId = strcat('/subscriptions/', subId, '/resourceGroups/', rgName, '/providers/Microsoft.Compute/virtualMachines/', vmName)\n| extend jsonScope = strcat('{\"scopes\":{\"hybrid\":{\"computer\":{\"id\":\"', resourceId, '\",\"name\":\"', vmName, '\"},\"workspace\":{\"id\":\"/unknown\"}},\"azure\":{\"resource\":{\"id\":\"', resourceId, '\",\"displayName\":\"', vmName, '\"},\"resourceType\":\"VirtualMachine\"}}}')\n| extend MapLink = strcat('https://portal.azure.com/#view/Microsoft_Azure_WorkloadInsights/AtScaleVmInsightsBladeViewModel/selectedTab~/2/sourceType/SingleVmScale/scopeSelections~/', url_encode(jsonScope), '/subscriptionId/', subId, '/doNotSaveScope~/true')\n| project Computer, Connections, LastSeen, MapLink\n| sort by Computer asc",
+        "size": 0,
+        "title": "Open VM Insights — click link to open full interactive VM Insights per VM",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "MapLink",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "ExternalUrl",
+                "linkLabel": "Open in VM Insights Map"
+              }
+            }
+          ],
+          "exportToExcelOptions": "all",
+          "filter": true
+        }
+      },
+      "name": "query - vm-insights-links"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "<h3 style=\"color:#0078d4;border-left:4px solid #0078d4;padding-left:12px;font-family:'Segoe UI',sans-serif;margin:24px 0 4px 0\">🔍 Deeper Analysis</h3>"
+      },
+      "name": "text - deeper-analysis"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "VMComputer\n| where _ResourceId !contains 'aro-infra-lx29kz5c-bab-dev-aro-01'\n| summarize arg_max(TimeGenerated, *) by _ResourceId\n| project Computer, OperatingSystemFullName, Ipv4Addresses, PhysicalMemoryMB, AzureImageSku, AzureLocation, DnsNames, BootTime\n| sort by Computer asc",
+        "size": 0,
+        "title": "VM Computer Inventory",
+        "noDataMessage": "No VMComputer data. Ensure Dependency Agent is installed and reporting.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "exportToExcelOptions": "all",
+          "filter": true
+        }
+      },
+      "name": "query - vm-computer-inventory"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "VMConnection\n| where _ResourceId !contains 'aro-infra-lx29kz5c-bab-dev-aro-01'\n| where TimeGenerated {TimeRange}\n| where LinksFailed > 0\n| where SourceIp !in ('10.189.250.5', '10.189.250.4') and DestinationIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| summarize\n    TotalFailed = sum(LinksFailed),\n    LastSeen = max(TimeGenerated)\n    by Computer, SourceIp, DestinationIp, DestinationPort, Protocol\n| sort by TotalFailed desc",
+        "size": 0,
+        "title": "Failed Connections",
+        "noDataMessage": "No failed connections detected in the selected time range.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "TotalFailed",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "exportToExcelOptions": "all",
+          "rowLimit": 10000,
+          "filter": true
+        }
+      },
+      "name": "query - failed-connections"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "VMConnection\n| where _ResourceId !contains 'aro-infra-lx29kz5c-bab-dev-aro-01'\n| where TimeGenerated {TimeRange}\n| where isnotempty(MaliciousIp)\n| project TimeGenerated, Computer, RemoteIp = MaliciousIp, Severity, Description, IndicatorThreatType, Confidence, LastReportedDateTime\n| sort by Severity desc",
+        "size": 0,
+        "title": "Malicious IP Connections",
+        "noDataMessage": "No connections to malicious IPs detected.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "formatRules": [
+            {
+              "columnMatch": "Severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "error",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "warning",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            }
+          ],
+          "exportToExcelOptions": "all",
+          "filter": true
+        }
+      },
+      "name": "query - malicious-ip"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "VMProcess\n| where _ResourceId !contains 'aro-infra-lx29kz5c-bab-dev-aro-01'\n| where TimeGenerated {TimeRange}\n| summarize arg_max(TimeGenerated, *) by _ResourceId\n| project Computer, ExecutableName, DisplayName, CommandLine, UserName, ProductVersion\n| sort by Computer asc, ExecutableName asc",
+        "size": 0,
+        "title": "Process Inventory",
+        "noDataMessage": "No VMProcess data. Ensure Dependency Agent is installed and reporting.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "exportToExcelOptions": "all",
+          "filter": true
+        }
+      },
+      "name": "query - process-inventory"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "VMBoundPort\n| where _ResourceId !contains 'aro-infra-lx29kz5c-bab-dev-aro-01'\n| where TimeGenerated {TimeRange}\n| where Ip != '127.0.0.1'\n| where Ip !in ('10.189.250.5', '10.189.250.4')\n| summarize\n    BytesSent = sum(BytesSent),\n    BytesReceived = sum(BytesReceived),\n    LinksEstablished = sum(LinksEstablished),\n    LinksLive = sum(LinksLive)\n    by Computer, ProcessName, Port, Protocol, IsWildcardBind\n| sort by LinksEstablished desc",
+        "size": 0,
+        "title": "Open Ports — Ranked by Activity",
+        "noDataMessage": "No VMBoundPort data in the selected time range.",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "exportToExcelOptions": "all",
+          "filter": true,
+          "rowLimit": 2000
+        }
+      },
+      "name": "query - open-ports-activity"
+    }
+  ],
+  "fallbackResourceIds": [
+    "Azure Monitor"
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
