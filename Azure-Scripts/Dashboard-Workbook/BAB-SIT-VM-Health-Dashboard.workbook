@@ -87,10 +87,10 @@
         ]
       },
       "customWidth": "14",
+      "name": "TotalVMs",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "TotalVMs"
+      }
     },
     {
       "type": 3,
@@ -106,10 +106,10 @@
         ]
       },
       "customWidth": "14",
+      "name": "OnlineVMs",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "OnlineVMs"
+      }
     },
     {
       "type": 3,
@@ -125,10 +125,10 @@
         ]
       },
       "customWidth": "14",
+      "name": "OfflineVMs",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "OfflineVMs"
+      }
     },
     {
       "type": 3,
@@ -144,16 +144,16 @@
         ]
       },
       "customWidth": "14",
+      "name": "DeallocatedVMs",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "DeallocatedVMs"
+      }
     },
     {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend JoinVMId = tolower(id)\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.devtestlab/schedules'\n    | extend JoinVMId = tolower(tostring(properties['targetResourceId']))\n    | extend AutoShutdownStatus = tostring(properties['status'])\n    | project JoinVMId, AutoShutdownStatus\n) on JoinVMId\n| extend AutoShutdownStatus = iff(isempty(AutoShutdownStatus), 'Disabled', AutoShutdownStatus)\n| where AutoShutdownStatus =~ 'Enabled'\n| summarize AutoShutdownEnabled=count()",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend powerState = tostring(properties.extended.instanceView.powerState.code)\n| where powerState =~ 'PowerState/running'\n| extend JoinVMId = tolower(id)\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.devtestlab/schedules'\n    | extend JoinVMId = tolower(tostring(properties['targetResourceId']))\n    | extend AutoShutdownStatus = tostring(properties['status'])\n    | project JoinVMId, AutoShutdownStatus\n) on JoinVMId\n| extend AutoShutdownStatus = iff(isempty(AutoShutdownStatus), 'Disabled', AutoShutdownStatus)\n| where AutoShutdownStatus =~ 'Enabled'\n| summarize AutoShutdownEnabled=count()",
         "size": 4,
         "title": "Auto Shutdown Enabled",
         "queryType": 1,
@@ -163,16 +163,16 @@
         ]
       },
       "customWidth": "14",
+      "name": "AutoShutdownEnabled",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "AutoShutdownEnabled"
+      }
     },
     {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend JoinVMId = tolower(id)\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.devtestlab/schedules'\n    | extend JoinVMId = tolower(tostring(properties['targetResourceId']))\n    | extend AutoShutdownStatus = tostring(properties['status'])\n    | project JoinVMId, AutoShutdownStatus\n) on JoinVMId\n| extend AutoShutdownStatus = iff(isempty(AutoShutdownStatus), 'Disabled', AutoShutdownStatus)\n| where AutoShutdownStatus =~ 'Disabled'\n| summarize AutoShutdownDisabled=count()",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend powerState = tostring(properties.extended.instanceView.powerState.code)\n| where powerState =~ 'PowerState/running'\n| extend JoinVMId = tolower(id)\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.devtestlab/schedules'\n    | extend JoinVMId = tolower(tostring(properties['targetResourceId']))\n    | extend AutoShutdownStatus = tostring(properties['status'])\n    | project JoinVMId, AutoShutdownStatus\n) on JoinVMId\n| extend AutoShutdownStatus = iff(isempty(AutoShutdownStatus), 'Disabled', AutoShutdownStatus)\n| where AutoShutdownStatus =~ 'Disabled'\n| summarize AutoShutdownDisabled=count()",
         "size": 4,
         "title": "Auto Shutdown Disabled",
         "queryType": 1,
@@ -182,10 +182,29 @@
         ]
       },
       "customWidth": "14",
+      "name": "AutoShutdownDisabled",
       "styleSettings": {
         "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| extend powerState = tostring(properties.extended.instanceView.powerState.code)\n| where powerState =~ 'PowerState/running'\n| extend JoinVMId = tolower(id)\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.devtestlab/schedules'\n    | extend JoinVMId = tolower(tostring(properties['targetResourceId']))\n    | extend AutoShutdownStatus = tostring(properties['status'])\n    | project JoinVMId, AutoShutdownStatus\n) on JoinVMId\n| extend AutoShutdownStatus = iff(isempty(AutoShutdownStatus), 'Disabled', AutoShutdownStatus)\n| summarize TotalRunningVMs = count(), EnabledVMs = countif(AutoShutdownStatus =~ 'Enabled')\n| extend AutoShutdownEnabledPercent = strcat(tostring(round(todouble(EnabledVMs) * 100.0 / todouble(TotalRunningVMs), 1)), '%')\n| project AutoShutdownEnabledPercent",
+        "size": 4,
+        "title": "Auto Shutdown Enabled %",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ]
       },
-      "name": "AutoShutdownDisabled"
+      "customWidth": "14",
+      "name": "AutoShutdownEnabledPercent",
+      "styleSettings": {
+        "showBorder": true
+      }
     },
     {
       "type": 3,
@@ -201,10 +220,10 @@
         ]
       },
       "customWidth": "14",
+      "name": "CriticalDiskAlerts",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "CriticalDiskAlerts"
+      }
     },
     {
       "type": 3,
@@ -220,10 +239,10 @@
         ]
       },
       "customWidth": "14",
+      "name": "HighCPUVMs",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "HighCPUVMs"
+      }
     },
     {
       "type": 3,
@@ -239,10 +258,10 @@
         ]
       },
       "customWidth": "14",
+      "name": "HighMemoryVMs",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "HighMemoryVMs"
+      }
     },
     {
       "type": 1,
@@ -262,65 +281,49 @@
             "cellValue": "",
             "linkTarget": "parameter",
             "linkLabel": "✕ Close",
-            "parameterName": "DrillTile",
-            "parameterType": 1,
             "style": "secondary"
           },
           {
             "id": "lnk-total",
             "cellValue": "total",
             "linkTarget": "parameter",
-            "linkLabel": "All VMs",
-            "parameterName": "DrillTile",
-            "parameterType": 1
+            "linkLabel": "All VMs"
           },
           {
             "id": "lnk-running",
             "cellValue": "running",
             "linkTarget": "parameter",
-            "linkLabel": "Running VMs",
-            "parameterName": "DrillTile",
-            "parameterType": 1
+            "linkLabel": "Running VMs"
           },
           {
             "id": "lnk-stopped",
             "cellValue": "stopped",
             "linkTarget": "parameter",
-            "linkLabel": "Stopped VMs",
-            "parameterName": "DrillTile",
-            "parameterType": 1
+            "linkLabel": "Stopped VMs"
           },
           {
             "id": "lnk-deallocated",
             "cellValue": "deallocated",
             "linkTarget": "parameter",
-            "linkLabel": "Deallocated VMs",
-            "parameterName": "DrillTile",
-            "parameterType": 1
+            "linkLabel": "Deallocated VMs"
           },
           {
             "id": "lnk-critical-disk",
             "cellValue": "critical_disk",
             "linkTarget": "parameter",
-            "linkLabel": "Critical Disk (<10%)",
-            "parameterName": "DrillTile",
-            "parameterType": 1
+            "linkLabel": "Critical Disk (<10%)"
           },
           {
             "id": "lnk-cpu",
             "cellValue": "cpu_high",
             "linkTarget": "parameter",
-            "linkLabel": "CPU >90%",
-            "parameterName": "DrillTile",
-            "parameterType": 1
+            "linkLabel": "CPU >90%"
           },
           {
             "id": "lnk-mem",
             "cellValue": "mem_high",
             "linkTarget": "parameter",
-            "linkLabel": "Memory >90%",
-            "parameterName": "DrillTile",
-            "parameterType": 1
+            "linkLabel": "Memory >90%"
           }
         ]
       },
@@ -335,15 +338,19 @@
         "title": "All VMs",
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
-        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"]
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ]
       },
       "conditionalVisibility": {
         "parameterName": "DrillTile",
         "comparison": "isEqualTo",
         "value": "total"
       },
-      "styleSettings": { "showBorder": true },
-      "name": "DrillTotal"
+      "name": "DrillTotal",
+      "styleSettings": {
+        "showBorder": true
+      }
     },
     {
       "type": 3,
@@ -354,15 +361,19 @@
         "title": "Running VMs",
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
-        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"]
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ]
       },
       "conditionalVisibility": {
         "parameterName": "DrillTile",
         "comparison": "isEqualTo",
         "value": "running"
       },
-      "styleSettings": { "showBorder": true },
-      "name": "DrillRunning"
+      "name": "DrillRunning",
+      "styleSettings": {
+        "showBorder": true
+      }
     },
     {
       "type": 3,
@@ -373,15 +384,19 @@
         "title": "Stopped VMs",
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
-        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"]
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ]
       },
       "conditionalVisibility": {
         "parameterName": "DrillTile",
         "comparison": "isEqualTo",
         "value": "stopped"
       },
-      "styleSettings": { "showBorder": true },
-      "name": "DrillStopped"
+      "name": "DrillStopped",
+      "styleSettings": {
+        "showBorder": true
+      }
     },
     {
       "type": 3,
@@ -392,15 +407,19 @@
         "title": "Deallocated VMs",
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
-        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"]
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ]
       },
       "conditionalVisibility": {
         "parameterName": "DrillTile",
         "comparison": "isEqualTo",
         "value": "deallocated"
       },
-      "styleSettings": { "showBorder": true },
-      "name": "DrillDeallocated"
+      "name": "DrillDeallocated",
+      "styleSettings": {
+        "showBorder": true
+      }
     },
     {
       "type": 3,
@@ -412,7 +431,9 @@
         "noDataMessage": "No critical disk alerts.",
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"],
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
         "gridSettings": {
           "formatRules": [
             {
@@ -441,8 +462,10 @@
         "comparison": "isEqualTo",
         "value": "critical_disk"
       },
-      "styleSettings": { "showBorder": true },
-      "name": "DrillCriticalDisk"
+      "name": "DrillCriticalDisk",
+      "styleSettings": {
+        "showBorder": true
+      }
     },
     {
       "type": 3,
@@ -454,7 +477,9 @@
         "noDataMessage": "No VMs with CPU above 90%.",
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"],
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
         "gridSettings": {
           "formatRules": [
             {
@@ -483,8 +508,10 @@
         "comparison": "isEqualTo",
         "value": "cpu_high"
       },
-      "styleSettings": { "showBorder": true },
-      "name": "DrillHighCPU"
+      "name": "DrillHighCPU",
+      "styleSettings": {
+        "showBorder": true
+      }
     },
     {
       "type": 3,
@@ -496,7 +523,9 @@
         "noDataMessage": "No VMs with memory usage above 90%.",
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": ["/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"],
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
         "gridSettings": {
           "formatRules": [
             {
@@ -525,8 +554,10 @@
         "comparison": "isEqualTo",
         "value": "mem_high"
       },
-      "styleSettings": { "showBorder": true },
-      "name": "DrillHighMemory"
+      "name": "DrillHighMemory",
+      "styleSettings": {
+        "showBorder": true
+      }
     },
     {
       "type": 1,
@@ -550,10 +581,10 @@
         "visualization": "timechart"
       },
       "customWidth": "50",
+      "name": "CPUTrends",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "CPUTrends"
+      }
     },
     {
       "type": 3,
@@ -570,10 +601,10 @@
         "visualization": "timechart"
       },
       "customWidth": "50",
+      "name": "MemoryTrends",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "MemoryTrends"
+      }
     },
     {
       "type": 3,
@@ -591,10 +622,10 @@
         "visualization": "timechart"
       },
       "customWidth": "50",
+      "name": "NetworkTrends",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "NetworkTrends"
+      }
     },
     {
       "type": 3,
@@ -618,10 +649,10 @@
         }
       },
       "customWidth": "50",
+      "name": "DiskUtilization",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "DiskUtilization"
+      }
     },
     {
       "type": 3,
@@ -672,10 +703,10 @@
           "openQuery": true
         }
       },
+      "name": "DiskAlerts",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "DiskAlerts"
+      }
     },
     {
       "type": 1,
@@ -685,140 +716,67 @@
       "name": "section-operational"
     },
     {
-  "type": 3,
-  "content": {
-    "version": "KqlItem/1.0",
-    "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where isempty(\"{VM}\") or name =~ \"{VM}\"\n| extend\n    JoinSub = subscriptionId,\n    JoinRG = tolower(resourceGroup),\n    JoinVMId = tolower(id),\n    PowerState = tostring(properties.extended.instanceView.powerState.displayStatus),\n    OSType = tostring(properties.storageProfile.osDisk.osType),\n    VMSize = tostring(properties.hardwareProfile.vmSize),\n    VMInsightsUrl = strcat('https://portal.azure.com/#resource', id, '/insights/performance')\n| join kind=leftouter (\n    ResourceContainers\n    | where type =~ 'microsoft.resources/subscriptions/resourcegroups'\n    | extend\n        JoinSub = subscriptionId,\n        JoinRG = tolower(name)\n    | project\n        JoinSub,\n        JoinRG,\n        ApplicationName = coalesce(tostring(tags['Application name']), tostring(tags['Application Name']), tostring(tags['ApplicationName']), tostring(tags['AppName']), tostring(tags['Project']), tostring(tags['project'])),\n        ApproverName = coalesce(tostring(tags['Approver name']), tostring(tags['Approver Name']), tostring(tags['ApproverName']), tostring(tags['Approver'])),\n        BusinessOwner = coalesce(tostring(tags['Business Owner']), tostring(tags['BusinessOwner']), tostring(tags['Owner'])),\n        Company = coalesce(tostring(tags['Company']), tostring(tags['company'])),\n        CostCenter = coalesce(tostring(tags['Cost Center']), tostring(tags['CostCenter']), tostring(tags['Cost center']))\n) on JoinSub, JoinRG\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.devtestlab/schedules'\n    | extend\n        JoinVMId = tolower(tostring(properties['targetResourceId'])),\n        AutoShutdownStatus = tostring(properties['status']),\n        ShutdownTime = tostring(properties['dailyRecurrence']['time'])\n    | project\n        JoinVMId,\n        AutoShutdownStatus,\n        ShutdownTime\n) on JoinVMId\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.network/networkinterfaces'\n    | extend JoinVMId = tolower(tostring(properties['virtualMachine']['id']))\n    | mv-expand ipconfig = properties['ipConfigurations']\n    | extend PrivateIP = tostring(ipconfig['properties']['privateIPAddress'])\n    | where isnotempty(JoinVMId) and isnotempty(PrivateIP)\n    | summarize PrivateIPs = strcat_array(make_set(PrivateIP), ', ') by JoinVMId\n) on JoinVMId\n| extend\n    AutoShutdownStatus = iff(isempty(AutoShutdownStatus), 'Disabled', AutoShutdownStatus),\n    ShutdownTime = iff(isempty(ShutdownTime), '-', ShutdownTime),\n    PrivateIPs = iff(isempty(PrivateIPs), '-', PrivateIPs),\n    ApplicationName = iff(isempty(ApplicationName), '-', ApplicationName),\n    ApproverName = iff(isempty(ApproverName), '-', ApproverName),\n    BusinessOwner = iff(isempty(BusinessOwner), '-', BusinessOwner),\n    Company = iff(isempty(Company), '-', Company),\n    CostCenter = iff(isempty(CostCenter), '-', CostCenter)\n| project\n    VMName = name,\n    ResourceGroup = resourceGroup,\n    Location = location,\n    OSType,\n    VMSize,\n    PowerState,\n    PrivateIPs,\n    AutoShutdownStatus,\n    ShutdownTime,\n    ApplicationName,\n    ApproverName,\n    BusinessOwner,\n    Company,\n    CostCenter,\n    id,\n    VMInsightsUrl\n| order by VMName asc",
-    "size": 0,
-    "title": "VM Inventory",
-    "queryType": 1,
-    "resourceType": "microsoft.resourcegraph/resources",
-    "crossComponentResources": [
-      "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
-    ],
-    "gridSettings": {
-      "formatRules": [
-        {
-          "columnMatch": "PowerState",
-          "formatter": 18,
-          "formatOptions": {
-            "thresholdsOptions": "icons",
-            "thresholdsGrid": [
-              {
-                "operator": "==",
-                "thresholdValue": "VM running",
-                "representation": "success",
-                "text": "{0}{1}"
-              },
-              {
-                "operator": "==",
-                "thresholdValue": "VM deallocated",
-                "representation": "stopped",
-                "text": "{0}{1}"
-              },
-              {
-                "operator": "Default",
-                "thresholdValue": null,
-                "representation": "warning",
-                "text": "{0}{1}"
-              }
-            ]
-          }
-        },
-        {
-          "columnMatch": "AutoShutdownStatus",
-          "formatter": 18,
-          "formatOptions": {
-            "thresholdsOptions": "icons",
-            "thresholdsGrid": [
-              {
-                "operator": "==",
-                "thresholdValue": "Enabled",
-                "representation": "success",
-                "text": "{0}{1}"
-              },
-              {
-                "operator": "==",
-                "thresholdValue": "Disabled",
-                "representation": "error",
-                "text": "{0}{1}"
-              },
-              {
-                "operator": "Default",
-                "thresholdValue": null,
-                "representation": "warning",
-                "text": "{0}{1}"
-              }
-            ]
-          }
-        },
-        {
-          "columnMatch": "id",
-          "formatter": 13,
-          "formatOptions": {
-            "linkTarget": "Resource",
-            "showIcon": true,
-            "linkLabel": "Open VM"
-          }
-        },
-        {
-          "columnMatch": "VMInsightsUrl",
-          "formatter": 13,
-          "formatOptions": {
-            "linkTarget": "Url",
-            "linkLabel": "VM Insights"
-          }
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where isempty(\"{VM}\") or name =~ \"{VM}\"\n| extend\n    JoinSub = subscriptionId,\n    JoinRG = tolower(resourceGroup),\n    JoinVMId = tolower(id),\n    PowerState = tostring(properties.extended.instanceView.powerState.displayStatus),\n    OSType = tostring(properties.storageProfile.osDisk.osType),\n    VMSize = tostring(properties.hardwareProfile.vmSize),\n    VMInsightsUrl = strcat('https://portal.azure.com/#resource', id, '/insights/performance')\n| join kind=leftouter (\n    ResourceContainers\n    | where type =~ 'microsoft.resources/subscriptions/resourcegroups'\n    | extend\n        JoinSub = subscriptionId,\n        JoinRG = tolower(name)\n    | project\n        JoinSub,\n        JoinRG,\n        ApplicationName = coalesce(tostring(tags['Application name']), tostring(tags['Application Name']), tostring(tags['ApplicationName']), tostring(tags['AppName']), tostring(tags['Project']), tostring(tags['project'])),\n        ApproverName = coalesce(tostring(tags['Approver name']), tostring(tags['Approver Name']), tostring(tags['ApproverName']), tostring(tags['Approver'])),\n        BusinessOwner = coalesce(tostring(tags['Business Owner']), tostring(tags['BusinessOwner']), tostring(tags['Owner'])),\n        Company = coalesce(tostring(tags['Company']), tostring(tags['company'])),\n        CostCenter = coalesce(tostring(tags['Cost Center']), tostring(tags['CostCenter']), tostring(tags['Cost center']))\n) on JoinSub, JoinRG\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.devtestlab/schedules'\n    | extend\n        JoinVMId = tolower(tostring(properties['targetResourceId'])),\n        AutoShutdownStatus = tostring(properties['status']),\n        ShutdownTime = tostring(properties['dailyRecurrence']['time'])\n    | project\n        JoinVMId,\n        AutoShutdownStatus,\n        ShutdownTime\n) on JoinVMId\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.network/networkinterfaces'\n    | extend JoinVMId = tolower(tostring(properties['virtualMachine']['id']))\n    | mv-expand ipconfig = properties['ipConfigurations']\n    | extend PrivateIP = tostring(ipconfig['properties']['privateIPAddress'])\n    | where isnotempty(JoinVMId) and isnotempty(PrivateIP)\n    | summarize PrivateIPs = strcat_array(make_set(PrivateIP), ', ') by JoinVMId\n) on JoinVMId\n| extend\n    AutoShutdownStatus = iff(isempty(AutoShutdownStatus), 'Disabled', AutoShutdownStatus),\n    ShutdownTime = iff(isempty(ShutdownTime), '-', ShutdownTime),\n    PrivateIPs = iff(isempty(PrivateIPs), '-', PrivateIPs),\n    ApplicationName = iff(isempty(ApplicationName), '-', ApplicationName),\n    ApproverName = iff(isempty(ApproverName), '-', ApproverName),\n    BusinessOwner = iff(isempty(BusinessOwner), '-', BusinessOwner),\n    Company = iff(isempty(Company), '-', Company),\n    CostCenter = iff(isempty(CostCenter), '-', CostCenter)\n| project\n    VMName = name,\n    ResourceGroup = resourceGroup,\n    Location = location,\n    OSType,\n    VMSize,\n    PowerState,\n    PrivateIPs,\n    AutoShutdownStatus,\n    ShutdownTime,\n    ApplicationName,\n    ApproverName,\n    BusinessOwner,\n    Company,\n    CostCenter,\n    id,\n    VMInsightsUrl\n| order by VMName asc",
+        "size": 0,
+        "title": "VM Inventory",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
+        ],
+        "gridSettings": {
+          "rowLimit": 1000,
+          "filter": true,
+          "labelSettings": [
+            {
+              "columnId": "PrivateIPs",
+              "label": "Private IPs"
+            },
+            {
+              "columnId": "AutoShutdownStatus",
+              "label": "Auto Shutdown"
+            },
+            {
+              "columnId": "ShutdownTime",
+              "label": "Shutdown Time"
+            },
+            {
+              "columnId": "ApplicationName",
+              "label": "Application"
+            },
+            {
+              "columnId": "ApproverName",
+              "label": "Approver"
+            },
+            {
+              "columnId": "BusinessOwner",
+              "label": "Business Owner"
+            },
+            {
+              "columnId": "CostCenter",
+              "label": "Cost Center"
+            },
+            {
+              "columnId": "id",
+              "label": "Azure VM Blade"
+            },
+            {
+              "columnId": "VMInsightsUrl",
+              "label": "VM Insights"
+            }
+          ],
+          "exportCsv": true,
+          "openQuery": true
         }
-      ],
-      "filter": true,
-      "rowLimit": 1000,
-      "labelSettings": [
-        {
-          "columnId": "id",
-          "label": "Azure VM Blade"
-        },
-        {
-          "columnId": "VMInsightsUrl",
-          "label": "VM Insights"
-        },
-        {
-          "columnId": "PrivateIPs",
-          "label": "Private IPs"
-        },
-        {
-          "columnId": "AutoShutdownStatus",
-          "label": "Auto Shutdown"
-        },
-        {
-          "columnId": "ShutdownTime",
-          "label": "Shutdown Time"
-        },
-        {
-          "columnId": "ApplicationName",
-          "label": "Application"
-        },
-        {
-          "columnId": "ApproverName",
-          "label": "Approver"
-        },
-        {
-          "columnId": "BusinessOwner",
-          "label": "Business Owner"
-        },
-        {
-          "columnId": "CostCenter",
-          "label": "Cost Center"
-        }
-      ],
-      "exportCsv": true,
-      "openQuery": true
-    }
-  },
-  "styleSettings": {
-    "showBorder": true
-  },
-  "name": "VMInventory"
-},
+      },
+      "name": "VMInventory",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
     {
       "type": 3,
       "content": {
@@ -860,10 +818,10 @@
           "openQuery": true
         }
       },
+      "name": "StatusGrid",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "StatusGrid"
+      }
     },
     {
       "type": 3,
@@ -884,16 +842,16 @@
           "openQuery": true
         }
       },
+      "name": "FailedHeartbeats",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "FailedHeartbeats"
+      }
     },
     {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name in~ ('AzureMonitorWindowsAgent','AzureMonitorLinuxAgent')\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name in~ ('AzureMonitorWindowsAgent','AzureMonitorLinuxAgent')\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| extend VMResourceId = tolower(strcat('/subscriptions/', subscriptionId, '/resourcegroups/', resourceGroup, '/providers/microsoft.compute/virtualmachines/', VMName))\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.compute/virtualmachines'\n    | extend PowerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n    | project vmId = tolower(id), PowerState\n) on $left.VMResourceId == $right.vmId\n| where PowerState !in ('VM deallocated', 'VM stopped')\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
         "size": 0,
         "title": "AMA Extension Health",
         "noDataMessage": "No AMA extensions found. Ensure Azure Monitor Agent is deployed to VMs.",
@@ -937,16 +895,16 @@
           "openQuery": true
         }
       },
+      "name": "AMAExtensionHealth",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "AMAExtensionHealth"
+      }
     },
     {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name startswith 'DependencyAgent'\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| extend VMResourceId = tolower(strcat('/subscriptions/', subscriptionId, '/resourcegroups/', resourceGroup, '/providers/microsoft.compute/virtualmachines/', VMName))\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.compute/virtualmachines'\n    | extend PowerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n    | project tolower(id), PowerState\n) on $left.VMResourceId == $right.tolower_id\n| where PowerState !in ('VM deallocated', 'VM stopped')\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name startswith 'DependencyAgent'\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| extend VMResourceId = tolower(strcat('/subscriptions/', subscriptionId, '/resourcegroups/', resourceGroup, '/providers/microsoft.compute/virtualmachines/', VMName))\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.compute/virtualmachines'\n    | extend PowerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n    | project vmId = tolower(id), PowerState\n) on $left.VMResourceId == $right.vmId\n| where PowerState !in ('VM deallocated', 'VM stopped')\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
         "size": 0,
         "title": "Dependency Agent Health",
         "noDataMessage": "No Dependency Agent extensions found.",
@@ -990,10 +948,10 @@
           "openQuery": true
         }
       },
+      "name": "DependencyAgentHealth",
       "styleSettings": {
         "showBorder": true
-      },
-      "name": "DependencyAgentHealth"
+      }
     }
   ],
   "fallbackResourceIds": [
