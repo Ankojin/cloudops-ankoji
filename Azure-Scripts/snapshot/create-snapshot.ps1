@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string[]]$ResourceGroupNames = @("bab-dev-apex-swec-rg-01"),
+    [string[]]$ResourceGroupNames = @("dev-mobilebanking-rg-01"),
     
     [Parameter(Mandatory = $false)]
     [string[]]$ExcludedVMNames = @(),
@@ -11,7 +11,7 @@ param(
     [string]$SnapshotPrefix = "snapshot",
     
     [Parameter(Mandatory = $false)]
-    [string]$Location = "swedencentral"
+    [string]$Location = "UAENorth"
 )
 
 $dateStamp = Get-Date -Format "yyyyMMdd-HHmmss"

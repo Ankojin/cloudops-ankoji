@@ -6,8 +6,10 @@ param(
     [string]$ScriptName      = "Enroll-WebServerCert.ps1",
     [string]$ServerListPath  = "C:\DeployCertEnroll\servers.txt",
     [string]$LogFile         = "C:\DeployCertEnroll\deployment.log",
-    # Daily time the renewal check task will run on each remote server (24-hour HH:mm)
-    [string]$DailyRunTime    = "02:00"
+    # Time the renewal check task will run on each remote server (24-hour HH:mm)
+    [string]$RunTime         = "10:00",
+    # Days of week the task runs (valid: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday)
+    [string[]]$RunDays       = @("Sunday", "Wednesday", "Thursday")
 )
 
 $sourceFolder = $SourceFolder
@@ -56,22 +58,26 @@ foreach ($server in $serverList) {
         Copy-Item -Path $sourceFolder -Destination $dest -Recurse -Force -ErrorAction Stop
         Write-Log "✔ Copied CertEnroll folder to $server"
 
-        # Generate task XML — daily CalendarTrigger starting tomorrow at $DailyRunTime
+        # Generate task XML — weekly CalendarTrigger on $RunDays at $RunTime
         # The enrollment script skips if cert has >30 days remaining, renews if <=30 days
-        $startTime = (Get-Date).Date.AddDays(1).ToString("yyyy-MM-dd") + "T$($DailyRunTime):00"
+        $startTime = (Get-Date).ToString("yyyy-MM-dd") + "T$($RunTime):00"
+        $daysOfWeekXml = ($RunDays | ForEach-Object { "        <$_ />" }) -join "`n"
         $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>Daily certificate renewal check - auto-renews if expiring within 30 days</Description>
+    <Description>Weekly certificate renewal check - auto-renews if expiring within 30 days</Description>
   </RegistrationInfo>
   <Triggers>
     <CalendarTrigger>
       <StartBoundary>$startTime</StartBoundary>
       <Enabled>true</Enabled>
-      <ScheduleByDay>
-        <DaysInterval>1</DaysInterval>
-      </ScheduleByDay>
+      <ScheduleByWeek>
+        <DaysOfWeek>
+$daysOfWeekXml
+        </DaysOfWeek>
+        <WeeksInterval>1</WeeksInterval>
+      </ScheduleByWeek>
     </CalendarTrigger>
   </Triggers>
   <Principals>
@@ -107,7 +113,7 @@ foreach ($server in $serverList) {
         Copy-Item -Path $localTaskXml -Destination "\\$server\C$\CertEnroll\" -Force -ErrorAction Stop
         Remove-Item $localTaskXml -Force -ErrorAction SilentlyContinue
 
-        # Register the persistent daily task and trigger an immediate first run
+        # Register the persistent weekly task and trigger an immediate first run
         # Note: Enroll-WebServerCert.ps1 handles the cert logic:
         #   - cert valid > 30 days  → skip (no action)
         #   - cert missing or expiring within 30 days → enroll/renew from CA
@@ -116,7 +122,7 @@ foreach ($server in $serverList) {
             schtasks.exe /Run /TN "EnrollWebServerCert"
         } -ErrorAction Stop
 
-        Write-Log "✔ Persistent daily renewal task registered and initial run triggered on $server"
+        Write-Log "✔ Persistent weekly renewal task registered and initial run triggered on $server"
 
         # Retry cert check loop — wait up to 3 minutes (12 x 15 sec)
         $maxRetries    = 12

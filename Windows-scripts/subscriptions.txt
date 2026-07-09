@@ -1,0 +1,11 @@
+# subscriptions.txt
+# One Azure Subscription ID per line.
+# Lines starting with # are treated as comments and ignored.
+# Used with: .\Get-DefenderSecretsFindings.ps1 -SubscriptionFile .\subscriptions.txt
+#
+# Replace the GUIDs below with your actual subscription IDs.
+# ---------------------------------------------------------------------------
+
+# Non-production subscriptions
+43cc4f11-ffb1-4a0d-8420-0ba3746b4248
+e48414cd-f96d-4414-ae9e-da7fec844f77

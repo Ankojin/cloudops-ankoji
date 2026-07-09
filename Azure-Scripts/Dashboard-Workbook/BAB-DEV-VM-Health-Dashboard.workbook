@@ -393,7 +393,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "conditionalVisibility": {
@@ -433,7 +435,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "conditionalVisibility": {
@@ -473,7 +477,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "conditionalVisibility": {
@@ -623,7 +629,9 @@
             }
           ],
           "filter": true,
-          "rowLimit": 2000
+          "rowLimit": 2000,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
@@ -708,7 +716,9 @@
               "columnId": "VMInsightsUrl",
               "label": "VM Insights"
             }
-          ]
+          ],
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
@@ -752,7 +762,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
@@ -774,7 +786,9 @@
           "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
         ],
         "gridSettings": {
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
@@ -825,7 +839,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
@@ -837,7 +853,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name startswith 'DependencyAgent'\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name startswith 'DependencyAgent'\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| extend VMResourceId = tolower(strcat('/subscriptions/', subscriptionId, '/resourcegroups/', resourceGroup, '/providers/microsoft.compute/virtualmachines/', VMName))\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.compute/virtualmachines'\n    | extend PowerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n    | project tolower(id), PowerState\n) on $left.VMResourceId == $right.tolower_id\n| where PowerState !in ('VM deallocated', 'VM stopped')\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
         "size": 0,
         "title": "Dependency Agent Health",
         "noDataMessage": "No Dependency Agent extensions found.",
@@ -876,7 +892,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {

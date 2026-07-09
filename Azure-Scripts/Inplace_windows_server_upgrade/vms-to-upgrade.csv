@@ -1,0 +1,4 @@
+ResourceGroupName,VMName,Region,TargetSKU,UpgradeMediaSku,UpgradeDiskName
+rg-prod,DAMUBAPJBDWV1,swedencentral,Windows Server 2025 Datacenter - x64 Gen1,server2025Upgrade
+rg-prod,DAMUBAPJBDWV2,swedencentral,Windows Server 2025 Datacenter - x64 Gen2,server2025Upgrade
+rg-dr,DAMUBAPJBDWV3,northeurope,Windows Server 2025 Datacenter - x64 Gen2,server2025Upgrade

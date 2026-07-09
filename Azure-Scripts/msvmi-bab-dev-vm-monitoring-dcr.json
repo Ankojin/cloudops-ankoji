@@ -1,0 +1,178 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "resources": [
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2024-03-11",
+      "name": "msvmi-bab-dev-vm-monitoring-dcr",
+      "location": "swedencentral",
+      "properties": {
+        "description": "Data collection rule for VM Insights, Perf and OpenTelemetry.",
+        "dataSources": {
+          "performanceCounters": [
+            {
+              "name": "perfCounterDataSource60",
+              "streams": [
+                "Microsoft-Perf"
+              ],
+              "samplingFrequencyInSeconds": 60,
+              "counterSpecifiers": [
+                "\\LogicalDisk(_Total)\\% Free Space",
+                "\\LogicalDisk(_Total)\\Free Megabytes",
+                "\\LogicalDisk(*)\\% Free Space",
+                "\\LogicalDisk(*)\\Free Megabytes",
+
+                "Logical Disk(*)\\% Free Inodes",
+                "Logical Disk(*)\\% Used Inodes",
+                "Logical Disk(*)\\Free Megabytes",
+                "Logical Disk(*)\\% Free Space",
+                "Logical Disk(*)\\% Used Space",
+
+                "\\LogicalDisk(_Total)\\% Disk Time",
+                "\\LogicalDisk(_Total)\\Disk Bytes/sec",
+                "\\LogicalDisk(_Total)\\Disk Transfers/sec",
+                "\\LogicalDisk(_Total)\\Avg. Disk sec/Transfer",
+
+                "\\Processor Information(_Total)\\% Processor Time",
+                "\\Processor Information(_Total)\\% User Time",
+                "\\Processor Information(_Total)\\% Privileged Time",
+                "\\Processor Information(_Total)\\Processor Frequency",
+                "\\System\\Processor Queue Length",
+
+                "Processor(*)\\% Processor Time",
+                "Processor(*)\\% User Time",
+                "Processor(*)\\% Privileged Time",
+                "Processor(*)\\% IO Wait Time",
+
+                "\\Memory\\% Committed Bytes In Use",
+                "\\Memory\\Available Bytes",
+                "\\Memory\\Committed Bytes",
+                "\\Memory\\Pages/sec",
+                "\\Memory\\Page Faults/sec",
+
+                "Memory(*)\\Available MBytes Memory",
+                "Memory(*)\\% Available Memory",
+                "Memory(*)\\Used Memory MBytes",
+                "Memory(*)\\% Used Memory",
+                "Memory(*)\\Pages/sec",
+                "Memory(*)\\Page Reads/sec",
+                "Memory(*)\\Page Writes/sec",
+
+                "\\Network Interface(*)\\Bytes Total/sec",
+                "\\Network Interface(*)\\Bytes Sent/sec",
+                "\\Network Interface(*)\\Bytes Received/sec",
+
+                "Network(*)\\Total Bytes",
+                "Network(*)\\Total Bytes Transmitted",
+                "Network(*)\\Total Bytes Received",
+
+                "System(*)\\Uptime",
+                "System(*)\\Load1",
+                "System(*)\\Load5",
+                "System(*)\\Load15",
+                "System(*)\\Users",
+                "System(*)\\CPUs"
+              ]
+            }
+          ],
+          "performanceCountersOTel": [
+            {
+              "name": "OtelDataSource60",
+              "streams": [
+                "Microsoft-OtelPerfMetrics"
+              ],
+              "samplingFrequencyInSeconds": 60,
+              "counterSpecifiers": [
+                "system.cpu.time",
+                "system.memory.usage",
+                "system.network.io",
+                "system.network.errors",
+                "system.network.dropped",
+                "system.uptime",
+                "system.filesystem.usage",
+                "system.filesystem.utilization",
+                "system.filesystem.inodes.usage",
+                "system.disk.io",
+                "system.disk.io_time",
+                "system.disk.merged",
+                "system.disk.operation_time",
+                "system.disk.operations",
+                "system.disk.pending_operations",
+                "system.disk.weighted_io_time",
+
+                "process.cpu.time",
+                "process.cpu.utilization",
+                "process.memory.usage",
+                "process.memory.virtual",
+                "process.disk.io",
+                "process.disk.operations",
+                "process.open_file_descriptors",
+                "process.threads",
+                "system.processes.created"
+              ]
+            }
+          ],
+          "extensions": [
+            {
+              "name": "DependencyAgentDataSource",
+              "extensionName": "DependencyAgent",
+              "streams": [
+                "Microsoft-ServiceMap"
+              ],
+              "extensionSettings": {}
+            }
+          ]
+        },
+        "destinations": {
+          "logAnalytics": [
+            {
+              "name": "VMInsightsPerf-Logs-Dest",
+              "workspaceResourceId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-dev-all-wrkspc-swec-01"
+            }
+          ],
+          "monitoringAccounts": [
+            {
+              "name": "AMW-Destination",
+              "accountResourceId": "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-wrkspace-swec-rg-01/providers/Microsoft.Monitor/accounts/bab-dev-vminsights-amw"
+            }
+          ]
+        },
+        "dataFlows": [
+          {
+            "streams": [
+              "Microsoft-Perf"
+            ],
+            "destinations": [
+              "VMInsightsPerf-Logs-Dest"
+            ]
+          },
+          {
+            "streams": [
+              "Microsoft-ServiceMap"
+            ],
+            "destinations": [
+              "VMInsightsPerf-Logs-Dest"
+            ]
+          },
+          {
+            "streams": [
+              "Microsoft-OtelPerfMetrics"
+            ],
+            "destinations": [
+              "AMW-Destination"
+            ]
+          },
+          {
+            "streams": [
+              "Microsoft-InsightsMetrics"
+            ],
+            "destinations": [
+              "VMInsightsPerf-Logs-Dest"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

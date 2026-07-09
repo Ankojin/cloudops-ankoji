@@ -1,0 +1,5 @@
+SubscriptionId,SubscriptionName
+aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa,Production-Core
+bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb,Production-DMZ
+cccccccc-3333-3333-3333-cccccccccccc,NonProd-SIT
+dddddddd-4444-4444-4444-dddddddddddd,NonProd-DEV

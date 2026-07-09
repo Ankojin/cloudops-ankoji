@@ -431,7 +431,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "conditionalVisibility": {
@@ -471,7 +473,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "conditionalVisibility": {
@@ -511,7 +515,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "conditionalVisibility": {
@@ -661,7 +667,9 @@
             }
           ],
           "filter": true,
-          "rowLimit": 2000
+          "rowLimit": 2000,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
@@ -801,7 +809,9 @@
           "columnId": "CostCenter",
           "label": "Cost Center"
         }
-      ]
+      ],
+      "exportCsv": true,
+      "openQuery": true
     }
   },
   "styleSettings": {
@@ -845,7 +855,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
@@ -867,7 +879,9 @@
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
         ],
         "gridSettings": {
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
@@ -918,7 +932,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
@@ -930,7 +946,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name startswith 'DependencyAgent'\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines/extensions'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where name startswith 'DependencyAgent'\n| extend ProvisioningState = tostring(properties.provisioningState)\n| extend VMName = tostring(split(id,'/')[8])\n| extend VMResourceId = tolower(strcat('/subscriptions/', subscriptionId, '/resourcegroups/', resourceGroup, '/providers/microsoft.compute/virtualmachines/', VMName))\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.compute/virtualmachines'\n    | extend PowerState = tostring(properties.extended.instanceView.powerState.displayStatus)\n    | project tolower(id), PowerState\n) on $left.VMResourceId == $right.tolower_id\n| where PowerState !in ('VM deallocated', 'VM stopped')\n| project VMName, ExtensionName=name, ResourceGroup=resourceGroup, ProvisioningState\n| order by ProvisioningState asc",
         "size": 0,
         "title": "Dependency Agent Health",
         "noDataMessage": "No Dependency Agent extensions found.",
@@ -969,7 +985,9 @@
               }
             }
           ],
-          "filter": true
+          "filter": true,
+          "exportCsv": true,
+          "openQuery": true
         }
       },
       "styleSettings": {
