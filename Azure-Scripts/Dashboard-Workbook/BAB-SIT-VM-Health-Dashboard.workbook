@@ -435,26 +435,7 @@
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
         ],
         "gridSettings": {
-          "formatRules": [
-            {
-              "columnMatch": "FreePct",
-              "formatter": 18,
-              "formatOptions": {
-                "thresholdsOptions": "colors",
-                "thresholdsGrid": [
-                  {
-                    "operator": "Default",
-                    "thresholdValue": null,
-                    "representation": "redBright",
-                    "text": "{0}{1}"
-                  }
-                ]
-              }
-            }
-          ],
-          "filter": true,
-          "exportCsv": true,
-          "openQuery": true
+          "filter": true
         }
       },
       "conditionalVisibility": {
@@ -481,26 +462,7 @@
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
         ],
         "gridSettings": {
-          "formatRules": [
-            {
-              "columnMatch": "AvgCPU",
-              "formatter": 18,
-              "formatOptions": {
-                "thresholdsOptions": "colors",
-                "thresholdsGrid": [
-                  {
-                    "operator": "Default",
-                    "thresholdValue": null,
-                    "representation": "redBright",
-                    "text": "{0}{1}"
-                  }
-                ]
-              }
-            }
-          ],
-          "filter": true,
-          "exportCsv": true,
-          "openQuery": true
+          "filter": true
         }
       },
       "conditionalVisibility": {
@@ -527,26 +489,7 @@
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
         ],
         "gridSettings": {
-          "formatRules": [
-            {
-              "columnMatch": "AvgMemory",
-              "formatter": 18,
-              "formatOptions": {
-                "thresholdsOptions": "colors",
-                "thresholdsGrid": [
-                  {
-                    "operator": "Default",
-                    "thresholdValue": null,
-                    "representation": "redBright",
-                    "text": "{0}{1}"
-                  }
-                ]
-              }
-            }
-          ],
-          "filter": true,
-          "exportCsv": true,
-          "openQuery": true
+          "filter": true
         }
       },
       "conditionalVisibility": {
@@ -562,155 +505,6 @@
     {
       "type": 1,
       "content": {
-        "json": "<h3 style=\"color:#0078d4;border-left:4px solid #0078d4;padding-left:12px;font-family:'Segoe UI',sans-serif;margin:24px 0 4px 0\">📈 Performance Charts</h3>"
-      },
-      "name": "section-charts"
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where CounterName == '% Processor Time'\n| where InstanceName == '_Total'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize AvgCPU=avg(CounterValue) by bin(TimeGenerated,5m), Computer\n| order by TimeGenerated asc",
-        "size": 0,
-        "title": "CPU Trends",
-        "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": [
-          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
-        ],
-        "visualization": "timechart"
-      },
-      "customWidth": "50",
-      "name": "CPUTrends",
-      "styleSettings": {
-        "showBorder": true
-      }
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where CounterName in ('% Committed Bytes In Use','% Used Memory')\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize AvgMemory=avg(CounterValue) by bin(TimeGenerated,5m), Computer\n| order by TimeGenerated asc",
-        "size": 0,
-        "title": "Memory Trends",
-        "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": [
-          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
-        ],
-        "visualization": "timechart"
-      },
-      "customWidth": "50",
-      "name": "MemoryTrends",
-      "styleSettings": {
-        "showBorder": true
-      }
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where (ObjectName == 'Network' and CounterName in ('Total Bytes Transmitted','Total Bytes Received','Total Bytes'))\n    or (ObjectName == 'Network Adapter' and CounterName in ('Bytes Received/sec','Bytes Sent/sec','Bytes Total/sec'))\n| summarize AvgBytes=avg(CounterValue) by bin(TimeGenerated,5m), Computer, CounterName\n| order by TimeGenerated asc",
-        "size": 0,
-        "title": "Network Trends (Bytes/sec)",
-        "noDataMessage": "No network counter data. Run: Perf | where CounterName contains 'Byte' | distinct ObjectName, CounterName | take 20",
-        "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": [
-          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
-        ],
-        "visualization": "timechart"
-      },
-      "customWidth": "50",
-      "name": "NetworkTrends",
-      "styleSettings": {
-        "showBorder": true
-      }
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "let WinDisk = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where ObjectName == 'Logical Disk'\n| where CounterName == '% Free Space'\n| where InstanceName == '_Total'\n| summarize AvgFree=avg(CounterValue) by bin(TimeGenerated,5m), Computer;\nlet LinuxDisk = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where ObjectName == 'LogicalDisk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize AvgFree=avg(CounterValue) by bin(TimeGenerated,5m), Computer;\nunion WinDisk, LinuxDisk\n| summarize AvgFree=avg(AvgFree) by TimeGenerated, Computer\n| extend DiskUsedPct=round(100 - AvgFree, 1)\n| project TimeGenerated, Computer, DiskUsedPct\n| order by TimeGenerated asc",
-        "size": 0,
-        "title": "Disk Utilization % Used (avg across all mounts)",
-        "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": [
-          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
-        ],
-        "visualization": "timechart",
-        "chartSettings": {
-          "ySettings": {
-            "min": 0,
-            "max": 100
-          },
-          "hideLegend": true
-        }
-      },
-      "customWidth": "50",
-      "name": "DiskUtilization",
-      "styleSettings": {
-        "showBorder": true
-      }
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "let Windows = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'Logical Disk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=round(avg(CounterValue),1) by Computer, Disk=InstanceName\n| where FreePct < 20;\nlet Linux = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'LogicalDisk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=round(avg(CounterValue),1) by Computer, Disk=InstanceName\n| where FreePct < 20;\nunion Windows, Linux\n| summarize FreePct=min(FreePct) by Computer, Disk\n| extend DiskStatus = iff(FreePct < 10, 'Critical', 'Warning')\n| order by FreePct asc",
-        "size": 0,
-        "title": "Disk Space Alerts (<20% Free) — avg last 1h, one row per disk",
-        "noDataMessage": "No disk space alerts.",
-        "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": [
-          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
-        ],
-        "gridSettings": {
-          "formatRules": [
-            {
-              "columnMatch": "DiskStatus",
-              "formatter": 18,
-              "formatOptions": {
-                "thresholdsOptions": "icons",
-                "thresholdsGrid": [
-                  {
-                    "operator": "==",
-                    "thresholdValue": "Critical",
-                    "representation": "error",
-                    "text": "{0}{1}"
-                  },
-                  {
-                    "operator": "==",
-                    "thresholdValue": "Warning",
-                    "representation": "warning",
-                    "text": "{0}{1}"
-                  },
-                  {
-                    "operator": "Default",
-                    "thresholdValue": null,
-                    "representation": "success",
-                    "text": "{0}{1}"
-                  }
-                ]
-              }
-            }
-          ],
-          "filter": true,
-          "rowLimit": 2000,
-          "exportCsv": true,
-          "openQuery": true
-        }
-      },
-      "name": "DiskAlerts",
-      "styleSettings": {
-        "showBorder": true
-      }
-    },
-    {
-      "type": 1,
-      "content": {
         "json": "<h3 style=\"color:#0078d4;border-left:4px solid #0078d4;padding-left:12px;font-family:'Segoe UI',sans-serif;margin:24px 0 4px 0\">🔍 Operational Views</h3>"
       },
       "name": "section-operational"
@@ -719,9 +513,10 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where isempty(\"{VM}\") or name =~ \"{VM}\"\n| extend\n    JoinSub = subscriptionId,\n    JoinRG = tolower(resourceGroup),\n    JoinVMId = tolower(id),\n    PowerState = tostring(properties.extended.instanceView.powerState.displayStatus),\n    OSType = tostring(properties.storageProfile.osDisk.osType),\n    VMSize = tostring(properties.hardwareProfile.vmSize),\n    VMInsightsUrl = strcat('https://portal.azure.com/#resource', id, '/insights/performance')\n| join kind=leftouter (\n    ResourceContainers\n    | where type =~ 'microsoft.resources/subscriptions/resourcegroups'\n    | extend\n        JoinSub = subscriptionId,\n        JoinRG = tolower(name)\n    | project\n        JoinSub,\n        JoinRG,\n        ApplicationName = coalesce(tostring(tags['Application name']), tostring(tags['Application Name']), tostring(tags['ApplicationName']), tostring(tags['AppName']), tostring(tags['Project']), tostring(tags['project'])),\n        ApproverName = coalesce(tostring(tags['Approver name']), tostring(tags['Approver Name']), tostring(tags['ApproverName']), tostring(tags['Approver'])),\n        BusinessOwner = coalesce(tostring(tags['Business Owner']), tostring(tags['BusinessOwner']), tostring(tags['Owner'])),\n        Company = coalesce(tostring(tags['Company']), tostring(tags['company'])),\n        CostCenter = coalesce(tostring(tags['Cost Center']), tostring(tags['CostCenter']), tostring(tags['Cost center']))\n) on JoinSub, JoinRG\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.devtestlab/schedules'\n    | extend\n        JoinVMId = tolower(tostring(properties['targetResourceId'])),\n        AutoShutdownStatus = tostring(properties['status']),\n        ShutdownTime = tostring(properties['dailyRecurrence']['time'])\n    | project\n        JoinVMId,\n        AutoShutdownStatus,\n        ShutdownTime\n) on JoinVMId\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.network/networkinterfaces'\n    | extend JoinVMId = tolower(tostring(properties['virtualMachine']['id']))\n    | mv-expand ipconfig = properties['ipConfigurations']\n    | extend PrivateIP = tostring(ipconfig['properties']['privateIPAddress'])\n    | where isnotempty(JoinVMId) and isnotempty(PrivateIP)\n    | summarize PrivateIPs = strcat_array(make_set(PrivateIP), ', ') by JoinVMId\n) on JoinVMId\n| extend\n    AutoShutdownStatus = iff(isempty(AutoShutdownStatus), 'Disabled', AutoShutdownStatus),\n    ShutdownTime = iff(isempty(ShutdownTime), '-', ShutdownTime),\n    PrivateIPs = iff(isempty(PrivateIPs), '-', PrivateIPs),\n    ApplicationName = iff(isempty(ApplicationName), '-', ApplicationName),\n    ApproverName = iff(isempty(ApproverName), '-', ApproverName),\n    BusinessOwner = iff(isempty(BusinessOwner), '-', BusinessOwner),\n    Company = iff(isempty(Company), '-', Company),\n    CostCenter = iff(isempty(CostCenter), '-', CostCenter)\n| project\n    VMName = name,\n    ResourceGroup = resourceGroup,\n    Location = location,\n    OSType,\n    VMSize,\n    PowerState,\n    PrivateIPs,\n    AutoShutdownStatus,\n    ShutdownTime,\n    ApplicationName,\n    ApproverName,\n    BusinessOwner,\n    Company,\n    CostCenter,\n    id,\n    VMInsightsUrl\n| order by VMName asc",
+        "query": "Resources\n| where type =~ 'microsoft.compute/virtualmachines'\n| where resourceGroup !startswith 'aro-infra'\n| where isempty(\"{ResourceGroup}\") or resourceGroup =~ \"{ResourceGroup}\"\n| where isempty(\"{VM}\") or name =~ \"{VM}\"\n| extend\n    JoinSub = subscriptionId,\n    JoinRG = tolower(resourceGroup),\n    JoinVMId = tolower(id),\n    PowerState = tostring(properties.extended.instanceView.powerState.displayStatus),\n    OSType = tostring(properties.storageProfile.osDisk.osType),\n    VMSize = tostring(properties.hardwareProfile.vmSize),\n    VMInsightsUrl = strcat('https://portal.azure.com/#resource', id, '/insights/performance')\n| join kind=leftouter (\n    ResourceContainers\n    | where type =~ 'microsoft.resources/subscriptions/resourcegroups'\n    | extend\n        JoinSub = subscriptionId,\n        JoinRG = tolower(name)\n    | project\n        JoinSub,\n        JoinRG,\n        ApplicationName = coalesce(tostring(tags['Application name']), tostring(tags['Application Name']), tostring(tags['ApplicationName']), tostring(tags['AppName']), tostring(tags['Project']), tostring(tags['project'])),\n        ApproverName = coalesce(tostring(tags['Approver name']), tostring(tags['Approver Name']), tostring(tags['ApproverName']), tostring(tags['Approver'])),\n        TechnicalOwner = coalesce(tostring(tags['Technical Owner']), tostring(tags['Technical owner']), tostring(tags['TechnicalOwner']), tostring(tags['Tech Owner']), tostring(tags['TechOwner'])),\n        BusinessOwner = coalesce(tostring(tags['Business Owner']), tostring(tags['BusinessOwner']), tostring(tags['Owner'])),\n        Company = coalesce(tostring(tags['Company']), tostring(tags['company'])),\n        CostCenter = coalesce(tostring(tags['Cost Center']), tostring(tags['CostCenter']), tostring(tags['Cost center']))\n) on JoinSub, JoinRG\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.devtestlab/schedules'\n    | extend\n        JoinVMId = tolower(tostring(properties['targetResourceId'])),\n        AutoShutdownStatus = tostring(properties['status']),\n        ShutdownTime = tostring(properties['dailyRecurrence']['time'])\n    | project\n        JoinVMId,\n        AutoShutdownStatus,\n        ShutdownTime\n) on JoinVMId\n| join kind=leftouter (\n    Resources\n    | where type =~ 'microsoft.network/networkinterfaces'\n    | extend JoinVMId = tolower(tostring(properties['virtualMachine']['id']))\n    | mv-expand ipconfig = properties['ipConfigurations']\n    | extend PrivateIP = tostring(ipconfig['properties']['privateIPAddress'])\n    | where isnotempty(JoinVMId) and isnotempty(PrivateIP)\n    | summarize PrivateIPs = strcat_array(make_set(PrivateIP), ', ') by JoinVMId\n) on JoinVMId\n| extend\n    AutoShutdownStatus = iff(isempty(AutoShutdownStatus), 'Disabled', AutoShutdownStatus),\n    ShutdownTime = iff(isempty(ShutdownTime), '-', ShutdownTime),\n    PrivateIPs = iff(isempty(PrivateIPs), '-', PrivateIPs),\n    ApplicationName = iff(isempty(ApplicationName), '-', ApplicationName),\n    ApproverName = iff(isempty(ApproverName), '-', ApproverName),\n    TechnicalOwner = iff(isempty(TechnicalOwner), '-', TechnicalOwner),\n    BusinessOwner = iff(isempty(BusinessOwner), '-', BusinessOwner),\n    Company = iff(isempty(Company), '-', Company),\n    CostCenter = iff(isempty(CostCenter), '-', CostCenter)\n| project\n    VMName = name,\n    ResourceGroup = resourceGroup,\n    Location = location,\n    OSType,\n    VMSize,\n    PowerState,\n    PrivateIPs,\n    AutoShutdownStatus,\n    ShutdownTime,\n    ApplicationName,\n    ApproverName,\n    TechnicalOwner,\n    BusinessOwner,\n    Company,\n    CostCenter,\n    id,\n    VMInsightsUrl\n| order by VMName asc",
         "size": 0,
         "title": "VM Inventory",
+        "showExportToExcel": true,
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
         "crossComponentResources": [
@@ -752,6 +547,10 @@
               "label": "Approver"
             },
             {
+              "columnId": "TechnicalOwner",
+              "label": "Technical Owner"
+            },
+            {
               "columnId": "BusinessOwner",
               "label": "Business Owner"
             },
@@ -767,9 +566,7 @@
               "columnId": "VMInsightsUrl",
               "label": "VM Insights"
             }
-          ],
-          "exportCsv": true,
-          "openQuery": true
+          ]
         }
       },
       "name": "VMInventory",
@@ -781,41 +578,41 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "Heartbeat\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize LastHeartbeat=max(TimeGenerated) by Computer\n| extend Status=iff(LastHeartbeat > ago(15m),'Online','Offline')\n| extend MinutesSinceHeartbeat = datetime_diff('minute', now(), LastHeartbeat)\n| project Computer, Status, LastHeartbeat, MinutesSinceHeartbeat\n| order by Computer asc",
+        "query": "let Windows = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'Logical Disk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=round(avg(CounterValue),1) by Computer, Disk=InstanceName\n| where FreePct < 20;\nlet Linux = Perf\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| where TimeGenerated > ago(1h)\n| where ObjectName == 'LogicalDisk'\n| where CounterName == '% Free Space'\n| where InstanceName !~ '_Total'\n| where InstanceName !startswith 'HarddiskVolume'\n| summarize FreePct=round(avg(CounterValue),1) by Computer, Disk=InstanceName\n| where FreePct < 20;\nunion Windows, Linux\n| summarize FreePct=min(FreePct) by Computer, Disk\n| extend DiskStatus = iff(FreePct < 10, 'Critical', 'Warning')\n| order by FreePct asc",
         "size": 0,
-        "title": "VM Status Grid",
+        "title": "Disk Space Alerts (<20% Free) — avg last 1h, one row per disk",
+        "noDataMessage": "No disk space alerts.",
+        "showExportToExcel": true,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
         ],
         "gridSettings": {
-          "formatRules": [
-            {
-              "columnMatch": "Status",
-              "formatter": 18,
-              "formatOptions": {
-                "thresholdsOptions": "icons",
-                "thresholdsGrid": [
-                  {
-                    "operator": "==",
-                    "thresholdValue": "Online",
-                    "representation": "success",
-                    "text": "{0}{1}"
-                  },
-                  {
-                    "operator": "Default",
-                    "thresholdValue": null,
-                    "representation": "error",
-                    "text": "{0}{1}"
-                  }
-                ]
-              }
-            }
-          ],
-          "filter": true,
-          "exportCsv": true,
-          "openQuery": true
+          "rowLimit": 2000,
+          "filter": true
+        }
+      },
+      "name": "DiskAlerts",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "Heartbeat\n| where _ResourceId !contains '{ExcludedRG}'\n| where isempty(\"{VM}\") or Computer =~ \"{VM}\"\n| summarize LastHeartbeat=max(TimeGenerated) by Computer\n| extend Status=iff(LastHeartbeat > ago(15m),'Online','Offline')\n| extend MinutesSinceHeartbeat = datetime_diff('minute', now(), LastHeartbeat)\n| project Computer, Status, LastHeartbeat, MinutesSinceHeartbeat\n| order by Computer asc",
+        "size": 0,
+        "title": "VM Status Grid",
+        "showExportToExcel": true,
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        ],
+        "gridSettings": {
+          "filter": true
         }
       },
       "name": "StatusGrid",
@@ -831,15 +628,14 @@
         "size": 0,
         "title": "Failed Heartbeats (>15 min)",
         "noDataMessage": "No failed heartbeats detected.",
+        "showExportToExcel": true,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
         ],
         "gridSettings": {
-          "filter": true,
-          "exportCsv": true,
-          "openQuery": true
+          "filter": true
         }
       },
       "name": "FailedHeartbeats",
@@ -855,44 +651,14 @@
         "size": 0,
         "title": "AMA Extension Health",
         "noDataMessage": "No AMA extensions found. Ensure Azure Monitor Agent is deployed to VMs.",
+        "showExportToExcel": true,
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
         "crossComponentResources": [
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
         ],
         "gridSettings": {
-          "formatRules": [
-            {
-              "columnMatch": "ProvisioningState",
-              "formatter": 18,
-              "formatOptions": {
-                "thresholdsOptions": "icons",
-                "thresholdsGrid": [
-                  {
-                    "operator": "==",
-                    "thresholdValue": "Succeeded",
-                    "representation": "success",
-                    "text": "{0}{1}"
-                  },
-                  {
-                    "operator": "==",
-                    "thresholdValue": "Failed",
-                    "representation": "error",
-                    "text": "{0}{1}"
-                  },
-                  {
-                    "operator": "Default",
-                    "thresholdValue": null,
-                    "representation": "warning",
-                    "text": "{0}{1}"
-                  }
-                ]
-              }
-            }
-          ],
-          "filter": true,
-          "exportCsv": true,
-          "openQuery": true
+          "filter": true
         }
       },
       "name": "AMAExtensionHealth",
@@ -908,44 +674,14 @@
         "size": 0,
         "title": "Dependency Agent Health",
         "noDataMessage": "No Dependency Agent extensions found.",
+        "showExportToExcel": true,
         "queryType": 1,
         "resourceType": "microsoft.resourcegraph/resources",
         "crossComponentResources": [
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77"
         ],
         "gridSettings": {
-          "formatRules": [
-            {
-              "columnMatch": "ProvisioningState",
-              "formatter": 18,
-              "formatOptions": {
-                "thresholdsOptions": "icons",
-                "thresholdsGrid": [
-                  {
-                    "operator": "==",
-                    "thresholdValue": "Succeeded",
-                    "representation": "success",
-                    "text": "{0}{1}"
-                  },
-                  {
-                    "operator": "==",
-                    "thresholdValue": "Failed",
-                    "representation": "error",
-                    "text": "{0}{1}"
-                  },
-                  {
-                    "operator": "Default",
-                    "thresholdValue": null,
-                    "representation": "warning",
-                    "text": "{0}{1}"
-                  }
-                ]
-              }
-            }
-          ],
-          "filter": true,
-          "exportCsv": true,
-          "openQuery": true
+          "filter": true
         }
       },
       "name": "DependencyAgentHealth",
