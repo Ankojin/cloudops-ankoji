@@ -32,8 +32,27 @@
             "name": "TimeRange",
             "type": 4,
             "value": {
-              "durationMs": 3600000
+              "durationMs": 86400000
             }
+          },
+          {
+            "id": "vm",
+            "version": "KqlParameterItem/1.0",
+            "name": "VM",
+            "label": "Virtual Machine",
+            "type": 2,
+            "isRequired": false,
+            "multiSelect": false,
+            "query": "VMConnection\n| where TimeGenerated {TimeRange}\n| summarize by Computer\n| sort by Computer asc\n| project value = Computer, label = Computer",
+            "typeSettings": {
+              "additionalResourceOptions": [],
+              "showDefault": false
+            },
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "crossComponentResources": [
+              "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+            ]
           }
         ],
         "style": "pills",
@@ -45,7 +64,7 @@
     {
       "type": 1,
       "content": {
-        "json": "# BAB SIT VM Dependency Map\nIncludes VMConnection, VMBoundPort, VMComputer and VMProcess queries.\n**Excluded RG:** `aro-infra-lybja3b0-bab-sit-aro-01`\n**Scope:** Private IPs only (10.0.0.0/8) for source and destination."
+        "json": "# BAB SIT VM Dependency Map\nIncludes VMConnection queries.\n**Scope:** Private IPs only (10.0.0.0/8) for source and destination."
       },
       "name": "text - 1"
     },
@@ -53,50 +72,161 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "VMConnection\n| where _ResourceId !contains 'aro-infra-lybja3b0-bab-sit-aro-01'\n| where TimeGenerated {TimeRange}\n| where ipv4_is_in_range(SourceIp, '10.0.0.0/8')\n| where ipv4_is_in_range(DestinationIp, '10.0.0.0/8')\n| where SourceIp !in ('10.189.250.5', '10.189.250.4') and DestinationIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| summarize\n    Connections = count(),\n    BytesSent = sum(BytesSent),\n    BytesReceived = sum(BytesReceived),\n    LastSeen = max(TimeGenerated)\n    by Computer, SourceIp, DestinationIp, DestinationPort, Protocol, Direction\n| sort by Connections desc",
+        "query": "VMConnection\n| where TimeGenerated {TimeRange}\n| where ipv4_is_in_range(SourceIp, '10.0.0.0/8')\n| where ipv4_is_in_range(DestinationIp, '10.0.0.0/8')\n| where SourceIp !in ('10.189.250.5', '10.189.250.4') and DestinationIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| where Direction == 'inbound'\n| where isempty('{VM}') or Computer == '{VM}'\n| summarize\n    Connections = count(),\n    BytesSent = sum(BytesSent),\n    BytesReceived = sum(BytesReceived),\n    LastSeen = max(TimeGenerated)\n    by Computer, SourceIp, DestinationIp, DestinationPort, Protocol\n| sort by Connections desc\n| project-rename RemoteIp = SourceIp, LocalIp = DestinationIp",
         "size": 0,
-        "title": "VM Connections (Private IPs only — summarised)",
+        "title": "VM Connections — Inbound (Private IPs only)",
         "showOpenInBlade": true,
+        "showExportToExcel": true,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
         ],
         "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Connections",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": ">=",
+                    "thresholdValue": "1000",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": ">=",
+                    "thresholdValue": "100",
+                    "representation": "orange",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "green",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "BytesSent",
+              "formatter": 4,
+              "formatOptions": {},
+              "numberFormat": {
+                "unit": 2,
+                "options": {
+                  "style": "decimal",
+                  "maximumFractionDigits": 2
+                }
+              }
+            },
+            {
+              "columnMatch": "BytesReceived",
+              "formatter": 4,
+              "formatOptions": {},
+              "numberFormat": {
+                "unit": 2,
+                "options": {
+                  "style": "decimal",
+                  "maximumFractionDigits": 2
+                }
+              }
+            }
+          ],
           "rowLimit": 10000,
           "exportToExcelOptions": "all",
           "filter": true
         }
       },
-      "name": "query - 2"
+      "name": "query - 2-inbound"
     },
     {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "VMBoundPort\n| where _ResourceId !contains 'aro-infra-lybja3b0-bab-sit-aro-01'\n| where TimeGenerated {TimeRange}\n| where ipv4_is_in_range(Ip, '10.0.0.0/8')\n| where Ip !in ('10.189.250.5', '10.189.250.4')\n| summarize\n    Samples = count(),\n    LastSeen = max(TimeGenerated)\n    by Computer, Ip, Port, Protocol, ProcessName\n| sort by Computer asc, Port asc",
+        "query": "VMConnection\n| where TimeGenerated {TimeRange}\n| where ipv4_is_in_range(SourceIp, '10.0.0.0/8')\n| where ipv4_is_in_range(DestinationIp, '10.0.0.0/8')\n| where SourceIp !in ('10.189.250.5', '10.189.250.4') and DestinationIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| where Direction == 'outbound'\n| where isempty('{VM}') or Computer == '{VM}'\n| summarize\n    Connections = count(),\n    BytesSent = sum(BytesSent),\n    BytesReceived = sum(BytesReceived),\n    LastSeen = max(TimeGenerated)\n    by Computer, SourceIp, DestinationIp, DestinationPort, Protocol\n| sort by Connections desc\n| project-rename LocalIp = SourceIp, RemoteIp = DestinationIp",
         "size": 0,
-        "title": "VM Bound Ports (Private IPs only — summarised)",
+        "title": "VM Connections — Outbound (Private IPs only)",
+        "showOpenInBlade": true,
+        "showExportToExcel": true,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
           "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
         ],
         "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Connections",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": ">=",
+                    "thresholdValue": "1000",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": ">=",
+                    "thresholdValue": "100",
+                    "representation": "orange",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "green",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "BytesSent",
+              "formatter": 4,
+              "formatOptions": {},
+              "numberFormat": {
+                "unit": 2,
+                "options": {
+                  "style": "decimal",
+                  "maximumFractionDigits": 2
+                }
+              }
+            },
+            {
+              "columnMatch": "BytesReceived",
+              "formatter": 4,
+              "formatOptions": {},
+              "numberFormat": {
+                "unit": 2,
+                "options": {
+                  "style": "decimal",
+                  "maximumFractionDigits": 2
+                }
+              }
+            }
+          ],
           "rowLimit": 10000,
           "exportToExcelOptions": "all",
           "filter": true
         }
       },
-      "name": "query - 3"
+      "name": "query - 2-outbound"
     },
     {
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "VMConnection\n| where _ResourceId !contains 'aro-infra-lybja3b0-bab-sit-aro-01'\n| where TimeGenerated {TimeRange}\n| where ipv4_is_in_range(SourceIp, '10.0.0.0/8')\n| where SourceIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| summarize\n    Connections = count(),\n    LastSeen = max(TimeGenerated)\n    by Computer, _ResourceId\n| where isnotempty(_ResourceId) and isnotempty(Computer)\n| extend\n    subId  = extract('/subscriptions/([^/]+)', 1, _ResourceId),\n    rgName = extract('/resourcegroups/([^/]+)', 1, _ResourceId),\n    vmName = extract('/virtualmachines/([^/]+)', 1, _ResourceId)\n| extend resourceId = strcat('/subscriptions/', subId, '/resourceGroups/', rgName, '/providers/Microsoft.Compute/virtualMachines/', vmName)\n| extend jsonScope = strcat('{\"scopes\":{\"hybrid\":{\"computer\":{\"id\":\"', resourceId, '\",\"name\":\"', vmName, '\"},\"workspace\":{\"id\":\"/unknown\"}},\"azure\":{\"resource\":{\"id\":\"', resourceId, '\",\"displayName\":\"', vmName, '\"},\"resourceType\":\"VirtualMachine\"}}}')\n| extend MapLink = strcat('https://portal.azure.com/#view/Microsoft_Azure_WorkloadInsights/AtScaleVmInsightsBladeViewModel/selectedTab~/2/sourceType/SingleVmScale/scopeSelections~/', url_encode(jsonScope), '/subscriptionId/', subId, '/doNotSaveScope~/true')\n| project Computer, Connections, LastSeen, MapLink\n| sort by Computer asc",
+        "query": "VMConnection\n| where TimeGenerated {TimeRange}\n| where ipv4_is_in_range(SourceIp, '10.0.0.0/8')\n| where ipv4_is_in_range(DestinationIp, '10.0.0.0/8')\n| where SourceIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| where isempty('{VM}') or Computer == '{VM}'\n| summarize\n    Connections = count(),\n    LastSeen = max(TimeGenerated)\n    by Computer, _ResourceId\n| where isnotempty(_ResourceId) and isnotempty(Computer)\n| extend\n    subId  = extract('/subscriptions/([^/]+)', 1, _ResourceId),\n    rgName = extract('/resourcegroups/([^/]+)', 1, _ResourceId),\n    vmName = extract('/virtualmachines/([^/]+)', 1, _ResourceId)\n| extend resourceId = strcat('/subscriptions/', subId, '/resourceGroups/', rgName, '/providers/Microsoft.Compute/virtualMachines/', vmName)\n| extend jsonScope = strcat('{\"scopes\":{\"hybrid\":{\"computer\":{\"id\":\"', resourceId, '\",\"name\":\"', vmName, '\"},\"workspace\":{\"id\":\"/unknown\"}},\"azure\":{\"resource\":{\"id\":\"', resourceId, '\",\"displayName\":\"', vmName, '\"},\"resourceType\":\"VirtualMachine\"}}}')\n| extend MapLink = strcat('https://portal.azure.com/#view/Microsoft_Azure_WorkloadInsights/AtScaleVmInsightsBladeViewModel/selectedTab~/2/sourceType/SingleVmScale/scopeSelections~/', url_encode(jsonScope), '/subscriptionId/', subId, '/doNotSaveScope~/true')\n| project Computer, Connections, LastSeen, MapLink\n| sort by Computer asc",
         "size": 0,
         "title": "Open VM Insights — click link to open full interactive VM Insights per VM",
+        "showOpenInBlade": true,
+        "showExportToExcel": true,
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "crossComponentResources": [
@@ -130,29 +260,11 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "VMComputer\n| where _ResourceId !contains 'aro-infra-lybja3b0-bab-sit-aro-01'\n| summarize arg_max(TimeGenerated, *) by _ResourceId\n| project Computer, OperatingSystemFullName, Ipv4Addresses, PhysicalMemoryMB, AzureImageSku, AzureLocation, DnsNames, BootTime\n| sort by Computer asc",
-        "size": 0,
-        "title": "VM Computer Inventory",
-        "noDataMessage": "No VMComputer data. Ensure Dependency Agent is installed and reporting.",
-        "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": [
-          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
-        ],
-        "gridSettings": {
-          "exportToExcelOptions": "all",
-          "filter": true
-        }
-      },
-      "name": "query - vm-computer-inventory"
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "VMConnection\n| where _ResourceId !contains 'aro-infra-lybja3b0-bab-sit-aro-01'\n| where TimeGenerated {TimeRange}\n| where LinksFailed > 0\n| where SourceIp !in ('10.189.250.5', '10.189.250.4') and DestinationIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| summarize\n    TotalFailed = sum(LinksFailed),\n    LastSeen = max(TimeGenerated)\n    by Computer, SourceIp, DestinationIp, DestinationPort, Protocol\n| sort by TotalFailed desc",
+        "query": "VMConnection\n| where TimeGenerated {TimeRange}\n| where LinksFailed > 0\n| where ipv4_is_in_range(SourceIp, '10.0.0.0/8')\n| where ipv4_is_in_range(DestinationIp, '10.0.0.0/8')\n| where SourceIp !in ('10.189.250.5', '10.189.250.4') and DestinationIp !in ('10.189.250.5', '10.189.250.4')\n| where SourceIp != DestinationIp\n| where isempty('{VM}') or Computer == '{VM}'\n| summarize\n    TotalFailed = sum(LinksFailed),\n    LastSeen = max(TimeGenerated)\n    by Computer, SourceIp, DestinationIp, DestinationPort, Protocol\n| sort by TotalFailed desc\n| project-rename LocalIp = SourceIp, RemoteIp = DestinationIp",
         "size": 0,
         "title": "Failed Connections",
+        "showOpenInBlade": true,
+        "showExportToExcel": true,
         "noDataMessage": "No failed connections detected in the selected time range.",
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
@@ -188,9 +300,11 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "VMConnection\n| where _ResourceId !contains 'aro-infra-lybja3b0-bab-sit-aro-01'\n| where TimeGenerated {TimeRange}\n| where isnotempty(MaliciousIp)\n| project TimeGenerated, Computer, RemoteIp = MaliciousIp, Severity, Description, IndicatorThreatType, Confidence, LastReportedDateTime\n| sort by Severity desc",
+        "query": "VMConnection\n| where TimeGenerated {TimeRange}\n| where isnotempty(MaliciousIp)\n| where isempty('{VM}') or Computer == '{VM}'\n| project TimeGenerated, Computer, RemoteIp = MaliciousIp, Severity, Description, IndicatorThreatType, Confidence, LastReportedDateTime\n| sort by Severity desc",
         "size": 0,
         "title": "Malicious IP Connections",
+        "showOpenInBlade": true,
+        "showExportToExcel": true,
         "noDataMessage": "No connections to malicious IPs detected.",
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
@@ -232,47 +346,6 @@
         }
       },
       "name": "query - malicious-ip"
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "VMProcess\n| where _ResourceId !contains 'aro-infra-lybja3b0-bab-sit-aro-01'\n| where TimeGenerated {TimeRange}\n| summarize arg_max(TimeGenerated, *) by _ResourceId\n| project Computer, ExecutableName, DisplayName, CommandLine, UserName, ProductVersion\n| sort by Computer asc, ExecutableName asc",
-        "size": 0,
-        "title": "Process Inventory",
-        "noDataMessage": "No VMProcess data. Ensure Dependency Agent is installed and reporting.",
-        "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": [
-          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
-        ],
-        "gridSettings": {
-          "exportToExcelOptions": "all",
-          "filter": true
-        }
-      },
-      "name": "query - process-inventory"
-    },
-    {
-      "type": 3,
-      "content": {
-        "version": "KqlItem/1.0",
-        "query": "VMBoundPort\n| where _ResourceId !contains 'aro-infra-lybja3b0-bab-sit-aro-01'\n| where TimeGenerated {TimeRange}\n| where Ip != '127.0.0.1'\n| where Ip !in ('10.189.250.5', '10.189.250.4')\n| summarize\n    BytesSent = sum(BytesSent),\n    BytesReceived = sum(BytesReceived),\n    LinksEstablished = sum(LinksEstablished),\n    LinksLive = sum(LinksLive)\n    by Computer, ProcessName, Port, Protocol, IsWildcardBind\n| sort by LinksEstablished desc",
-        "size": 0,
-        "title": "Open Ports — Ranked by Activity",
-        "noDataMessage": "No VMBoundPort data in the selected time range.",
-        "queryType": 0,
-        "resourceType": "microsoft.operationalinsights/workspaces",
-        "crossComponentResources": [
-          "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
-        ],
-        "gridSettings": {
-          "exportToExcelOptions": "all",
-          "filter": true,
-          "rowLimit": 2000
-        }
-      },
-      "name": "query - open-ports-activity"
     }
   ],
   "fallbackResourceIds": [
