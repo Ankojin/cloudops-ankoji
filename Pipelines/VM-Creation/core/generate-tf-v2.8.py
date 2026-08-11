@@ -646,6 +646,10 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "{vm_name}_shutdown" {{
         else:
             command = "powershell -ExecutionPolicy Unrestricted -File {}".format(blob_file)
 
+        # HCL-escape SAS URL and command before embedding in Terraform template
+        escaped_sas_url = _hcl_escape(sas_url)
+        escaped_command = _hcl_escape(command)
+
         # Write using .format() to avoid backslash escaping issues
         tf.write("""
 # Custom Script Extension (LAST) for {vm_name}
@@ -657,8 +661,8 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
   type_handler_version = "{handler_version}"
 
   settings = jsonencode({{
-    fileUris        = ["{sas_url}"],
-    commandToExecute = "{command}"
+    fileUris        = ["{escaped_sas_url}"],
+    commandToExecute = "{escaped_command}"
   }})
 
   tags = {{
@@ -671,8 +675,8 @@ resource "azurerm_virtual_machine_extension" "{vm_name}_customscript" {{
     publisher=publisher,
     extension_type=extension_type,
     handler_version=handler_version,
-    sas_url=sas_url,
-    command=command,
+    escaped_sas_url=escaped_sas_url,
+    escaped_command=escaped_command,
     tags_block=tags_block
 ))
     
