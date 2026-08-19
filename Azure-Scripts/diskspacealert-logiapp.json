@@ -3,8 +3,8 @@
     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
-      "workspaceId": {
-        "type": "string"
+      "workspaces": {
+        "type": "array"
       }
     },
     "triggers": {
@@ -23,17 +23,17 @@
       }
     },
     "actions": {
-      "Run_Query": {
+      "Run_Query_DEV": {
         "type": "Http",
         "inputs": {
           "method": "POST",
-          "uri": "@{concat('https://api.loganalytics.azure.com/v1/workspaces/', parameters('workspaceId'), '/query')}",
+          "uri": "@{concat('https://api.loganalytics.azure.com/v1/workspaces/', parameters('workspaces')[0]['WorkspaceId'], '/query')}",
           "headers": {
             "Content-Type": "application/json",
             "Prefer": "wait=600"
           },
           "body": {
-            "query": "Perf | where TimeGenerated > ago(25h) | where ObjectName in~ ('Logical Disk', 'LogicalDisk') | where CounterName in ('% Free Space', 'Free Megabytes') | where InstanceName !in~ ('_Total', 'Instances', 'total') | where InstanceName !startswith 'HarddiskVolume' | where InstanceName !startswith '/dev' | where InstanceName !startswith '/sys' | where InstanceName !startswith '/run' | where InstanceName !startswith '/proc' | where InstanceName !startswith '/boot' | where InstanceName !startswith '/home' | where InstanceName !startswith '/tmp' | where InstanceName !in~ ('tmpfs', 'overlay', 'none', 'udev') | evaluate pivot(CounterName, avg(CounterValue), Computer, InstanceName) | project Computer, Disk = InstanceName, FreePct = round(['% Free Space'], 1), FreeGB = round(['Free Megabytes'] / 1024, 1), TotalGB = round((['Free Megabytes'] / 1024) / (['% Free Space'] / 100), 1), UsedGB = round((['Free Megabytes'] / 1024) * (100 - ['% Free Space']) / ['% Free Space'], 1) | where isnotnull(FreePct) and isnotnull(TotalGB) and isnotnull(UsedGB) and TotalGB > 0 and TotalGB < 102400 | where FreePct < 20 | order by FreePct asc"
+            "query": "Perf | extend Environment = 'DEV' | where TimeGenerated > ago(25h) | where ObjectName in~ ('Logical Disk', 'LogicalDisk') | where CounterName in ('% Free Space', 'Free Megabytes') | where InstanceName !in~ ('_Total', 'Instances', 'total') | where InstanceName !startswith 'HarddiskVolume' | where InstanceName !startswith '/dev' | where InstanceName !startswith '/sys' | where InstanceName !startswith '/run' | where InstanceName !startswith '/proc' | where InstanceName !startswith '/boot' | where InstanceName !startswith '/home' | where InstanceName !startswith '/tmp' | where InstanceName !in~ ('tmpfs', 'overlay', 'none', 'udev') | evaluate pivot(CounterName, avg(CounterValue), Environment, Computer, InstanceName) | project Environment, Computer, Disk = InstanceName, FreePct = round(['% Free Space'], 1), FreeGB = round(['Free Megabytes'] / 1024, 1), TotalGB = round((['Free Megabytes'] / 1024) / (['% Free Space'] / 100), 1), UsedGB = round((['Free Megabytes'] / 1024) * (100 - ['% Free Space']) / ['% Free Space'], 1) | where isnotnull(FreePct) and isnotnull(TotalGB) and isnotnull(UsedGB) and TotalGB > 0 and TotalGB < 102400 | where FreePct < 20 | order by FreePct asc"
           },
           "authentication": {
             "type": "ManagedServiceIdentity",
@@ -46,9 +46,32 @@
           }
         }
       },
-      "Handle_Query_Failure": {
+      "Run_Query_SIT": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "@{concat('https://api.loganalytics.azure.com/v1/workspaces/', parameters('workspaces')[1]['WorkspaceId'], '/query')}",
+          "headers": {
+            "Content-Type": "application/json",
+            "Prefer": "wait=600"
+          },
+          "body": {
+            "query": "Perf | extend Environment = 'SIT' | where TimeGenerated > ago(25h) | where ObjectName in~ ('Logical Disk', 'LogicalDisk') | where CounterName in ('% Free Space', 'Free Megabytes') | where InstanceName !in~ ('_Total', 'Instances', 'total') | where InstanceName !startswith 'HarddiskVolume' | where InstanceName !startswith '/dev' | where InstanceName !startswith '/sys' | where InstanceName !startswith '/run' | where InstanceName !startswith '/proc' | where InstanceName !startswith '/boot' | where InstanceName !startswith '/home' | where InstanceName !startswith '/tmp' | where InstanceName !in~ ('tmpfs', 'overlay', 'none', 'udev') | evaluate pivot(CounterName, avg(CounterValue), Environment, Computer, InstanceName) | project Environment, Computer, Disk = InstanceName, FreePct = round(['% Free Space'], 1), FreeGB = round(['Free Megabytes'] / 1024, 1), TotalGB = round((['Free Megabytes'] / 1024) / (['% Free Space'] / 100), 1), UsedGB = round((['Free Megabytes'] / 1024) * (100 - ['% Free Space']) / ['% Free Space'], 1) | where isnotnull(FreePct) and isnotnull(TotalGB) and isnotnull(UsedGB) and TotalGB > 0 and TotalGB < 102400 | where FreePct < 20 | order by FreePct asc"
+          },
+          "authentication": {
+            "type": "ManagedServiceIdentity",
+            "audience": "https://api.loganalytics.io"
+          },
+          "retryPolicy": {
+            "type": "fixed",
+            "count": 3,
+            "interval": "PT30S"
+          }
+        }
+      },
+      "Handle_DEV_Query_Failure": {
         "runAfter": {
-          "Run_Query": [
+          "Run_Query_DEV": [
             "Failed",
             "TimedOut"
           ]
@@ -58,13 +81,32 @@
           "runStatus": "Failed",
           "runError": {
             "code": "QueryFailed",
-            "message": "Log Analytics query failed or timed out after 3 retries. Check the Logic App run history for details."
+            "message": "@{concat('DEV Log Analytics query failed or timed out. No email was sent. HTTP status: ', string(outputs('Run_Query_DEV')?['statusCode']), '. Response body: ', string(outputs('Run_Query_DEV')?['body']))}"
+          }
+        }
+      },
+      "Handle_SIT_Query_Failure": {
+        "runAfter": {
+          "Run_Query_SIT": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "type": "Terminate",
+        "inputs": {
+          "runStatus": "Failed",
+          "runError": {
+            "code": "QueryFailed",
+            "message": "@{concat('SIT Log Analytics query failed or timed out. No email was sent. HTTP status: ', string(outputs('Run_Query_SIT')?['statusCode']), '. Response body: ', string(outputs('Run_Query_SIT')?['body']))}"
           }
         }
       },
       "Initialize_HTML": {
         "runAfter": {
-          "Run_Query": [
+          "Run_Query_DEV": [
+            "Succeeded"
+          ],
+          "Run_Query_SIT": [
             "Succeeded"
           ]
         },
@@ -74,7 +116,7 @@
             {
               "name": "HtmlBody",
               "type": "string",
-              "value": "<html><body><p>Hello Team,</p><p>The following disks are below <b>20%</b> free space:</p><table border='1' style='border-collapse:collapse;font-family:Arial;'><tr style='background-color:#0078D4;color:white;'><th style='padding:8px'>Server</th><th style='padding:8px'>Drive</th><th style='padding:8px'>Free Space %</th><th style='padding:8px'>Free (GB)</th><th style='padding:8px'>Used (GB)</th><th style='padding:8px'>Total (GB)</th><th style='padding:8px'>Severity</th></tr>"
+              "value": "<html><body><p>Hello Team,</p><p>The following disks are below <b>20%</b> free space across the <b>DEV/SIT</b> environments:</p><table border='1' style='border-collapse:collapse;font-family:Arial;'><tr style='background-color:#0078D4;color:white;'><th style='padding:8px'>Environment</th><th style='padding:8px'>Server</th><th style='padding:8px'>Drive</th><th style='padding:8px'>Free Space %</th><th style='padding:8px'>Free (GB)</th><th style='padding:8px'>Used (GB)</th><th style='padding:8px'>Total (GB)</th><th style='padding:8px'>Severity</th></tr>"
             }
           ]
         }
@@ -91,7 +133,7 @@
             {
               "name": "CsvBody",
               "type": "string",
-              "value": "\"Server\",\"Drive\",\"Free Space %\",\"Free (GB)\",\"Used (GB)\",\"Total (GB)\",\"Severity\"\n"
+              "value": "\"Environment\",\"Server\",\"Drive\",\"Free Space %\",\"Free (GB)\",\"Used (GB)\",\"Total (GB)\",\"Severity\"\n"
             }
           ]
         }
@@ -154,7 +196,7 @@
           ]
         },
         "type": "If",
-        "expression": "@greater(length(body('Run_Query')?['tables'][0]['rows']),0)",
+        "expression": "@greater(length(union(body('Run_Query_DEV')?['tables'][0]['rows'], body('Run_Query_SIT')?['tables'][0]['rows'])),0)",
         "actions": {
           "Get_SendGrid_Key": {
             "type": "Http",
@@ -179,7 +221,7 @@
               ]
             },
             "type": "Foreach",
-            "foreach": "@body('Run_Query')['tables'][0]['rows']",
+            "foreach": "@union(body('Run_Query_DEV')['tables'][0]['rows'], body('Run_Query_SIT')['tables'][0]['rows'])",
             "runtimeConfiguration": {
               "concurrency": {
                 "repetitions": 1
@@ -190,7 +232,7 @@
                 "type": "AppendToStringVariable",
                 "inputs": {
                   "name": "HtmlBody",
-                  "value": "<tr style='@{if(less(float(items('For_each_Disk')[2]), 10), 'background-color:#FFD7D7', 'background-color:#FFF3CD')}'><td style='padding:8px'>@{items('For_each_Disk')[0]}</td><td style='padding:8px'>@{items('For_each_Disk')[1]}</td><td style='padding:8px;font-weight:bold;color:@{if(less(float(items('For_each_Disk')[2]), 10), '#C00000', '#9C5700')}'>@{items('For_each_Disk')[2]}%</td><td style='padding:8px'>@{items('For_each_Disk')[3]} GB</td><td style='padding:8px'>@{items('For_each_Disk')[5]} GB</td><td style='padding:8px'>@{items('For_each_Disk')[4]} GB</td><td style='padding:8px;font-weight:bold;color:@{if(less(float(items('For_each_Disk')[2]), 10), '#C00000', '#9C5700')}'>@{if(less(float(items('For_each_Disk')[2]), 10), 'Critical', 'Warning')}</td></tr>"
+                  "value": "<tr style='@{if(less(float(items('For_each_Disk')[3]), 10), 'background-color:#FFD7D7', 'background-color:#FFF3CD')}'><td style='padding:8px'>@{items('For_each_Disk')[0]}</td><td style='padding:8px'>@{items('For_each_Disk')[1]}</td><td style='padding:8px'>@{items('For_each_Disk')[2]}</td><td style='padding:8px;font-weight:bold;color:@{if(less(float(items('For_each_Disk')[3]), 10), '#C00000', '#9C5700')}'>@{items('For_each_Disk')[3]}%</td><td style='padding:8px'>@{items('For_each_Disk')[4]} GB</td><td style='padding:8px'>@{items('For_each_Disk')[6]} GB</td><td style='padding:8px'>@{items('For_each_Disk')[5]} GB</td><td style='padding:8px;font-weight:bold;color:@{if(less(float(items('For_each_Disk')[3]), 10), '#C00000', '#9C5700')}'>@{if(less(float(items('For_each_Disk')[3]), 10), 'Critical', 'Warning')}</td></tr>"
                 }
               },
               "Append_CSV_Row": {
@@ -202,7 +244,7 @@
                 "type": "AppendToStringVariable",
                 "inputs": {
                   "name": "CsvBody",
-                  "value": "\"@{items('For_each_Disk')[0]}\",\"@{items('For_each_Disk')[1]}\",\"@{items('For_each_Disk')[2]}\",\"@{items('For_each_Disk')[3]}\",\"@{items('For_each_Disk')[5]}\",\"@{items('For_each_Disk')[4]}\",\"@{if(less(float(items('For_each_Disk')[2]), 10), 'Critical', 'Warning')}\"\n"
+                  "value": "\"@{items('For_each_Disk')[0]}\",\"@{items('For_each_Disk')[1]}\",\"@{items('For_each_Disk')[2]}\",\"@{items('For_each_Disk')[3]}\",\"@{items('For_each_Disk')[4]}\",\"@{items('For_each_Disk')[6]}\",\"@{items('For_each_Disk')[5]}\",\"@{if(less(float(items('For_each_Disk')[3]), 10), 'Critical', 'Warning')}\"\n"
                 }
               },
               "Track_Server": {
@@ -212,13 +254,13 @@
                   ]
                 },
                 "type": "If",
-                "expression": "@not(contains(variables('UniqueServers'), items('For_each_Disk')[0]))",
+                "expression": "@not(contains(variables('UniqueServers'), concat(items('For_each_Disk')[0], '|', items('For_each_Disk')[1])))",
                 "actions": {
                   "Add_Server": {
                     "type": "AppendToArrayVariable",
                     "inputs": {
                       "name": "UniqueServers",
-                      "value": "@items('For_each_Disk')[0]"
+                      "value": "@concat(items('For_each_Disk')[0], '|', items('For_each_Disk')[1])"
                     }
                   }
                 },
@@ -233,7 +275,7 @@
                   ]
                 },
                 "type": "If",
-                "expression": "@less(float(items('For_each_Disk')[2]), 10)",
+                "expression": "@less(float(items('For_each_Disk')[3]), 10)",
                 "actions": {
                   "Increment_CriticalCount": {
                     "type": "IncrementVariable",
@@ -291,7 +333,7 @@
                         "email": "MailgroupCloudServices@bankalbilad.com.sa"
                       }
                     ],
-                    "subject": "@{concat('[', if(greater(variables('CriticalCount'), 0), 'CRITICAL', 'WARNING'), '] Disk Space Alert - ', string(length(variables('UniqueServers'))), ' server(s) | ', string(variables('CriticalCount')), ' Critical, ', string(variables('WarningCount')), ' Warning [', formatDateTime(utcNow(), 'yyyy-MM-dd HH:mm'), ' UTC]')}"
+                    "subject": "@{concat('[DEV/SIT] [', if(greater(variables('CriticalCount'), 0), 'CRITICAL', 'WARNING'), '] Disk Space Alert - ', string(length(variables('UniqueServers'))), ' server(s) | ', string(variables('CriticalCount')), ' Critical, ', string(variables('WarningCount')), ' Warning [', formatDateTime(utcNow(), 'yyyy-MM-dd HH:mm'), ' UTC]')}"
                   }
                 ],
                 "from": {
@@ -335,8 +377,17 @@
     "outputs": {}
   },
   "parameters": {
-    "workspaceId": {
-      "value": "2b769ac8-2757-4611-a534-891be5dcb3b6"
+    "workspaces": {
+      "value": [
+        {
+          "Environment": "DEV",
+          "WorkspaceId": "2b769ac8-2757-4611-a534-891be5dcb3b6"
+        },
+        {
+          "Environment": "SIT",
+          "WorkspaceId": "e25464e7-55f2-462d-af24-884d972c07c0"
+        }
+      ]
     }
   }
 }

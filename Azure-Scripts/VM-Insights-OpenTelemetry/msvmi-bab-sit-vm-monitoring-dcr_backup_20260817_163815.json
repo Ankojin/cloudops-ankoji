@@ -1,0 +1,179 @@
+{
+  "etag": "\"13003a95-0000-4700-0000-6a82d5250000\"",
+  "extendedLocation": null,
+  "id": "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.Insights/dataCollectionRules/msvmi-bab-sit-vm-monitoring-dcr",
+  "identity": null,
+  "kind": null,
+  "location": "swedencentral",
+  "managedBy": null,
+  "name": "msvmi-bab-sit-vm-monitoring-dcr",
+  "plan": null,
+  "properties": {
+    "dataFlows": [
+      {
+        "destinations": [
+          "VMInsightsPerf-Logs-Dest"
+        ],
+        "streams": [
+          "Microsoft-Perf"
+        ]
+      },
+      {
+        "destinations": [
+          "AMW-Destination"
+        ],
+        "streams": [
+          "Microsoft-OtelPerfMetrics"
+        ]
+      },
+      {
+        "destinations": [
+          "VMInsightsPerf-Logs-Dest"
+        ],
+        "streams": [
+          "Microsoft-ServiceMap"
+        ]
+      }
+    ],
+    "dataSources": {
+      "extensions": [
+        {
+          "extensionName": "DependencyAgent",
+          "extensionSettings": {},
+          "name": "DependencyAgentDataSource",
+          "streams": [
+            "Microsoft-ServiceMap"
+          ]
+        }
+      ],
+      "performanceCounters": [
+        {
+          "counterSpecifiers": [
+            "\\LogicalDisk(_Total)\\% Free Space",
+            "\\LogicalDisk(_Total)\\Free Megabytes",
+            "\\LogicalDisk(*)\\% Free Space",
+            "\\LogicalDisk(*)\\Free Megabytes",
+            "Logical Disk(*)\\% Free Inodes",
+            "Logical Disk(*)\\% Used Inodes",
+            "Logical Disk(*)\\Free Megabytes",
+            "Logical Disk(*)\\% Free Space",
+            "Logical Disk(*)\\% Used Space",
+            "\\LogicalDisk(_Total)\\% Disk Time",
+            "\\LogicalDisk(_Total)\\Disk Bytes/sec",
+            "\\LogicalDisk(_Total)\\Disk Transfers/sec",
+            "\\LogicalDisk(_Total)\\Avg. Disk sec/Transfer",
+            "\\Processor Information(_Total)\\% Processor Time",
+            "\\Processor Information(_Total)\\% User Time",
+            "\\Processor Information(_Total)\\% Privileged Time",
+            "\\Processor Information(_Total)\\Processor Frequency",
+            "\\System\\Processor Queue Length",
+            "Processor(*)\\% Processor Time",
+            "Processor(*)\\% User Time",
+            "Processor(*)\\% Privileged Time",
+            "Processor(*)\\% IO Wait Time",
+            "\\Memory\\% Committed Bytes In Use",
+            "\\Memory\\Available Bytes",
+            "\\Memory\\Committed Bytes",
+            "\\Memory\\Pages/sec",
+            "\\Memory\\Page Faults/sec",
+            "Memory(*)\\Available MBytes Memory",
+            "Memory(*)\\% Available Memory",
+            "Memory(*)\\Used Memory MBytes",
+            "Memory(*)\\% Used Memory",
+            "Memory(*)\\Pages/sec",
+            "Memory(*)\\Page Reads/sec",
+            "Memory(*)\\Page Writes/sec",
+            "\\Network Interface(*)\\Bytes Total/sec",
+            "\\Network Interface(*)\\Bytes Sent/sec",
+            "\\Network Interface(*)\\Bytes Received/sec",
+            "Network(*)\\Total Bytes",
+            "Network(*)\\Total Bytes Transmitted",
+            "Network(*)\\Total Bytes Received",
+            "System(*)\\Uptime",
+            "System(*)\\Load1",
+            "System(*)\\Load5",
+            "System(*)\\Load15",
+            "System(*)\\Users",
+            "System(*)\\CPUs",
+            "\\System\\System Up Time"
+          ],
+          "name": "perfCounterDataSource60",
+          "samplingFrequencyInSeconds": 60,
+          "streams": [
+            "Microsoft-Perf"
+          ]
+        }
+      ],
+      "performanceCountersOTel": [
+        {
+          "counterSpecifiers": [
+            "system.cpu.time",
+            "system.memory.usage",
+            "system.network.io",
+            "system.network.errors",
+            "system.network.dropped",
+            "system.uptime",
+            "system.filesystem.usage",
+            "system.filesystem.utilization",
+            "system.filesystem.inodes.usage",
+            "system.disk.io",
+            "system.disk.io_time",
+            "system.disk.merged",
+            "system.disk.operation_time",
+            "system.disk.operations",
+            "system.disk.pending_operations",
+            "system.disk.weighted_io_time",
+            "process.cpu.time",
+            "process.cpu.utilization",
+            "process.memory.usage",
+            "process.memory.virtual",
+            "process.disk.io",
+            "process.disk.operations",
+            "process.open_file_descriptors",
+            "process.threads",
+            "system.processes.created",
+            "system.cpu.utilization",
+            "system.linux.memory.available",
+            "system.memory.utilization"
+          ],
+          "name": "OtelDataSource60",
+          "samplingFrequencyInSeconds": 60,
+          "streams": [
+            "Microsoft-OtelPerfMetrics"
+          ]
+        }
+      ]
+    },
+    "description": "Data collection rule for VM Insights, Perf and OpenTelemetry.",
+    "destinations": {
+      "logAnalytics": [
+        {
+          "name": "VMInsightsPerf-Logs-Dest",
+          "workspaceId": "e25464e7-55f2-462d-af24-884d972c07c0",
+          "workspaceResourceId": "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/Microsoft.OperationalInsights/workspaces/bab-sit-all-wrkspc-swec-01"
+        }
+      ],
+      "monitoringAccounts": [
+        {
+          "accountId": "e0a99b11-8bb3-47df-a0f1-a1953444b7a2",
+          "accountResourceId": "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-wrkspace-swec-rg-01/providers/microsoft.monitor/accounts/bab-sit-vminsights-amw",
+          "name": "AMW-Destination"
+        }
+      ]
+    },
+    "immutableId": "dcr-fd54c0701b5848d2b1b3b73eaecc4df0",
+    "provisioningState": "Succeeded"
+  },
+  "resourceGroup": "bab-sit-wrkspace-swec-rg-01",
+  "sku": null,
+  "systemData": {
+    "createdAt": "2026-06-29T14:13:31.6938817Z",
+    "createdBy": "ANagisetty@Bankalbilad.com.sa",
+    "createdByType": "User",
+    "lastModifiedAt": "2026-08-17T09:32:20.3641357Z",
+    "lastModifiedBy": "ANagisetty@Bankalbilad.com.sa",
+    "lastModifiedByType": "User"
+  },
+  "tags": null,
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

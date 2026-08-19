@@ -1,0 +1,28 @@
+Metric,Value,Unit/Description
+Total Worker/Compute Nodes,13,nodes
+Dedicated/Tainted Pool Nodes,5,nodes
+Shared/General-Purpose Nodes,8,nodes
+Dedicated Node Definition,Custom scheduling taint on node,Automatically discovered
+Dedicated Capacity CPU,111.3700,cores
+Dedicated Capacity Memory,465.4854,GiB
+Dedicated CPU Requests,40.1500,cores
+Dedicated Memory Requests,122.5469,GiB
+Dedicated CPU Request Utilization,36.05,%
+Dedicated Memory Request Utilization,26.33,%
+Dedicated Free CPU,71.2200,cores
+Dedicated Free Memory,342.9385,GiB
+Shared Capacity CPU,127.1200,cores
+Shared Capacity Memory,933.5872,GiB
+Shared CPU Requests,72.8750,cores
+Shared Memory Requests,182.3211,GiB
+Shared CPU Request Utilization,57.33,%
+Shared Memory Request Utilization,19.53,%
+Shared Free CPU,54.2450,cores
+Shared Free Memory,751.2661,GiB
+Running Dedicated-Pool Pods,292,pods
+Running Pods From Dedicated/Targeted Workloads On Shared Nodes,436,pods (placement issue candidates)
+Namespaces Using Both Dedicated And Shared Nodes,16,namespaces (review candidates)
+Capacity Method,Actual Running Pod Effective Requests vs Node Allocatable,No replica multiplication
+Effective Pod Request,Max(sum app requests), max(init-container request),Kubernetes scheduling semantics
+Planning Basis,Requests (scheduler guarantee) — not Limits,Golden rule
+Target Utilization,80,% of allocatable (planning headroom)

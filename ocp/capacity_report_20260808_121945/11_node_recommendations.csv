@@ -1,0 +1,3 @@
+Pool,Basis,Current_Nodes,Avg_CPU_Cores_Per_Node,Avg_Memory_GiB_Per_Node,DaemonSet_CPU_Per_Node,DaemonSet_Mem_Per_Node,Net_CPU_Per_New_Node,Net_Mem_Per_New_Node,CPU_Requests,Mem_Requests,Target_Util_Pct,CPU_Headroom_Cores,Mem_Headroom_GiB,CPU_Nodes_To_Add,Mem_Nodes_To_Add,Recommended_Nodes_To_Add,Binding_Constraint,Status
+DEDICATED,Actual_Running,5,22.2740,93.0971,0.9782,2.9277,21.2958,90.1694,40.1500,122.5469,80,48.9460,249.8415,0,0,0,CPU,OK - within target headroom
+SHARED,Actual_Running,8,15.8900,116.6984,0.9782,2.9277,14.9118,113.7707,72.8750,182.3211,80,28.8210,564.5487,0,0,0,CPU,OK - within target headroom

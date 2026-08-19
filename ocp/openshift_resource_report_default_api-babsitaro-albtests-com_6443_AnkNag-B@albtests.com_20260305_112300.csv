@@ -1,2 +1,0 @@
-Project,Total CPU Requests,Total CPU Limits,Total Memory Requests,Total Memory Limits,Quota CPU Requests,Quota CPU Limits,Quota Memory Requests,Quota Memory Limits,Pod Count
-bab-sit-newbib,8.100,14.525,21.20Gi,56.44Gi,N/A,N/A,N/A,N/A,20

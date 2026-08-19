@@ -1,0 +1,5 @@
+Pool,Basis,Current_Nodes,Avg_CPU_Cores_Per_Node,Avg_Memory_GiB_Per_Node,DaemonSet_CPU_Per_Node,DaemonSet_Mem_Per_Node,Net_CPU_Per_New_Node,Net_Mem_Per_New_Node,CPU_Requests,Mem_Requests,Target_Util_Pct,CPU_Headroom_Cores,Mem_Headroom_GiB,CPU_Nodes_To_Add,Mem_Nodes_To_Add,Recommended_Nodes_To_Add,Binding_Constraint,Status
+DEDICATED,Actual_Running,5,22.2740,93.0971,0.9782,2.9277,21.2958,90.1694,39.1500,118.5469,80,49.9460,253.8415,0,0,0,CPU,OK - within target headroom
+SHARED,Actual_Running,8,15.8900,116.6984,0.9782,2.9277,14.9118,113.7707,74.0750,185.4588,80,27.6210,561.4110,0,0,0,CPU,OK - within target headroom
+DEDICATED,Desired_Replicas,5,22.2740,93.0971,0.9782,2.9277,21.2958,90.1694,8.7910,22.2987,80,80.3050,350.0897,0,0,0,CPU,OK - desired replicas within target
+SHARED,Desired_Replicas,8,15.8900,116.6984,0.9782,2.9277,14.9118,113.7707,125.9686,330.2208,80,-24.2726,416.6490,3,0,3,CPU,ADD 3 node(s) for desired replica demand

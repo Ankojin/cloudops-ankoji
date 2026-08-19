@@ -1,0 +1,2 @@
+Capacity_Type,Node_Count,Running_Pods,Allocatable_CPU_Cores,Allocatable_Memory_GiB,CPU_Requests_Cores,Memory_Requests_GiB,Free_CPU_Cores,Free_Memory_GiB,CPU_Request_Pct,Memory_Request_Pct
+SHARED,8,466,127.1200,933.5872,72.8750,182.3211,54.2450,751.2661,57.33,19.53

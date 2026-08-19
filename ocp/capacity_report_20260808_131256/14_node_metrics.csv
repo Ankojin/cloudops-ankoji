@@ -1,0 +1,17 @@
+Node,CPU_Usage_Cores,CPU_Usage_Pct,Memory_Usage_Bytes,Memory_Usage_Pct
+bab-dev-aro-01-zm4qv-master-0,8.7630,55,25552748544,41
+bab-dev-aro-01-zm4qv-master-1,3.1090,19,20627587072,33
+bab-dev-aro-01-zm4qv-master-2,3.8240,24,25202524160,40
+bab-dev-aro-01-zm4qv-worker-rpa-swec-01-979xq,0.6390,2,18528337920,29
+bab-dev-aro-01-zm4qv-worker-rpa-swec-02-s9mnt,1.1370,3,17813209088,28
+bab-dev-aro-01-zm4qv-worker-swec-01-h4skf,1.0250,6,47321186304,37
+bab-dev-aro-01-zm4qv-worker-swec-02-65kw7,1.7910,11,34510733312,27
+bab-dev-aro-01-zm4qv-worker-swec-03-pdt28,4.1260,25,25945964544,20
+bab-dev-aro-01-zm4qv-worker-swec-04-25fmv,1.8250,11,26318209024,21
+bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r,1.5470,9,32036093952,25
+bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6,5.3030,33,33784070144,26
+bab-dev-aro-01-zm4qv-worker-swec-07-48zfr,0.8800,5,46481276928,37
+bab-dev-aro-01-zm4qv-worker-swec-08-9xmrp,1.7940,11,37059821568,29
+bab-dev-aro-01-zm4qv-worker-swec-09-7d9zr,0.8350,5,19243466752,15
+bab-dev-aro-01-zm4qv-worker-swec-10-62m4m,1.0410,6,23906484224,19
+bab-dev-aro-01-zm4qv-worker-swec-11-tqb4f,0.9380,5,22603104256,18

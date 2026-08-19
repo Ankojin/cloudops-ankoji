@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ARO Ops Dashboard — Live</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+/* ═══ Base — matches generate_report.sh / dashboard.css ══════ */
+*,*::before,*::after{box-sizing:border-box}
+body{font-family:"Segoe UI",Arial,sans-serif;background:#f4f6f9;margin:0;padding:0}
+
+.header{background:linear-gradient(135deg,#1f4e79,#2e75b6);color:#fff;padding:20px 28px;margin-bottom:0}
+.header h1{margin:0 0 4px;font-size:1.5rem;display:flex;align-items:center;gap:12px}
+.header p{margin:4px 0 0;font-size:13px;color:#adc6e0;letter-spacing:.5px}
+.live-dot{width:10px;height:10px;border-radius:50%;background:#3fb950;display:inline-block;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* Tab bar */
+.tab-bar{background:#1a3f63;display:flex;align-items:center;padding:0 20px;gap:2px;
+  border-bottom:3px solid #16334f;position:sticky;top:0;z-index:100}
+.tab-bar button{background:none;border:none;color:#adc6e0;padding:11px 20px;cursor:pointer;
+  font-size:.9rem;border-bottom:3px solid transparent;margin-bottom:-3px;
+  transition:color .15s,border-color .15s;font-weight:500}
+.tab-bar button.active{color:#fff;border-bottom-color:#f78166}
+.tab-bar button:hover:not(.active){color:#fff}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:.82rem;color:#adc6e0}
+#countdown{font-weight:700;color:#79c0ff;font-size:.95rem;min-width:2.5ch}
+.btn-refresh{background:#2e6fad;border:1px solid #3b84c7;color:#fff;
+  border-radius:5px;padding:4px 12px;cursor:pointer;font-size:.82rem}
+.btn-refresh:hover{background:#3b84c7}
+
+/* Cards & Grid */
+.wrap{padding:20px 24px;max-width:1600px;margin:0 auto}
+.card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.10);margin-bottom:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-bottom:20px}
+.grid>.card{margin-bottom:0}
+
+/* Metric numbers */
+.metric{font-size:34px;font-weight:700}
+.green{color:#1a7f37}.yellow{color:#856404}.orange{color:#b26a00}.red{color:#b00020}
+
+/* Badges */
+.badge-safe    {background:#d4edda;color:#1a7f37;padding:3px 10px;border-radius:12px;font-weight:700;font-size:13px}
+.badge-at_risk {background:#fff3cd;color:#856404;padding:3px 10px;border-radius:12px;font-weight:700;font-size:13px}
+.badge-critical{background:#f8d7da;color:#b00020;padding:3px 10px;border-radius:12px;font-weight:700;font-size:13px}
+.badge-green   {background:#d4edda;color:#1a7f37;padding:3px 10px;border-radius:12px;font-weight:700;font-size:13px}
+.badge-yellow  {background:#fff3cd;color:#856404;padding:3px 10px;border-radius:12px;font-weight:700;font-size:13px}
+.badge-orange  {background:#ffe5b4;color:#b26a00;padding:3px 10px;border-radius:12px;font-weight:700;font-size:13px}
+.badge-red     {background:#f8d7da;color:#b00020;padding:3px 10px;border-radius:12px;font-weight:700;font-size:13px}
+
+/* Growth table row colors */
+tr.row-safe    {background:#f0fff4}
+tr.row-at_risk {background:#fffbea}
+tr.row-critical{background:#fff5f5}
+
+/* Pressure box */
+.pressure-box{padding:10px 16px;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:12px;display:inline-block}
+.pressure-GREEN {background:#d4edda;color:#1a7f37}
+.pressure-YELLOW{background:#fff3cd;color:#856404}
+.pressure-ORANGE{background:#ffe5b4;color:#b26a00}
+.pressure-RED   {background:#f8d7da;color:#b00020}
+
+/* Progress bars */
+.bar-wrap{background:#e9ecef;border-radius:8px;overflow:hidden}
+.bar-fill{height:16px;border-radius:8px;transition:width .5s}
+.bar-safe    {background:#1a7f37}
+.bar-at_risk {background:#f39c12}
+.bar-critical{background:#c0392b}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f8f9fa;color:#1f4e79;padding:10px 12px;text-align:left;border-bottom:2px solid #1f4e79;font-weight:600}
+td{padding:9px 12px;border-bottom:1px solid #eee;vertical-align:top}
+tr:hover td{background:#f0f7ff}
+tr:last-child td{border-bottom:none}
+
+/* NS type badges */
+.type-tenant{background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600}
+.type-infra {background:#f3e8ff;color:#6c3483;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600}
+
+/* Project cards */
+.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:12px}
+.project-card{background:#fff;border:1px solid #e0e0e0;border-top-width:4px;border-radius:8px;padding:14px}
+
+/* Overlay */
+#overlay{position:fixed;inset:0;background:rgba(30,60,100,.75);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:200}
+#overlay.hidden{display:none}
+.spinner{width:38px;height:38px;border:3px solid #adc6e0;border-top-color:#fff;
+  border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#overlay-msg{color:#fff;font-size:.95rem;text-align:center;max-width:380px}
+
+/* Calc legend */
+.calc-legend{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 14px;font-size:12px}
+.calc-item{padding:8px 14px;border-radius:0 4px 4px 0;line-height:1.7}
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="overlay">
+  <div class="spinner"></div>
+  <div id="overlay-msg">Connecting to capacity API…</div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <h1><span class="live-dot"></span>ARO Ops Dashboard
+    <span style="padding:3px 12px;background:#1a3f63;border-radius:8px;font-size:14px;font-weight:600;letter-spacing:1px">LIVE</span>
+  </h1>
+  <p>Capacity &nbsp;·&nbsp; Resources &nbsp;·&nbsp; Tenant Chargeback &nbsp;·&nbsp; PVC Inventory</p>
+</div>
+
+<!-- Tab bar -->
+<div class="tab-bar">
+  <button class="active" onclick="switchTab('overview',this)">&#9783; Overview</button>
+  <button onclick="switchTab('dev',this)">DEV Details</button>
+  <button onclick="switchTab('sit',this)">SIT Details</button>
+  <button onclick="switchTab('pools',this)">Dedicated Node Pools</button>
+  <button onclick="switchTab('namespaces',this)">Namespaces</button>
+  <button onclick="switchTab('analytics',this)">&#128202; Analytics</button>
+  <div class="header-right">
+    <span>Refresh in <span id="countdown">5:00</span></span>
+    <span id="last-updated" style="color:#adc6e0">—</span>
+    <button class="btn-refresh" onclick="fetchAll()">↻ Refresh</button>
+  </div>
+</div>
+
+<!-- ══ Overview tab ══ -->
+<div class="tab-panel active" id="tab-overview">
+  <div class="wrap">
+    <div class="grid">
+      <!-- DEV overview card -->
+      <div class="card" style="border-top:4px solid #2e75b6">
+        <h3 style="color:#2e75b6;margin:0 0 10px"><span style="background:#2e75b6;color:#fff;padding:2px 10px;border-radius:6px;font-size:13px;margin-right:8px">DEV</span>Development</h3>
+        <div style="font-size:11px;color:#888;margin-bottom:12px" id="ov-dev-time">—</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+          <div><div style="font-size:11px;color:#888">Workers</div><div class="metric" style="font-size:22px" id="ov-dev-workers">—</div></div>
+          <div><div style="font-size:11px;color:#888">Masters</div><div class="metric" style="font-size:22px" id="ov-dev-masters">—</div></div>
+          <div><div style="font-size:11px;color:#888">CPU Cores</div><div class="metric" style="font-size:22px" id="ov-dev-cpu">—</div></div>
+          <div><div style="font-size:11px;color:#888">Memory GiB</div><div class="metric" style="font-size:22px" id="ov-dev-mem">—</div></div>
+          <div><div style="font-size:11px;color:#888">Pods</div><div class="metric" style="font-size:22px" id="ov-dev-pods">—</div></div>
+        </div>
+        <div style="margin-bottom:7px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>CPU Requested</span><span id="ov-dev-cpupct">—</span></div>
+          <div class="bar-wrap"><div class="bar-fill bar-safe" id="ov-dev-cpubar" style="width:0%;height:10px"></div></div>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Memory Requested</span><span id="ov-dev-mempct">—</span></div>
+          <div class="bar-wrap"><div class="bar-fill bar-safe" id="ov-dev-membar" style="width:0%;height:10px"></div></div>
+        </div>
+        <span id="ov-dev-pressure" class="badge-green">—</span>
+        <div style="margin-top:12px;height:65px"><canvas id="spark-ov-dev"></canvas></div>
+      </div>
+      <!-- SIT overview card -->
+      <div class="card" style="border-top:4px solid #d29922">
+        <h3 style="color:#856404;margin:0 0 10px"><span style="background:#d29922;color:#fff;padding:2px 10px;border-radius:6px;font-size:13px;margin-right:8px">SIT</span>System Integration</h3>
+        <div style="font-size:11px;color:#888;margin-bottom:12px" id="ov-sit-time">—</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+          <div><div style="font-size:11px;color:#888">Workers</div><div class="metric" style="font-size:22px" id="ov-sit-workers">—</div></div>
+          <div><div style="font-size:11px;color:#888">Masters</div><div class="metric" style="font-size:22px" id="ov-sit-masters">—</div></div>
+          <div><div style="font-size:11px;color:#888">CPU Cores</div><div class="metric" style="font-size:22px" id="ov-sit-cpu">—</div></div>
+          <div><div style="font-size:11px;color:#888">Memory GiB</div><div class="metric" style="font-size:22px" id="ov-sit-mem">—</div></div>
+          <div><div style="font-size:11px;color:#888">Pods</div><div class="metric" style="font-size:22px" id="ov-sit-pods">—</div></div>
+        </div>
+        <div style="margin-bottom:7px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>CPU Requested</span><span id="ov-sit-cpupct">—</span></div>
+          <div class="bar-wrap"><div class="bar-fill bar-safe" id="ov-sit-cpubar" style="width:0%;height:10px"></div></div>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Memory Requested</span><span id="ov-sit-mempct">—</span></div>
+          <div class="bar-wrap"><div class="bar-fill bar-safe" id="ov-sit-membar" style="width:0%;height:10px"></div></div>
+        </div>
+        <span id="ov-sit-pressure" class="badge-green">—</span>
+        <div style="margin-top:12px;height:65px"><canvas id="spark-ov-sit"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DEV Details tab ══ -->
+<div class="tab-panel" id="tab-dev"></div>
+
+<!-- ══ SIT Details tab ══ -->
+<div class="tab-panel" id="tab-sit"></div>
+
+<!-- ══ Node Pools tab ══ -->
+<div class="tab-panel" id="tab-pools">
+  <div class="wrap">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="card"><h2 style="color:#2e75b6">DEV — Dedicated Node Pools</h2><div id="pools-dev-content"><p style="color:#aaa">Loading…</p></div></div>
+      <div class="card"><h2 style="color:#856404">SIT — Dedicated Node Pools</h2><div id="pools-sit-content"><p style="color:#aaa">Loading…</p></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Namespaces tab ══ -->
+<div class="tab-panel" id="tab-namespaces">
+  <div class="wrap">
+    <div class="card" style="padding:12px 18px;margin-bottom:16px;background:#f0f7ff;border:1px solid #bcd4f0">
+      <label style="font-size:13px;font-weight:600;color:#1f4e79;margin-right:10px">Environment</label>
+      <select id="ns-env-select" onchange="renderNamespacesTab()"
+        style="padding:4px 10px;border:1px solid #bcd4f0;border-radius:5px;font-size:13px;background:#fff">
+        <option value="DEV">DEV — Development</option>
+        <option value="SIT">SIT — System Integration</option>
+      </select>
+    </div>
+    <div class="calc-legend">
+      <div class="calc-item" style="background:#eaf4fb;border-left:3px solid #2e75b6"><b>CPU / Mem Reserved</b><br><span style="color:#555">Sum of all pod <code>requests</code> in the namespace</span></div>
+      <div class="calc-item" style="background:#eafaf1;border-left:3px solid #1a7f37"><b>CPU / Mem Actual</b><br><span style="color:#555">Real-time usage from Metrics Server</span></div>
+      <div class="calc-item" style="background:#fef9e7;border-left:3px solid #f39c12"><b>% Util</b> = Actual ÷ Reserved × 100<br>
+        <span style="color:#1a7f37;font-weight:600">&#9646; 50–90%</span> healthy &nbsp;
+        <span style="color:#d35400;font-weight:600">&#9646; &lt;50%</span> over-prov &nbsp;
+        <span style="color:#c0392b;font-weight:600">&#9646; &gt;90%</span> tight</div>
+      <div class="calc-item" style="background:#f3e8ff;border-left:3px solid #7d3c98"><b>Row colors</b><br>
+        <span style="display:inline-block;width:10px;height:10px;background:#f3e8ff;border:1px solid #d2b4de;vertical-align:middle;margin-right:3px"></span>Lavender=infra &nbsp;
+        <span style="display:inline-block;width:10px;height:10px;background:#eaf4fb;border:1px solid #bce0f5;vertical-align:middle;margin-right:3px"></span>Blue=tenant even &nbsp;
+        <span style="display:inline-block;width:10px;height:10px;background:#fff;border:1px solid #ddd;vertical-align:middle;margin-right:3px"></span>White=tenant odd</div>
+    </div>
+    <div class="card">
+      <h2 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Chargeback by Namespace <span id="ns-tab-env-label"></span>
+        <select id="ns-env-filter" onchange="renderNamespacesTab()" style="font-size:12px;padding:3px 8px;border:1px solid #ccc;border-radius:6px;margin-left:auto;cursor:pointer">
+          <option value="all">All</option>
+          <option value="tenant">Tenant only</option>
+          <option value="infra">Infra only</option>
+        </select>
+      </h2>
+      <div style="overflow-x:auto">
+        <table><thead><tr>
+          <th>Namespace</th><th>Type</th><th>Pods</th>
+          <th>CPU Reserved</th><th>CPU Actual</th><th>CPU Util %</th>
+          <th>Mem Reserved (GiB)</th><th>Mem Actual (GiB)</th><th>Mem Util %</th>
+        </tr></thead>
+        <tbody id="chargeback-body"><tr><td colspan="9" style="text-align:center;color:#aaa">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Tenant Projects</h2>
+      <p style="color:#555;font-size:13px">
+        <span style="color:#1a7f37;font-weight:600">&#9646; green</span> 50–90% util (healthy) &nbsp;
+        <span style="color:#d35400;font-weight:600">&#9646; amber</span> &lt;50% over-provisioned &nbsp;
+        <span style="color:#c0392b;font-weight:600">&#9646; red</span> &gt;90% tight &nbsp;
+        <span style="color:#2e75b6;font-weight:600">&#9646; blue</span> Metrics unavailable
+      </p>
+      <div class="project-grid" id="project-cards"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Analytics tab ══ -->
+<div class="tab-panel" id="tab-analytics">
+  <div class="wrap">
+    <div class="card">
+      <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        &#128202; Capacity Analytics
+        <select id="an-env-select" onchange="renderAnalyticsTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer">
+          <option value="DEV">DEV</option>
+          <option value="SIT">SIT</option>
+        </select>
+        <select id="an-period-select" onchange="renderAnalyticsTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer">
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+        <button onclick="exportAnalyticsCsv()" style="margin-left:auto;background:#2e75b6;color:#fff;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px">&#8681; Export CSV</button>
+      </h2>
+      <div style="position:relative;height:320px">
+        <canvas id="analytics-chart"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <h3 style="margin:0">Data Table</h3>
+        <button onclick="exportAnalyticsCsv()" style="background:#27ae60;color:#fff;border:none;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px">&#8681; Aggregated CSV</button>
+        <button onclick="exportAnalyticsCsvRaw()" style="background:#555;color:#fff;border:none;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px">&#8681; Raw Snapshots CSV</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Period</th><th>Snapshots</th>
+            <th>Avg CPU %</th><th>Max CPU %</th>
+            <th>Avg Mem %</th><th>Max Mem %</th>
+            <th>Avg Pods</th><th>Max Pods</th>
+            <th>Avg Workers</th>
+            <th>Avg CPU Used (cores)</th>
+            <th>Avg Mem Used (GiB)</th>
+            <th>Total CPU</th><th>Total Mem (GiB)</th>
+          </tr></thead>
+          <tbody id="analytics-tbody">
+            <tr><td colspan="13" style="text-align:center;color:#aaa">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const API  = '';
+const ENVS = ['DEV','SIT'];
+const REFRESH_SECS = 300;
+
+let _status={}, _metrics={}, _history={}, _pools={}, _ns={};
+let _sparkCharts={}, _histCharts={};
+let _remaining = REFRESH_SECS;
+
+// ── Tab switching ────────────────────────────────────────────
+function switchTab(id,btn){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+  if(id==='analytics') renderAnalyticsTab();
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+const $   = id => document.getElementById(id);
+const pct = v  => (+(v||0)).toFixed(1)+'%';
+const f1  = v  => (+(v||0)).toFixed(1);
+const f3  = v  => (+(v||0)).toFixed(3);
+const cap = v  => Math.min(+(v||0),100);
+
+function barClass(p){ return p>85?'bar-critical':p>60?'bar-at_risk':'bar-safe'; }
+function utilColor(u){ return u>90?'#c0392b':u>50?'#1a7f37':'#d35400'; }
+function pressureBadge(p){
+  const m={GREEN:'badge-green',YELLOW:'badge-yellow',ORANGE:'badge-orange',RED:'badge-red'};
+  return m[(p||'GREEN').toUpperCase()]||'badge-green';
+}
+function setBar(id,val){
+  const el=$(id); if(!el) return;
+  el.style.width=cap(val)+'%'; el.className='bar-fill '+barClass(val);
+}
+
+// ── Build per-env tab HTML ───────────────────────────────────
+function buildEnvTab(env){
+  const p=env.toLowerCase();
+  return `<div class="wrap">
+  <div style="margin:0 0 18px;padding:14px 22px;background:linear-gradient(135deg,#1f4e79,#2e75b6);border-radius:10px;color:#fff;display:flex;align-items:center;gap:12px">
+    <span style="font-size:1.4rem">&#9680;</span>
+    <div>
+      <div style="font-size:1rem;font-weight:700">${env} Cluster</div>
+      <div style="font-size:.78rem;opacity:.85;margin-top:2px">Last collected: <span id="${p}-collected-at">—</span></div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+      <span id="${p}-status-badge" class="badge-safe">HEALTHY</span>
+      <span id="${p}-pressure-badge" class="badge-green">GREEN</span>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="card"><h3>Health Score</h3><div class="metric green" id="${p}-health-score">—/100</div></div>
+    <div class="card"><h3>CPU Requested</h3><div class="metric" id="${p}-cpu-pct" style="color:#2e75b6">—%</div>
+      <div style="font-size:12px;color:#888;margin-top:4px"><span id="${p}-cpu-req">—</span> of <span id="${p}-cpu-total">—</span> cores</div></div>
+    <div class="card"><h3>Memory Requested</h3><div class="metric" id="${p}-mem-pct" style="color:#16a085">—%</div>
+      <div style="font-size:12px;color:#888;margin-top:4px"><span id="${p}-mem-req">—</span> of <span id="${p}-mem-total">—</span> GiB</div></div>
+    <div class="card"><h3>Cluster</h3><table style="font-size:12px">
+      <tr><td style="color:#888">Nodes</td><td><b id="${p}-nodes">—</b></td></tr>
+      <tr><td style="color:#888">Workers</td><td><b id="${p}-workers">—</b></td></tr>
+      <tr><td style="color:#888">Masters</td><td><b id="${p}-masters">—</b></td></tr>
+      <tr><td style="color:#888">Namespaces</td><td><b id="${p}-ns-count">—</b></td></tr>
+      <tr><td style="color:#888">Pods</td><td><b id="${p}-pods">—</b></td></tr>
+    </table></div>
+  </div>
+  <div class="card">
+    <h2>Worker Pool Utilization &nbsp;<span id="${p}-util-source" style="padding:2px 10px;border-radius:8px;font-size:12px;background:#d4edda;color:#1a7f37"></span></h2>
+    <table><thead><tr>
+      <th style="width:160px">Resource</th>
+      <th style="width:170px">Used / Available</th>
+      <th>Utilization bar &amp; trend</th>
+    </tr></thead><tbody>
+    <tr>
+      <td><b>CPU</b><br><small style="color:#888" id="${p}-worker-label">— workers</small></td>
+      <td>
+        <div style="font-size:18px;font-weight:700;color:#2e75b6" id="${p}-cpu-used-val">—</div>
+        <div style="font-size:11px;color:#555;margin-top:2px" id="${p}-cpu-avail-txt">—</div>
+        <div style="margin-top:6px;background:#e9ecef;border-radius:4px;height:8px;overflow:hidden">
+          <div id="${p}-cpu-bar-el" style="height:8px;border-radius:4px;background:#2e75b6;width:0%;transition:width .4s"></div></div>
+        <div style="font-size:11px;color:#555;margin-top:2px" id="${p}-cpu-bar-pct">—</div>
+      </td>
+      <td><canvas id="${p}-spark-cpu" height="46" style="width:100%;display:block"></canvas></td>
+    </tr>
+    <tr>
+      <td><b>Memory</b></td>
+      <td>
+        <div style="font-size:18px;font-weight:700;color:#16a085" id="${p}-mem-used-val">—</div>
+        <div style="font-size:11px;color:#555;margin-top:2px" id="${p}-mem-avail-txt">—</div>
+        <div style="margin-top:6px;background:#e9ecef;border-radius:4px;height:8px;overflow:hidden">
+          <div id="${p}-mem-bar-el" style="height:8px;border-radius:4px;background:#16a085;width:0%;transition:width .4s"></div></div>
+        <div style="font-size:11px;color:#555;margin-top:2px" id="${p}-mem-bar-pct">—</div>
+      </td>
+      <td><canvas id="${p}-spark-mem" height="46" style="width:100%;display:block"></canvas></td>
+    </tr>
+    <tr>
+      <td><b>Pods Running</b></td>
+      <td><div style="font-size:18px;font-weight:700;color:#5ba4cf" id="${p}-pods-running">—</div></td>
+      <td><canvas id="${p}-spark-pods" height="46" style="width:100%;display:block"></canvas></td>
+    </tr>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h2>Growth Forecast (vs Worker Pool)</h2>
+    <p style="color:#555;font-size:13px">Safe threshold = 80% of worker capacity. Green=safe · Yellow=monitor · Red=action needed.</p>
+    <table><tr><th>Scenario</th><th>CPU % of Workers</th><th>Memory % of Workers</th><th>Status</th></tr>
+    <tbody id="${p}-growth-rows"><tr><td colspan="4" style="text-align:center;color:#aaa">Loading…</td></tr></tbody></table>
+  </div>
+  <div class="card">
+    <h2>Capacity Planning — Worker Pool</h2>
+    <div id="${p}-pressure-box" class="pressure-box pressure-GREEN">&#9888; Pressure: GREEN</div>
+    <table>
+      <tr><th>Metric</th><th>Value</th></tr>
+      <tr><td>Worker Nodes</td><td><b id="${p}-plan-workers">—</b></td></tr>
+      <tr><td>Worker CPU Capacity</td><td><b id="${p}-plan-cpu">—</b> cores</td></tr>
+      <tr><td>Worker Memory Capacity</td><td><b id="${p}-plan-mem">—</b> GiB</td></tr>
+      <tr><td>CPU Requested (% of workers)</td><td><b id="${p}-plan-cpu-pct">—</b>%</td></tr>
+      <tr><td>Memory Requested (% of workers)</td><td><b id="${p}-plan-mem-pct">—</b>%</td></tr>
+      <tr><td>CPU Actual Used</td><td><b id="${p}-plan-cpu-used">—</b> cores</td></tr>
+      <tr><td>Memory Actual Used</td><td><b id="${p}-plan-mem-used">—</b> GiB</td></tr>
+      <tr><td>Namespaces</td><td><b id="${p}-plan-ns">—</b></td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2 style="display:flex;align-items:center;gap:10px">History
+      <select id="${p}-hist-hours" onchange="changeHistoryRange('${env}')" style="font-size:12px;padding:3px 8px;border:1px solid #ccc;border-radius:6px;cursor:pointer">
+        <option value="1">1 h</option><option value="6">6 h</option>
+        <option value="12">12 h</option><option value="24" selected>24 h</option>
+      </select>
+    </h2>
+    <p style="color:#555;font-size:13px">CPU% and Memory% requested — collected every 5 minutes.</p>
+    <canvas id="${p}-history-chart" height="110"></canvas>
+  </div>
+</div>`;
+}
+
+// Inject per-env tab content immediately
+$('tab-dev').innerHTML = buildEnvTab('DEV');
+$('tab-sit').innerHTML = buildEnvTab('SIT');
+
+// ── Sparkline (static-report style) ─────────────────────────
+function drawSparkline(canvasId, pctVal, color, histPts){
+  const canvas=$(canvasId); if(!canvas) return;
+  canvas.width=canvas.offsetWidth||400;
+  const W=canvas.width, H=46;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#f8f9fa'; ctx.fillRect(0,0,W,H);
+  let pts;
+  if(histPts&&histPts.length>1){
+    const mx=Math.max(...histPts,1);
+    pts=histPts.map((v,i)=>({x:Math.round(i*(W-1)/(histPts.length-1)),y:Math.round(H-(v/mx)*(H-6)-3)}));
+  } else {
+    const n=[.85,.90,.88,.92,.87,.91,.89,.93,.90,1.0];
+    pts=n.map((v,i)=>({x:Math.round(i*(W-1)/(n.length-1)),y:Math.round(H-(pctVal*v/100)*(H-6)-3)}));
+  }
+  ctx.beginPath(); ctx.moveTo(pts[0].x,H);
+  pts.forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.lineTo(pts[pts.length-1].x,H); ctx.closePath();
+  ctx.fillStyle=color+'33'; ctx.fill();
+  ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=2;
+  pts.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
+  const last=pts[pts.length-1];
+  ctx.beginPath(); ctx.arc(last.x,last.y,4,0,2*Math.PI); ctx.fillStyle=color; ctx.fill();
+  const thresh=Math.round(H-0.80*(H-6)-3);
+  ctx.setLineDash([4,3]); ctx.strokeStyle='#e67e22'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,thresh); ctx.lineTo(W,thresh); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ── 24h history Chart.js line chart ─────────────────────────
+function buildHistoryChart(env,points){
+  const p=env.toLowerCase();
+  const canvas=$(p+'-history-chart'); if(!canvas) return;
+  if(_histCharts[env]){_histCharts[env].destroy();}
+  const labels=points.map(r=>{const d=new Date(r.collected_at);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');});
+  _histCharts[env]=new Chart(canvas,{type:'line',data:{labels,datasets:[
+    {label:'CPU %',data:points.map(r=>+(r.cpu_pct||0)),borderColor:'#2e75b6',backgroundColor:'#2e75b633',fill:true,tension:.3,pointRadius:2,borderWidth:2},
+    {label:'Mem %',data:points.map(r=>+(r.mem_pct||0)),borderColor:'#16a085',backgroundColor:'#16a08533',fill:true,tension:.3,pointRadius:2,borderWidth:2},
+  ]},options:{responsive:true,maintainAspectRatio:true,
+    plugins:{legend:{position:'top',labels:{font:{size:11}}},tooltip:{mode:'index',intersect:false}},
+    scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%',font:{size:10}},grid:{color:'#eee'}},x:{ticks:{font:{size:10},maxTicksLimit:12},grid:{display:false}}}}});
+}
+
+// ── Growth forecast rows ─────────────────────────────────────
+function growthRows(d){
+  const wCpu=+(d.worker_cpu||0), wMem=+(d.worker_mem_gib||0);
+  const cReq=+(d.total_cpu||0)*(+(d.cpu_pct||0)/100);
+  const mReq=+(d.total_mem_gib||0)*(+(d.mem_pct||0)/100);
+  return [{l:'Current (now)',f:0},{l:'+25% growth',f:.25},{l:'+50% growth',f:.5},{l:'+75% growth',f:.75},{l:'+100% growth',f:1}]
+    .map(s=>{
+      const fCpu=cReq*(1+s.f), fMem=mReq*(1+s.f);
+      const cP=wCpu>0?(fCpu/wCpu)*100:0, mP=wMem>0?(fMem/wMem)*100:0;
+      const st=cP>85?'critical':cP>70?'at_risk':'safe';
+      return `<tr class="row-${st}"><td><b>${s.l}</b></td>
+        <td><div style="display:flex;align-items:center;gap:8px"><div class="bar-wrap" style="flex:1;height:10px"><div class="bar-fill bar-${st}" style="width:${cap(cP).toFixed(1)}%;height:10px"></div></div><span>${cP.toFixed(1)}%</span></div><small style="color:#888">${fCpu.toFixed(1)} cores</small></td>
+        <td>${mP.toFixed(1)}% <small style="color:#888">(${fMem.toFixed(1)} GiB)</small></td>
+        <td><span class="badge-${st}">${st.replace('_',' ')}</span></td></tr>`;
+    }).join('');
+}
+
+// ── Render overview cards ────────────────────────────────────
+function renderOverview(envs){
+  ENVS.forEach(env=>{
+    const d=envs[env]; if(!d) return;
+    const p=env.toLowerCase();
+    const cpuP=+(d.cpu_pct||0), memP=+(d.mem_pct||0);
+    ($('ov-'+p+'-time')||{}).textContent=d.collected_at?new Date(d.collected_at).toLocaleString():'—';
+    ($('ov-'+p+'-workers')||{}).textContent=d.worker_nodes??'—';
+    ($('ov-'+p+'-masters')||{}).textContent=d.master_nodes??'—';
+    ($('ov-'+p+'-cpu')||{}).textContent=f1(d.worker_cpu);
+    ($('ov-'+p+'-mem')||{}).textContent=f1(d.worker_mem_gib);
+    ($('ov-'+p+'-pods')||{}).textContent=d.pods_running??'—';
+    ($('ov-'+p+'-cpupct')||{}).textContent=pct(cpuP);
+    ($('ov-'+p+'-mempct')||{}).textContent=pct(memP);
+    setBar('ov-'+p+'-cpubar',cpuP); setBar('ov-'+p+'-membar',memP);
+    const pr=$('ov-'+p+'-pressure');
+    if(pr){pr.textContent=d.pressure||'—';pr.className=pressureBadge(d.pressure);}
+  });
+}
+
+// ── Render per-env tab ───────────────────────────────────────
+function renderEnvTab(env,d,hist){
+  const p=env.toLowerCase();
+  const cpuP=+(d.cpu_pct||0), memP=+(d.mem_pct||0);
+  const wCpu=+(d.worker_cpu||0), wMem=+(d.worker_mem_gib||0);
+  const cpuUsed=+(d.cpu_used||0), memUsed=+(d.mem_used_gib||0);
+  const wCpuBar=wCpu>0?Math.min((cpuUsed/wCpu)*100,100):0;
+  const wMemBar=wMem>0?Math.min((memUsed/wMem)*100,100):0;
+  const health=Math.max(0,100-Math.max(cpuP,memP)).toFixed(0);
+  const st=cpuP>85||memP>85?'CRITICAL':cpuP>70||memP>70?'WARNING':'HEALTHY';
+  const stCls={CRITICAL:'red',WARNING:'orange',HEALTHY:'green'}[st];
+  const pressure=(d.pressure||'GREEN').toUpperCase();
+
+  ($(`${p}-collected-at`)||{}).textContent=d.collected_at?new Date(d.collected_at).toLocaleString():'—';
+  const sb=$(`${p}-status-badge`); if(sb){sb.textContent=st;sb.className='badge-'+(st==='HEALTHY'?'safe':st==='WARNING'?'at_risk':'critical');}
+  const pb=$(`${p}-pressure-badge`); if(pb){pb.textContent=pressure;pb.className=pressureBadge(pressure);}
+  const hs=$(`${p}-health-score`); if(hs){hs.textContent=health+'/100';hs.className='metric '+stCls;}
+  ($(`${p}-cpu-pct`)||{}).textContent=pct(cpuP);
+  ($(`${p}-cpu-req`)||{}).textContent=f1(+(d.total_cpu||0)*(cpuP/100))+' cores';
+  ($(`${p}-cpu-total`)||{}).textContent=f1(d.total_cpu);
+  ($(`${p}-mem-pct`)||{}).textContent=pct(memP);
+  ($(`${p}-mem-req`)||{}).textContent=f1(+(d.total_mem_gib||0)*(memP/100))+' GiB';
+  ($(`${p}-mem-total`)||{}).textContent=f1(d.total_mem_gib);
+  ($(`${p}-nodes`)||{}).textContent=d.node_count??'—';
+  ($(`${p}-workers`)||{}).textContent=d.worker_nodes??'—';
+  ($(`${p}-masters`)||{}).textContent=d.master_nodes??'—';
+  ($(`${p}-ns-count`)||{}).textContent=d.ns_count??'—';
+  ($(`${p}-pods`)||{}).textContent=d.pods_running??'—';
+  ($(`${p}-worker-label`)||{}).textContent=(d.worker_nodes??'—')+' worker nodes';
+  ($(`${p}-cpu-used-val`)||{}).textContent=f1(cpuUsed)+' cores';
+  ($(`${p}-cpu-avail-txt`)||{}).textContent=f1(Math.max(0,wCpu-cpuUsed))+' cores free of '+f1(wCpu)+' total';
+  ($(`${p}-cpu-bar-pct`)||{}).textContent=wCpuBar.toFixed(1)+'% utilized';
+  const cpuBarEl=$(`${p}-cpu-bar-el`); if(cpuBarEl){cpuBarEl.style.width=cap(wCpuBar)+'%';cpuBarEl.style.background=wCpuBar>85?'#c0392b':wCpuBar>60?'#e67e22':'#2e75b6';}
+  ($(`${p}-mem-used-val`)||{}).textContent=f1(memUsed)+' GiB';
+  ($(`${p}-mem-avail-txt`)||{}).textContent=f1(Math.max(0,wMem-memUsed))+' GiB free of '+f1(wMem)+' total';
+  ($(`${p}-mem-bar-pct`)||{}).textContent=wMemBar.toFixed(1)+'% utilized';
+  const memBarEl=$(`${p}-mem-bar-el`); if(memBarEl){memBarEl.style.width=cap(wMemBar)+'%';memBarEl.style.background=wMemBar>85?'#c0392b':wMemBar>60?'#e67e22':'#16a085';}
+  ($(`${p}-pods-running`)||{}).textContent=d.pods_running??'—';
+  const us=$(`${p}-util-source`); if(us){us.textContent=cpuUsed>0?'✓ Metrics Server':'Metrics unavailable';us.style.background=cpuUsed>0?'#d4edda':'#fff3cd';us.style.color=cpuUsed>0?'#1a7f37':'#856404';}
+  const gr=$(`${p}-growth-rows`); if(gr) gr.innerHTML=growthRows(d);
+  ($(`${p}-plan-workers`)||{}).textContent=d.worker_nodes||'—';
+  ($(`${p}-plan-cpu`)||{}).textContent=f1(wCpu);
+  ($(`${p}-plan-mem`)||{}).textContent=f1(wMem);
+  ($(`${p}-plan-cpu-pct`)||{}).textContent=pct(cpuP);
+  ($(`${p}-plan-mem-pct`)||{}).textContent=pct(memP);
+  ($(`${p}-plan-cpu-used`)||{}).textContent=f1(cpuUsed);
+  ($(`${p}-plan-mem-used`)||{}).textContent=f1(memUsed);
+  ($(`${p}-plan-ns`)||{}).textContent=d.ns_count||'—';
+  const prBox=$(`${p}-pressure-box`); if(prBox){prBox.className='pressure-box pressure-'+pressure;prBox.innerHTML='&#9888; Pressure: '+pressure;}
+
+  // Sparklines
+  const cpuH=hist?hist.points.map(r=>+(r.cpu_pct||0)):[];
+  const memH=hist?hist.points.map(r=>+(r.mem_pct||0)):[];
+  setTimeout(()=>{
+    drawSparkline(p+'-spark-cpu', wCpuBar,'#2e75b6',cpuH);
+    drawSparkline(p+'-spark-mem', wMemBar,'#16a085',memH);
+    drawSparkline(p+'-spark-pods',+(d.pods_running||0)/10,'#5ba4cf',[]);
+    drawSparkline('spark-ov-'+p, cpuP, env==='DEV'?'#2e75b6':'#d29922',cpuH);
+  },60);
+  if(hist&&hist.points.length>1) buildHistoryChart(env,hist.points);
+}
+
+// ── Render node pools ────────────────────────────────────────
+function renderPools(env,data){
+  const el=$('pools-'+env.toLowerCase()+'-content'); if(!el) return;
+  if(!data.pools||!data.pools.length){el.innerHTML='<p style="color:#aaa">No pool data available.</p>';return;}
+  let h='<table><thead><tr><th>Pool / Taint</th><th>Nodes</th><th>CPU</th><th>Memory</th><th>Type</th></tr></thead><tbody>';
+  data.pools.forEach(pool=>{
+    const bg=pool.dedicated?'#f5f9ff':'#fafafa';
+    const nc=pool.dedicated?'#1f4e79':'#555';
+    const taint=pool.taint_key?`<br><small style="font-family:monospace;color:#888">${pool.taint_key}=${pool.taint_value||''}:${pool.effect||''}</small>`:'';
+    h+=`<tr style="background:${bg};border-bottom:1px solid #eee"><td><b style="color:${nc}">${pool.pool_name||'—'}</b>${taint}</td><td>${pool.node_count||0}</td><td>${f1(pool.cpu_cores)} cores</td><td>${f1(pool.memory_gib)} GiB</td><td>${pool.dedicated?'<span class="type-tenant">dedicated</span>':'<span style="color:#888;font-size:11px">standard</span>'}</td></tr>`;
+  });
+  h+='</tbody></table>';
+  el.innerHTML=h;
+}
+
+// ── Render namespaces tab ────────────────────────────────────
+function renderNamespacesTab(){
+  const env=($('ns-env-select')||{}).value||'DEV';
+  const data=_ns[env];
+  const label=$('ns-tab-env-label'); if(label) label.innerHTML=`<span class="${env==='DEV'?'type-tenant':'type-infra'}" style="font-size:12px;margin-left:8px">${env}</span>`;
+  const tbody=$('chargeback-body'); const cards=$('project-cards');
+  if(!data||!data.namespaces){if(tbody)tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:#aaa">No data</td></tr>';if(cards)cards.innerHTML='';return;}
+  const typeFilter=($('ns-env-filter')||{}).value||'all';
+  let tenantRow=0,rows='',cardHtml='';
+  data.namespaces.forEach(ns=>{
+    const isInfra=ns.ns_type!=='tenant';
+    if(typeFilter==='tenant'&&isInfra) return;
+    if(typeFilter==='infra'&&!isInfra) return;
+    const cU=+(ns.cpu_util_pct||0), mU=+(ns.mem_util_pct||0);
+    const cColor=utilColor(cU), mColor=utilColor(mU);
+    const hasAct=(+(ns.cpu_actual||0)>0||+(ns.mem_actual||0)>0);
+    let bg; if(isInfra){bg='#f3e8ff';}else{tenantRow++;bg=(tenantRow%2===0)?'#eaf4fb':'#ffffff';}
+    rows+=`<tr style="background:${bg};border-bottom:1px solid #e0e0e0">
+      <td>${ns.namespace}</td><td><span class="${isInfra?'type-infra':'type-tenant'}">${isInfra?'infra':'tenant'}</span></td>
+      <td>${ns.pod_count||0}</td><td>${f3(ns.cpu_req)}</td><td>${f3(ns.cpu_actual||0)}</td>
+      <td><b style="color:${cColor}">${cU.toFixed(1)}%</b></td>
+      <td>${f1(ns.mem_req_gib||ns.mem_req||0)}</td><td>${f1(ns.mem_actual||0)}</td>
+      <td><b style="color:${mColor}">${mU.toFixed(1)}%</b></td></tr>`;
+    if(!isInfra){
+      const bc=!hasAct?'#2e75b6':cU>90?'#c0392b':cU>50?'#1a7f37':'#d35400';
+      cardHtml+=`<div class="project-card" style="border-top-color:${bc}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+          <span style="font-weight:700;font-size:13px;color:#1f4e79;word-break:break-all">${ns.namespace}</span>
+          <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:#dbeafe;color:#1e40af;margin-left:6px">${ns.pod_count||0} pods</span>
+        </div>
+        <table style="width:100%;font-size:12px">
+          <tr><td style="color:#555">CPU Reserved</td><td style="text-align:right;font-weight:700;color:#2e75b6">${f3(ns.cpu_req)} cores</td></tr>
+          ${hasAct?`<tr><td style="color:#555">CPU Actual</td><td style="text-align:right;font-weight:700;color:#e67e22">${f3(ns.cpu_actual||0)} cores</td></tr>
+          <tr><td colspan="2"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#e9ecef;border-radius:4px;height:7px"><div style="width:${cap(cU).toFixed(1)}%;height:7px;border-radius:4px;background:${bc}"></div></div><span style="font-size:11px;color:${bc};font-weight:700">${cU.toFixed(1)}% util</span></div></td></tr>`
+          :'<tr><td colspan="2" style="color:#888;font-size:11px">Actual: Metrics unavailable</td></tr>'}
+          <tr><td style="color:#555">Mem Reserved</td><td style="text-align:right;font-weight:700;color:#16a085">${f1(ns.mem_req_gib||ns.mem_req||0)} GiB</td></tr>
+          ${hasAct?`<tr><td style="color:#555">Mem Actual</td><td style="text-align:right;font-weight:700;color:#e74c3c">${f1(ns.mem_actual||0)} GiB</td></tr>
+          <tr><td colspan="2"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#e9ecef;border-radius:4px;height:7px"><div style="width:${cap(mU).toFixed(1)}%;height:7px;border-radius:4px;background:${mColor}"></div></div><span style="font-size:11px;color:${mColor};font-weight:700">${mU.toFixed(1)}% util</span></div></td></tr>`
+          :'<tr><td colspan="2" style="color:#888;font-size:11px">Actual: Metrics unavailable</td></tr>'}
+        </table></div>`;
+    }
+  });
+  if(tbody) tbody.innerHTML=rows||'<tr><td colspan="9" style="color:#aaa;text-align:center">No namespaces</td></tr>';
+  if(cards) cards.innerHTML=cardHtml||'<p style="color:#aaa">No tenant namespaces.</p>';
+}
+
+// ── Main fetch ───────────────────────────────────────────────
+async function fetchAll(){
+  $('overlay').classList.remove('hidden');
+  $('overlay-msg').textContent='Fetching live data…';
+  try{
+    const statusRes=await fetch(API+'/api/v1/status');
+    if(!statusRes.ok) throw new Error('API /status '+statusRes.status);
+    _status=await statusRes.json();
+    if(!_status.envs||Object.keys(_status.envs).length===0){
+      $('overlay-msg').textContent='⏳ Awaiting first collection run — retrying in 30s';
+      setTimeout(loadStatus,30000);
+      return;
+    }
+    if(_status.envs) renderOverview(_status.envs);
+
+    await Promise.all(ENVS.map(async env=>{
+      const [mR,hR,pR,nR]=await Promise.all([
+        fetch(API+'/api/v1/metrics/'+env),
+        fetch(API+'/api/v1/history/'+env+'?hours=24'),
+        fetch(API+'/api/v1/pools/'+env),
+        fetch(API+'/api/v1/namespaces/'+env+'?top=100'),
+      ]);
+      if(mR.ok) _metrics[env]=await mR.json();
+      if(hR.ok) _history[env]=await hR.json();
+      if(pR.ok) _pools[env]=await pR.json();
+      if(nR.ok) _ns[env]=await nR.json();
+      if(_metrics[env]) renderEnvTab(env,_metrics[env],_history[env]);
+      if(_pools[env])   renderPools(env,_pools[env]);
+    }));
+
+    renderNamespacesTab();
+    $('last-updated').textContent='Updated '+new Date().toLocaleTimeString();
+    _remaining=REFRESH_SECS;
+  }catch(err){
+    $('overlay-msg').textContent='⚠ '+err.message+' — retrying in 30s';
+    setTimeout(()=>$('overlay').classList.add('hidden'),5000);
+    return;
+  }
+  $('overlay').classList.add('hidden');
+}
+
+// ── Countdown ────────────────────────────────────────────────
+setInterval(()=>{
+  _remaining--; if(_remaining<=0){fetchAll();return;}
+  const m=Math.floor(_remaining/60),s=_remaining%60;
+  $('countdown').textContent=m+':'+s.toString().padStart(2,'0');
+},1000);
+
+// ── History range change ─────────────────────────────────────
+async function changeHistoryRange(env){
+  const p=env.toLowerCase();
+  const hours=+($(`${p}-hist-hours`)||{value:24}).value||24;
+  try{
+    const r=await fetch(API+'/api/v1/history/'+env+'?hours='+hours);
+    if(r.ok){_history[env]=await r.json();if(_history[env]&&_history[env].points) buildHistoryChart(env,_history[env].points);}
+  }catch(e){console.warn('history fetch failed',e);}
+}
+
+// ── Boot ──────────────────────────────────────────────────────
+fetchAll();
+
+// ── Analytics tab ─────────────────────────────────────────────
+let _analyticsChart = null;
+let _analyticsData  = {};   // cache: key = "ENV:period"
+
+async function renderAnalyticsTab(){
+  const env    = ($('an-env-select')    ||{value:'DEV'}).value;
+  const period = ($('an-period-select') ||{value:'monthly'}).value;
+  const key    = env+':'+period;
+  const tbody  = $('analytics-tbody');
+  if(tbody) tbody.innerHTML='<tr><td colspan="13" style="text-align:center;color:#aaa">Loading…</td></tr>';
+
+  if(!_analyticsData[key]){
+    try{
+      const r = await fetch(API+'/api/v1/aggregate/'+env+'?period='+period);
+      if(r.ok) _analyticsData[key] = await r.json();
+      else{ if(tbody) tbody.innerHTML='<tr><td colspan="13" style="color:#c0392b;text-align:center">API error: '+r.status+'</td></tr>'; return; }
+    }catch(e){
+      if(tbody) tbody.innerHTML='<tr><td colspan="13" style="color:#c0392b;text-align:center">Fetch failed: '+e+'</td></tr>'; return;
+    }
+  }
+
+  const d = _analyticsData[key];
+  if(!d||!d.data||!d.data.length){
+    if(tbody) tbody.innerHTML='<tr><td colspan="13" style="text-align:center;color:#aaa">No historical data yet. Data accumulates over time.</td></tr>';
+    return;
+  }
+
+  // ── Table ──
+  const pFmt = p => {
+    const dt = new Date(p);
+    if(period==='yearly')    return dt.getUTCFullYear();
+    if(period==='quarterly'){
+      const q=Math.floor(dt.getUTCMonth()/3)+1;
+      return `Q${q} ${dt.getUTCFullYear()}`;
+    }
+    return dt.toLocaleDateString('en-GB',{month:'short',year:'numeric',timeZone:'UTC'});
+  };
+
+  const cpuColor  = v => v>85?'color:#c0392b;font-weight:700':v>60?'color:#e67e22;font-weight:600':'';
+  const memColor  = v => v>85?'color:#c0392b;font-weight:700':v>60?'color:#e67e22;font-weight:600':'';
+  const f1 = v => v!=null?parseFloat(v).toFixed(1):'—';
+  const f2 = v => v!=null?parseFloat(v).toFixed(2):'—';
+  const fi = v => v!=null?Math.round(v):'—';
+
+  let html='';
+  d.data.forEach(row=>{
+    const avgCpu = parseFloat(row.avg_cpu_pct)||0;
+    const avgMem = parseFloat(row.avg_mem_pct)||0;
+    html+=`<tr>
+      <td><strong>${pFmt(row.period_start)}</strong></td>
+      <td style="text-align:center">${row.snapshot_count||0}</td>
+      <td style="text-align:right;${cpuColor(avgCpu)}">${f2(row.avg_cpu_pct)}%</td>
+      <td style="text-align:right;${cpuColor(parseFloat(row.max_cpu_pct)||0)}">${f2(row.max_cpu_pct)}%</td>
+      <td style="text-align:right;${memColor(avgMem)}">${f2(row.avg_mem_pct)}%</td>
+      <td style="text-align:right;${memColor(parseFloat(row.max_mem_pct)||0)}">${f2(row.max_mem_pct)}%</td>
+      <td style="text-align:right">${fi(row.avg_pods)}</td>
+      <td style="text-align:right">${fi(row.max_pods)}</td>
+      <td style="text-align:right">${f1(row.avg_worker_nodes)}</td>
+      <td style="text-align:right">${f2(row.avg_cpu_used)}</td>
+      <td style="text-align:right">${f2(row.avg_mem_used_gib)}</td>
+      <td style="text-align:right">${f1(row.avg_total_cpu)}</td>
+      <td style="text-align:right">${f1(row.avg_total_mem_gib)}</td>
+    </tr>`;
+  });
+  if(tbody) tbody.innerHTML = html;
+
+  // ── Chart ──
+  const labels  = d.data.map(r=>pFmt(r.period_start));
+  const avgCpus = d.data.map(r=>parseFloat(r.avg_cpu_pct)||0);
+  const maxCpus = d.data.map(r=>parseFloat(r.max_cpu_pct)||0);
+  const avgMems = d.data.map(r=>parseFloat(r.avg_mem_pct)||0);
+  const maxMems = d.data.map(r=>parseFloat(r.max_mem_pct)||0);
+
+  const canvas = $('analytics-chart');
+  if(!canvas) return;
+  if(_analyticsChart){ _analyticsChart.destroy(); _analyticsChart=null; }
+  _analyticsChart = new Chart(canvas, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Avg CPU %',  data:avgCpus, backgroundColor:'rgba(46,117,182,0.7)',  yAxisID:'y'},
+        {label:'Max CPU %',  data:maxCpus, backgroundColor:'rgba(46,117,182,0.25)', yAxisID:'y', borderColor:'rgba(46,117,182,0.9)',borderWidth:1},
+        {label:'Avg Mem %',  data:avgMems, backgroundColor:'rgba(22,160,133,0.7)',  yAxisID:'y'},
+        {label:'Max Mem %',  data:maxMems, backgroundColor:'rgba(22,160,133,0.25)', yAxisID:'y', borderColor:'rgba(22,160,133,0.9)',borderWidth:1},
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'top'}, title:{display:true, text:`${env} – ${period.charAt(0).toUpperCase()+period.slice(1)} Capacity Utilisation`}},
+      scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%'},title:{display:true,text:'Utilisation (%)'}}}
+    }
+  });
+}
+
+function exportAnalyticsCsv(){
+  const env    = ($('an-env-select')    ||{value:'DEV'}).value;
+  const period = ($('an-period-select') ||{value:'monthly'}).value;
+  window.location.href = API+'/api/v1/export/'+env+'?period='+period;
+}
+
+function exportAnalyticsCsvRaw(){
+  const env = ($('an-env-select')||{value:'DEV'}).value;
+  window.location.href = API+'/api/v1/export/'+env+'?period=raw';
+}
+
+// (analytics loading is handled directly in switchTab above)
+</script>
+</body>
+</html>

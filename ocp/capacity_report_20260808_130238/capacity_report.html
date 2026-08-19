@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenShift Capacity Report</title>
+<style>
+:root{--bg:#f6f8fb;--card:#fff;--text:#1a2332;--muted:#667085;--line:#e4e7ec;
+--blue:#2563eb;--green:#16a34a;--amber:#d97706;--red:#dc2626;--shadow:0 2px 12px rgba(0,0,0,.06)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);
+font-family:Inter,Segoe UI,system-ui,sans-serif;line-height:1.45}
+.wrap{max-width:1100px;margin:0 auto;padding:24px}
+.hero{background:linear-gradient(135deg,#0f1c33,#1e4a8c);color:#fff;border-radius:16px;padding:24px 28px;margin-bottom:20px}
+.hero h1{margin:0 0 6px;font-size:24px}.hero p{margin:0;opacity:.85;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.card h3{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.metric{font-size:28px;font-weight:700}.sub{font-size:12px;color:var(--muted);margin-top:4px}
+.ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}
+.section{margin:22px 0}.section h2{font-size:18px;margin:0 0 12px}
+.twocol{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.bar{height:10px;background:#eef1f6;border-radius:6px;overflow:hidden;margin:6px 0 12px}
+.fill{height:100%;border-radius:6px;background:var(--blue)}.fill.warn{background:var(--amber)}.fill.bad{background:var(--red)}.fill.ok{background:var(--green)}
+.bar-label{font-size:13px;display:flex;justify-content:space-between}
+.info{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 14px;border-radius:8px;font-size:13px;margin-bottom:14px}
+.alert{background:#fff1f2;border-left:4px solid var(--red);padding:12px 14px;border-radius:8px;font-size:13px;margin-bottom:12px}
+.table-wrap{overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px;background:#fff}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th{position:sticky;top:0;background:#f8fafc;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:hover td{background:#f8fbff}
+.empty{padding:16px;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:10px}
+.muted{color:var(--muted);font-size:12px}
+.footer{margin:28px 0 8px;font-size:12px;color:var(--muted)}
+@media(max-width:800px){.grid,.twocol{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.grid,.twocol{grid-template-columns:1fr}}
+</style>
+</head><body><div class="wrap">
+
+<div class="hero">
+  <h1>OpenShift Capacity Report</h1>
+  <p>Generated 2026-08-08T13:03:53+03:00 ·
+  Aligned with Red Hat capacity management: schedule on <b>Requests</b> vs <b>Allocatable</b>, plan scale-out near <b>80%</b> Request/Allocatable.</p>
+</div>
+
+<div class="grid">
+  <div class="card"><h3>Worker nodes</h3><div class="metric">13</div>
+    <div class="sub">Dedicated 5 · Shared 8</div></div>
+  <div class="card"><h3>Add nodes (desired scale)</h3>
+    <div class="metric bad">3</div>
+    <div class="sub">Dedicated +0 · Shared +3</div></div>
+  <div class="card"><h3>Add nodes (running now)</h3>
+    <div class="metric ok">0</div>
+    <div class="sub">Dedicated +0 · Shared +0</div></div>
+  <div class="card"><h3>Placement issues</h3>
+    <div class="metric bad">442</div>
+    <div class="sub">Dedicated-targeted pods on shared nodes</div></div>
+</div>
+
+<div class="section">
+  <h2>Cluster utilization — Requests vs Usage</h2>
+  <div class="info"><b>Requests / Allocatable</b> = scheduler capacity (will pods fit?).
+  <b>Usage / Allocatable</b> = real consumption from metrics-server (<code>oc adm top</code>).
+  Plan scale-out near ~80% requests; use usage to spot over/under-requesting.
+  Metrics collected from oc adm top.</div>
+  <div class="twocol">
+    <div class="card">
+      <h3>Dedicated pool</h3>
+      <div class="bar-label">CPU requests <b>36.3%</b></div><div class="bar"><div class="fill ok" style="width:36.28%"></div></div>
+      <div class="bar-label">CPU usage (metrics) <b>100%</b></div><div class="bar"><div class="fill bad" style="width:100%"></div></div>
+      <div class="bar-label">Memory requests <b>25.8%</b></div><div class="bar"><div class="fill ok" style="width:25.84%"></div></div>
+      <div class="bar-label">Memory usage (metrics) <b>20.3%</b></div><div class="bar"><div class="fill ok" style="width:20.26%"></div></div>
+      <div class="sub">40.4000 / 111.3700 cores requested ·
+      120.2626 / 465.4854 GiB requested</div>
+    </div>
+    <div class="card">
+      <h3>Shared pool</h3>
+      <div class="bar-label">CPU requests <b>59.3%</b></div><div class="bar"><div class="fill ok" style="width:59.29%"></div></div>
+      <div class="bar-label">CPU usage (metrics) <b>100%</b></div><div class="bar"><div class="fill bad" style="width:100%"></div></div>
+      <div class="bar-label">Memory requests <b>20.2%</b></div><div class="bar"><div class="fill ok" style="width:20.17%"></div></div>
+      <div class="bar-label">Memory usage (metrics) <b>28.2%</b></div><div class="bar"><div class="fill ok" style="width:28.17%"></div></div>
+      <div class="sub">75.3750 / 127.1200 cores requested ·
+      188.3211 / 933.5872 GiB requested</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Node recommendation</h2>
+  <div class="info"><b>Primary:</b> Desired Deployment/StatefulSet replicas × pod template Requests (planning).<br>
+  <b>Secondary:</b> Actual Running pod Requests (current pressure).<br>
+  Net capacity per new node = allocatable − DaemonSet Requests (avg 0.9782 CPU, 2.9277 GiB per worker), then × 80% target.</div>
+  <div class="twocol">
+    <div class="card">
+      <h3>Dedicated — desired scale</h3>
+      <div class="metric ok">+0</div>
+      <div class="sub">Binding: CPU · OK - desired replicas within target</div>
+    </div>
+    <div class="card">
+      <h3>Shared — desired scale</h3>
+      <div class="metric bad">+3</div>
+      <div class="sub">Binding: CPU · ADD 3 node(s) for desired replica demand</div>
+    </div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Pool</th><th>Basis</th><th>Current_Nodes</th><th>CPU_Requests</th><th>Mem_Requests</th><th>Net_CPU_Per_New_Node</th><th>Net_Mem_Per_New_Node</th><th>Recommended_Nodes_To_Add</th><th>Binding_Constraint</th><th>Status</th></tr></thead><tbody><tr><td>DEDICATED</td><td>Actual_Running</td><td>5</td><td>40.4000</td><td>120.2626</td><td>21.2958</td><td>90.1694</td><td>0</td><td>CPU</td><td>OK - within target headroom</td></tr><tr><td>SHARED</td><td>Actual_Running</td><td>8</td><td>75.3750</td><td>188.3211</td><td>14.9118</td><td>113.7707</td><td>0</td><td>CPU</td><td>OK - within target headroom</td></tr><tr><td>DEDICATED</td><td>Desired_Replicas</td><td>5</td><td>8.7910</td><td>22.2987</td><td>21.2958</td><td>90.1694</td><td>0</td><td>CPU</td><td>OK - desired replicas within target</td></tr><tr><td>SHARED</td><td>Desired_Replicas</td><td>8</td><td>125.9686</td><td>330.2208</td><td>14.9118</td><td>113.7707</td><td>3</td><td>CPU</td><td>ADD 3 node(s) for desired replica demand</td></tr></tbody></table></div>
+</div>
+
+<div class="section">
+  <h2>Growth scenarios (from current Running)</h2>
+  <div class="table-wrap"><table><thead><tr><th>Pool</th><th>Growth_Pct</th><th>Projected_CPU_Requests</th><th>Projected_Mem_Requests</th><th>Recommended_Nodes_To_Add</th><th>Binding_Constraint</th><th>Status</th></tr></thead><tbody><tr><td>DEDICATED</td><td>10</td><td>44.4400</td><td>132.2889</td><td>0</td><td>CPU</td><td>OK at +10% growth</td></tr><tr><td>DEDICATED</td><td>25</td><td>50.5000</td><td>150.3282</td><td>0</td><td>CPU</td><td>OK at +25% growth</td></tr><tr><td>DEDICATED</td><td>50</td><td>60.6000</td><td>180.3939</td><td>0</td><td>CPU</td><td>OK at +50% growth</td></tr><tr><td>SHARED</td><td>10</td><td>82.9125</td><td>207.1532</td><td>0</td><td>CPU</td><td>OK at +10% growth</td></tr><tr><td>SHARED</td><td>25</td><td>94.2188</td><td>235.4014</td><td>0</td><td>CPU</td><td>OK at +25% growth</td></tr><tr><td>SHARED</td><td>50</td><td>113.0625</td><td>282.4817</td><td>1</td><td>CPU</td><td>ADD 1 node(s) at +50% growth</td></tr></tbody></table></div>
+</div>
+
+<div class="section">
+  <h2>Desired replica demand (top controllers)</h2>
+  <div class="table-wrap"><table><thead><tr><th>Namespace</th><th>Controller</th><th>Desired_Replicas</th><th>CPU_Per_Replica</th><th>Mem_GiB_Per_Replica</th><th>Desired_CPU_Cores</th><th>Desired_Mem_GiB</th><th>Pool_Hint</th></tr></thead><tbody><tr><td>openshift-logging</td><td>StatefulSet/lokistack-ingester</td><td>2</td><td>2.0000</td><td>8.0000</td><td>4.0000</td><td>16.0000</td><td>SHARED</td></tr><tr><td>bab-dev-dgpdpl-bigid-01</td><td>Deployment/bigid-scanner</td><td>1</td><td>3.0000</td><td>4.0000</td><td>3.0000</td><td>4.0000</td><td>SHARED</td></tr><tr><td>bab-dev-rpa-apps-01</td><td>Deployment/du-digitizer-worker-deployment</td><td>3</td><td>1.0000</td><td>2.0000</td><td>3.0000</td><td>6.0000</td><td>SHARED</td></tr><tr><td>openshift-logging</td><td>Deployment/lokistack-querier</td><td>2</td><td>1.5000</td><td>3.0000</td><td>3.0000</td><td>6.0000</td><td>SHARED</td></tr><tr><td>babamldev</td><td>StatefulSet/sas-rabbitmq-server</td><td>3</td><td>1.0000</td><td>2.0000</td><td>3.0000</td><td>6.0000</td><td>DEDICATED</td></tr><tr><td>bab-dev-rpa-apps-01</td><td>Deployment/aievents-deploy</td><td>5</td><td>0.5000</td><td>0.2500</td><td>2.5000</td><td>1.2500</td><td>SHARED</td></tr><tr><td>bab-dev-rpa-apps-01</td><td>Deployment/orchestrator</td><td>2</td><td>1.0000</td><td>2.0000</td><td>2.0000</td><td>4.0000</td><td>SHARED</td></tr><tr><td>openshift-logging</td><td>Deployment/lokistack-distributor</td><td>2</td><td>1.0000</td><td>1.0000</td><td>2.0000</td><td>2.0000</td><td>SHARED</td></tr><tr><td>openshift-logging</td><td>Deployment/lokistack-query-frontend</td><td>2</td><td>1.0000</td><td>1.0000</td><td>2.0000</td><td>2.0000</td><td>SHARED</td></tr><tr><td>bab-dev-rpa-apps-01</td><td>Deployment/du-digitizer</td><td>3</td><td>0.5000</td><td>1.0000</td><td>1.5000</td><td>3.0000</td><td>SHARED</td></tr><tr><td>bab-dev-rpa-apps-01</td><td>Deployment/identity-service-api</td><td>2</td><td>0.6000</td><td>0.8789</td><td>1.2000</td><td>1.7578</td><td>SHARED</td></tr><tr><td>bab-dev-rpa-apps-01</td><td>Deployment/platform-license-accountant</td><td>2</td><td>0.6000</td><td>0.7812</td><td>1.2000</td><td>1.5625</td><td>SHARED</td></tr><tr><td>bab-dev-rpa-apps-01</td><td>Deployment/platform-license-accountant-worker</td><td>2</td><td>0.6000</td><td>0.7812</td><td>1.2000</td><td>1.5625</td><td>SHARED</td></tr><tr><td>bab-dev-cp4i</td><td>Deployment/ibm-mq-operator</td><td>1</td><td>1.0000</td><td>1.0000</td><td>1.0000</td><td>1.0000</td><td>SHARED</td></tr><tr><td>bab-dev-cp4i</td><td>Deployment/integration-navigator-ibm-inte-3c22-deployment</td><td>1</td><td>1.0000</td><td>1.0000</td><td>1.0000</td><td>1.0000</td><td>SHARED</td></tr><tr><td>bab-dev-dgpdpl-bigid-01</td><td>Deployment/bigid-me-agent</td><td>1</td><td>1.0000</td><td>3.0000</td><td>1.0000</td><td>3.0000</td><td>SHARED</td></tr><tr><td>bab-dev-dgpdpl-bigid-01</td><td>Deployment/bigid-reports</td><td>1</td><td>1.0000</td><td>1.0000</td><td>1.0000</td><td>1.0000</td><td>SHARED</td></tr><tr><td>bab-dev-dgpdpl-bigid-privacy-01</td><td>Deployment/pp-bigidme-authentication-manager</td><td>1</td><td>1.0000</td><td>1.4648</td><td>1.0000</td><td>1.4648</td><td>SHARED</td></tr><tr><td>bab-dev-dgpdpl-bigid-privacy-01</td><td>Deployment/pp-bigidme-camunda-engine</td><td>1</td><td>1.0000</td><td>7.8125</td><td>1.0000</td><td>7.8125</td><td>SHARED</td></tr><tr><td>bab-dev-dgpdpl-bigid-privacy-01</td><td>Deployment/pp-bigidme-clamav-service</td><td>1</td><td>1.0000</td><td>2.9297</td><td>1.0000</td><td>2.9297</td><td>SHARED</td></tr><tr><td>bab-dev-dgpdpl-bigid-privacy-01</td><td>Deployment/pp-bigidme-connectors-manager</td><td>1</td><td>1.0000</td><td>1.4648</td><td>1.0000</td><td>1.4648</td><td>SHARED</td></tr><tr><td>bab-dev-dgpdpl-bigid-privacy-01</td><td>Deployment/pp-bigidme-onboarding-service</td><td>1</td><td>1.0000</td><td>1.4648</td><td>1.0000</td><td>1.4648</td><td>SHARED</td></tr><tr><td>bab-dev-dgpdpl-bigid-privacy-01</td><td>Deployment/pp-bigidme-user-request-manager</td><td>1</td><td>1.0000</td><td>1.4648</td><td>1.0000</td><td>1.4648</td><td>SHARED</td></tr><tr><td>bab-dev-rpa-apps-01</td><td>Deployment/aistorage</td><td>2</td><td>0.5000</td><td>1.0000</td><td>1.0000</td><td>2.0000</td><td>SHARED</td></tr><tr><td>bab-dev-rpa-apps-01</td><td>Deployment/platform-messagebus-service</td><td>10</td><td>0.1000</td><td>0.7812</td><td>1.0000</td><td>7.8125</td><td>SHARED</td></tr></tbody></table></div><p class="muted">Showing 25 of 534</p>
+</div>
+
+<div class="section">
+  <h2>Worker node pressure</h2>
+  <div class="table-wrap"><table><thead><tr><th>Node</th><th>Node_Class</th><th>CPU_Request_Pct</th><th>CPU_Usage_Pct</th><th>Memory_Request_Pct</th><th>Memory_Usage_Pct</th><th>CPU_Requests_Cores</th><th>CPU_Usage_Cores</th><th>Memory_Requests_GiB</th><th>Memory_Usage_GiB</th></tr></thead><tbody><tr><td>bab-dev-aro-01-zm4qv-worker-rpa-swec-01-979xq</td><td>DEDICATED</td><td>33.22</td><td>3</td><td>54.46</td><td>29</td><td>10.5790</td><td>1249.0000</td><td>31.4218</td><td>17.12</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-rpa-swec-02-s9mnt</td><td>DEDICATED</td><td>32.27</td><td>2</td><td>52.28</td><td>27</td><td>10.2790</td><td>760.0000</td><td>30.1643</td><td>16.03</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-01-h4skf</td><td>SHARED</td><td>66.60</td><td>17</td><td>19.99</td><td>38</td><td>10.5820</td><td>2776.0000</td><td>23.3246</td><td>44.79</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-02-65kw7</td><td>SHARED</td><td>70.60</td><td>19</td><td>31.30</td><td>27</td><td>11.2190</td><td>3123.0000</td><td>36.5263</td><td>31.85</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-03-pdt28</td><td>SHARED</td><td>24.84</td><td>18</td><td>9.03</td><td>20</td><td>3.9470</td><td>2954.0000</td><td>10.5322</td><td>23.90</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-04-25fmv</td><td>SHARED</td><td>46.95</td><td>12</td><td>13.51</td><td>20</td><td>7.4600</td><td>1959.0000</td><td>15.7647</td><td>24.34</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>SHARED</td><td>71.78</td><td>9</td><td>20.97</td><td>25</td><td>11.4060</td><td>1577.0000</td><td>24.4724</td><td>29.90</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6</td><td>SHARED</td><td>78.11</td><td>38</td><td>23.69</td><td>27</td><td>12.4110</td><td>6069.0000</td><td>27.6510</td><td>32.24</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-07-48zfr</td><td>SHARED</td><td>21.77</td><td>8</td><td>9.07</td><td>35</td><td>3.4590</td><td>1400.0000</td><td>10.5840</td><td>41.00</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-08-9xmrp</td><td>SHARED</td><td>93.71</td><td>12</td><td>33.82</td><td>29</td><td>14.8910</td><td>1922.0000</td><td>39.4659</td><td>34.92</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-09-7d9zr</td><td>DEDICATED</td><td>44.77</td><td>6</td><td>17.15</td><td>15</td><td>7.1140</td><td>1107.0000</td><td>20.0167</td><td>17.96</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-10-62m4m</td><td>DEDICATED</td><td>40.52</td><td>6</td><td>18.12</td><td>19</td><td>6.4390</td><td>1029.0000</td><td>21.1494</td><td>22.18</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-11-tqb4f</td><td>DEDICATED</td><td>37.69</td><td>7</td><td>15.00</td><td>18</td><td>5.9890</td><td>1233.0000</td><td>17.5104</td><td>21.02</td></tr></tbody></table></div>
+</div>
+
+<div class="section">
+  <h2>Top namespaces (Running requests)</h2>
+  <div class="table-wrap"><table><thead><tr><th>Namespace</th><th>Pods</th><th>CPU</th><th>Memory GiB</th></tr></thead><tbody><tr><td>bab-dev-rpa-apps-01</td><td>91</td><td>27.64</td><td>75.5</td></tr><tr><td>openshift-logging</td><td>28</td><td>21.00</td><td>29.9</td></tr><tr><td>babamldev</td><td>129</td><td>16.73</td><td>48.9</td></tr><tr><td>bab-dev-cp4i</td><td>41</td><td>10.04</td><td>32.5</td></tr><tr><td>bab-azure-devops-agents</td><td>15</td><td>8.00</td><td>16.0</td></tr><tr><td>bab-dev-web-baas</td><td>29</td><td>7.80</td><td>13.0</td></tr><tr><td>bab-dev-baasplatform-apps-01</td><td>25</td><td>5.90</td><td>18.5</td></tr><tr><td>bab-dev-newbib</td><td>24</td><td>2.40</td><td>3.8</td></tr><tr><td>openshift-gitops</td><td>8</td><td>1.88</td><td>2.4</td></tr><tr><td>openshift-cluster-csi-drivers</td><td>52</td><td>1.82</td><td>6.7</td></tr><tr><td>openshift-ovn-kubernetes</td><td>18</td><td>1.40</td><td>26.4</td></tr><tr><td>devops-gitops</td><td>6</td><td>1.38</td><td>3.1</td></tr><tr><td>bab-dev-dgpdpl-bigid-01</td><td>6</td><td>1.35</td><td>2.0</td></tr><tr><td>bab-dev-k8s-secrets-store-csi</td><td>22</td><td>1.22</td><td>2.2</td></tr><tr><td>bab-dev-dgpdpl-bigid-privacy-01</td><td>5</td><td>1.20</td><td>1.7</td></tr></tbody></table></div><p class="muted">Showing 15 of 92</p>
+</div>
+
+<div class="section">
+  <h2>Placement exceptions</h2>
+  <div class="alert"><b>442</b> pod(s) have nodeSelector/affinity for dedicated taints but run on shared nodes.</div><div class="table-wrap"><table><thead><tr><th>Namespace</th><th>Pod_Name</th><th>Node</th><th>Matching_Dedicated_Taint_Toleration</th><th>Controller</th></tr></thead><tbody><tr><td>bab-dev-cp4i</td><td>apic-dev-a7s-director-55fd4f8f78-j6x8r</td><td>bab-dev-aro-01-zm4qv-worker-swec-01-h4skf</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-a7s-director-55fd4f8f78</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-a7s-ingestion-0</td><td>bab-dev-aro-01-zm4qv-worker-swec-02-65kw7</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>StatefulSet/apic-dev-a7s-ingestion</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-a7s-mtls-gw-65f7b8ddf7-qbz6r</td><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-a7s-mtls-gw-65f7b8ddf7</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-a7s-storage-0</td><td>bab-dev-aro-01-zm4qv-worker-swec-02-65kw7</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>StatefulSet/apic-dev-a7s-storage</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-analytics-proxy-7c88954b6c-jmsz6</td><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-analytics-proxy-7c88954b6c</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-analytics-push-29769675-nbfsb</td><td>bab-dev-aro-01-zm4qv-worker-swec-03-pdt28</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>Job/apic-dev-mgmt-analytics-push-29769675</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-analytics-ui-54786d94d-h57mh</td><td>bab-dev-aro-01-zm4qv-worker-swec-04-25fmv</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-analytics-ui-54786d94d</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-apim-ff9b7f957-fpmzs</td><td>bab-dev-aro-01-zm4qv-worker-swec-04-25fmv</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-apim-ff9b7f957</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-client-downloads-server-574994c7fd-2x6vm</td><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-client-downloads-server-574994c7fd</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-consumer-catalog-5446b76557-6pnqh</td><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-consumer-catalog-5446b76557</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-juhu-77c886756c-lp9fh</td><td>bab-dev-aro-01-zm4qv-worker-swec-01-h4skf</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-juhu-77c886756c</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-ldap-5c5d9d8c7d-4dds9</td><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-ldap-5c5d9d8c7d</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-lur-84996fbd7f-tds7z</td><td>bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-lur-84996fbd7f</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-natscluster-0</td><td>bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>StatefulSet/apic-dev-mgmt-natscluster</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-portal-proxy-674bc94cf9-6fws8</td><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-portal-proxy-674bc94cf9</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-s3proxy-0</td><td>bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>StatefulSet/apic-dev-mgmt-s3proxy</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-taskmanager-6cfc6c56d8-lclrv</td><td>bab-dev-aro-01-zm4qv-worker-swec-02-65kw7</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-taskmanager-6cfc6c56d8</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-ui-79b4dddfcf-cjtr9</td><td>bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-ui-79b4dddfcf</td></tr><tr><td>bab-dev-cp4i</td><td>apic-dev-mgmt-websocket-proxy-c6849554-5w2dz</td><td>bab-dev-aro-01-zm4qv-worker-swec-01-h4skf</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/apic-dev-mgmt-websocket-proxy-c6849554</td></tr><tr><td>bab-dev-cp4i</td><td>cert-manager-operator-controller-manager-64c45db57d-cwsr2</td><td>bab-dev-aro-01-zm4qv-worker-swec-02-65kw7</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/cert-manager-operator-controller-manager-64c45db57d</td></tr><tr><td>bab-dev-cp4i</td><td>cs-keycloak-0</td><td>bab-dev-aro-01-zm4qv-worker-swec-02-65kw7</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>StatefulSet/cs-keycloak</td></tr><tr><td>bab-dev-cp4i</td><td>datapower-operator-7bffcc979d-v988z</td><td>bab-dev-aro-01-zm4qv-worker-swec-04-25fmv</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/datapower-operator-7bffcc979d</td></tr><tr><td>bab-dev-cp4i</td><td>datapower-operator-conversion-webhook-7579c5f54f-kl99d</td><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/datapower-operator-conversion-webhook-7579c5f54f</td></tr><tr><td>bab-dev-cp4i</td><td>db-01-dev-dash-567bccbb88-g4v9k</td><td>bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/db-01-dev-dash-567bccbb88</td></tr><tr><td>bab-dev-cp4i</td><td>download-sadad-billers-is-5995b95f4b-p2j4d</td><td>bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/download-sadad-billers-is-5995b95f4b</td></tr><tr><td>bab-dev-cp4i</td><td>dummy-is-86b69f5c45-qzzql</td><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/dummy-is-86b69f5c45</td></tr><tr><td>bab-dev-cp4i</td><td>get-billers-list-is-64cddb98-zprf6</td><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/get-billers-list-is-64cddb98</td></tr><tr><td>bab-dev-cp4i</td><td>get-charge-card-list-is-7f8777775d-cvnff</td><td>bab-dev-aro-01-zm4qv-worker-swec-08-9xmrp</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/get-charge-card-list-is-7f8777775d</td></tr><tr><td>bab-dev-cp4i</td><td>get-cust-accts-list-is-77cb47f456-mw8pp</td><td>bab-dev-aro-01-zm4qv-worker-swec-04-25fmv</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/get-cust-accts-list-is-77cb47f456</td></tr><tr><td>bab-dev-cp4i</td><td>ibm-apiconnect-7f5b79fd65-4qkwc</td><td>bab-dev-aro-01-zm4qv-worker-swec-08-9xmrp</td><td>app=sas:NoSchedule;dedicated=uipath:NoSchedule</td><td>ReplicaSet/ibm-apiconnect-7f5b79fd65</td></tr></tbody></table></div><p class="muted">Showing 30 of 442</p>
+</div>
+
+<div class="section">
+  <h2>Node inventory</h2>
+  <div class="table-wrap"><table><thead><tr><th>Node</th><th>role</th><th>ready</th><th>Classification</th><th>dedicated_taint_count</th><th>cpu</th><th>mem</th></tr></thead><tbody><tr><td>bab-dev-aro-01-zm4qv-worker-rpa-swec-01-979xq</td><td>worker</td><td>True</td><td>DEDICATED</td><td>1</td><td>31.85</td><td>57.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-rpa-swec-02-s9mnt</td><td>worker</td><td>True</td><td>DEDICATED</td><td>1</td><td>31.85</td><td>57.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-01-h4skf</td><td>worker</td><td>True</td><td>SHARED</td><td>0</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-02-65kw7</td><td>worker</td><td>True</td><td>SHARED</td><td>0</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-03-pdt28</td><td>worker</td><td>True</td><td>SHARED</td><td>0</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-04-25fmv</td><td>worker</td><td>True</td><td>SHARED</td><td>0</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r</td><td>worker</td><td>True</td><td>SHARED</td><td>0</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6</td><td>worker</td><td>True</td><td>SHARED</td><td>0</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-07-48zfr</td><td>worker</td><td>True</td><td>SHARED</td><td>0</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-08-9xmrp</td><td>worker</td><td>True</td><td>SHARED</td><td>0</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-09-7d9zr</td><td>worker</td><td>True</td><td>DEDICATED</td><td>1</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-10-62m4m</td><td>worker</td><td>True</td><td>DEDICATED</td><td>1</td><td>15.89</td><td>116.69</td></tr><tr><td>bab-dev-aro-01-zm4qv-worker-swec-11-tqb4f</td><td>worker</td><td>True</td><td>DEDICATED</td><td>1</td><td>15.89</td><td>116.69</td></tr></tbody></table></div>
+</div>
+
+<div class="footer">
+  <b>Red Hat OpenShift capacity practices used here</b><br>
+  1. Capacity = sum of pod <b>Requests</b> vs node <b>Allocatable</b> (scheduler does not oversubscribe Requests).<br>
+  2. Overcommit means Limits &gt; Requests on pods — it does <i>not</i> mean scheduling more Requests than Allocatable.<br>
+  3. Prefer always setting CPU/memory Requests; avoid CPU Limits when possible; size Requests from observed average usage.<br>
+  4. Plan scale-out when Request/Allocatable approaches ~80% (OpenShift monitoring guidance / autoscaler pressure).<br>
+  5. DaemonSets consume capacity on every new node — subtracted from net capacity per node.<br>
+  6. Desired replicas (Deployment/STS) are the primary planning signal; Running pods are the current-pressure signal.<br>
+  7. Usage metrics from <code>oc adm top</code> (metrics-server) show real consumption vs Requests for rightsizing.<br>
+  CSVs in the output directory have full detail for Excel (including 14_node_metrics.csv).
+</div>
+
+</div></body></html>

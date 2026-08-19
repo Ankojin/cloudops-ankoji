@@ -1,0 +1,17 @@
+Node,Node_Class,Ready,Allocatable_CPU_Cores,Allocatable_Memory_GiB,Running_Pods,CPU_Requests_Cores,Memory_Requests_GiB,CPU_Free_Cores,Memory_Free_GiB,CPU_Request_Pct,Memory_Request_Pct
+bab-dev-aro-01-zm4qv-master-0,UNKNOWN,True,15.8900,57.6984,67,3.2300,10.2979,12.6600,47.4006,20.33,17.85
+bab-dev-aro-01-zm4qv-master-1,UNKNOWN,True,15.8900,57.6984,42,2.5940,7.7695,13.2960,49.9289,16.32,13.47
+bab-dev-aro-01-zm4qv-master-2,UNKNOWN,True,15.8900,57.6984,64,3.2770,10.0312,12.6130,47.6672,20.62,17.39
+bab-dev-aro-01-zm4qv-worker-rpa-swec-01-979xq,DEDICATED,True,31.8500,57.6951,51,10.3290,31.9561,21.5210,25.7390,32.43,55.39
+bab-dev-aro-01-zm4qv-worker-rpa-swec-02-s9mnt,DEDICATED,True,31.8500,57.6951,55,10.2790,31.9143,21.5710,25.7808,32.27,55.32
+bab-dev-aro-01-zm4qv-worker-swec-01-h4skf,SHARED,True,15.8900,116.6984,73,10.5820,23.3246,5.3080,93.3738,66.60,19.99
+bab-dev-aro-01-zm4qv-worker-swec-02-65kw7,SHARED,True,15.8900,116.6984,74,11.2690,36.7763,4.6210,79.9221,70.92,31.51
+bab-dev-aro-01-zm4qv-worker-swec-03-pdt28,SHARED,True,15.8900,116.6984,24,1.0970,4.4199,14.7930,112.2785,6.90,3.79
+bab-dev-aro-01-zm4qv-worker-swec-04-25fmv,SHARED,True,15.8900,116.6984,51,7.4600,15.7647,8.4300,100.9337,46.95,13.51
+bab-dev-aro-01-zm4qv-worker-swec-05-rwr4r,SHARED,True,15.8900,116.6984,79,11.4060,24.4724,4.4840,92.2260,71.78,20.97
+bab-dev-aro-01-zm4qv-worker-swec-06-qvjx6,SHARED,True,15.8900,116.6984,67,12.4110,27.6510,3.4790,89.0473,78.11,23.69
+bab-dev-aro-01-zm4qv-worker-swec-07-48zfr,SHARED,True,15.8900,116.6984,31,3.7590,10.4463,12.1310,106.2521,23.66,8.95
+bab-dev-aro-01-zm4qv-worker-swec-08-9xmrp,SHARED,True,15.8900,116.6984,67,14.8910,39.4659,0.9990,77.2325,93.71,33.82
+bab-dev-aro-01-zm4qv-worker-swec-09-7d9zr,DEDICATED,True,15.8900,116.6984,61,7.1140,20.0167,8.7760,96.6817,44.77,17.15
+bab-dev-aro-01-zm4qv-worker-swec-10-62m4m,DEDICATED,True,15.8900,116.6984,64,6.4390,21.1494,9.4510,95.5490,40.52,18.12
+bab-dev-aro-01-zm4qv-worker-swec-11-tqb4f,DEDICATED,True,15.8900,116.6984,61,5.9890,17.5104,9.9010,99.1880,37.69,15.00

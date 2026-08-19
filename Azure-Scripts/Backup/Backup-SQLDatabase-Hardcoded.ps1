@@ -22,7 +22,7 @@
 $SubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
 $VaultName = "bab-sit-backup-vault-swec-01"
 $VaultResourceGroup = "bab-sit-backup-rsv-swec-rg-01"
-$VMName = "dadhbdbsqiwv1"
+$VMName = "DADHBDBSQIWV1-new"
 $ServerName = "d2dhbdbsqiwv1.albtests.com"
 $SQLInstanceName = "MSSQLSERVER"
 

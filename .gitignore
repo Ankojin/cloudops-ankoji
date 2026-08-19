@@ -1,32 +1,80 @@
-# Sensitive files - never commit these
-# *.csv
-# **/vm-migration-map.csv
-# **/vm-migration*.csv
+# ============================================================
+# Sensitive files - NEVER COMMIT
+# ============================================================
+
+# Files containing sensitive names
 **/*secret*
+**/*secrets*
 **/*password*
+**/*passwd*
+**/*credential*
+**/*credentials*
 **/*token*
 
-# Azure credentials
-**/.azure/
+# Common secret/config files
+**/secrets.json
+**/credentials.json
 **/azurecreds.json
 **/service-principal.json
 
-# Terraform sensitive files
-**/*.tfstate
-**/*.tfstate.backup
-**/*.tfvars
-**/.terraform/
-
-# Log files with potential sensitive data
-**/*.log
-**/logs/
+# Azure credentials
+**/.azure/
 
 # Environment files
 .env
 .env.*
 !.env.example
 
-# Backup files
+# Certificates / private keys
+**/*.pem
+**/*.key
+**/*.pfx
+**/*.p12
+**/*.jks
+**/*.keystore
+
+# ============================================================
+# Terraform
+# ============================================================
+
+# Terraform state can contain secrets
+**/*.tfstate
+**/*.tfstate.*
+
+# Terraform variable files can contain passwords/secrets
+**/*.tfvars
+**/*.tfvars.json
+
+# Terraform working directory
+**/.terraform/
+
+# ============================================================
+# Logs - may contain sensitive information
+# ============================================================
+
+**/*.log
+**/logs/
+
+# ============================================================
+# Backup / temporary files
+# ============================================================
+
 *.bak
 *.backup
+*.tmp
+*.temp
 *~
+
+# ============================================================
+# OS files
+# ============================================================
+
+Thumbs.db
+Desktop.ini
+
+# ============================================================
+# IDE
+# ============================================================
+
+.vscode/
+.idea/

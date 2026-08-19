@@ -20,6 +20,7 @@
     .\vm-clone-sub-crossregion.ps1 -ExistingVhdAction Skip
     # Skips copying if VHD already exists
 
+    
 .EXAMPLE
     .\vm-clone-sub-crossregion.ps1 -ExistingVhdAction Overwrite
     # Overwrites existing VHDs automatically
@@ -40,15 +41,15 @@ param(
 # ---------------------------- CONFIGURATION ----------------------------
 $sourceSubscriptionId = "2a908090-d056-438c-bcf3-00ce359a72b5"
 $targetSubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
-$sourceResourceGroup = "sit-institutionalbrokerage-rg-01"
-$targetResourceGroup = "bab-sit-abic-ibm-rg-01"
-$sourceVMName = "DAIBMAPSLV1"
-$newVMName = "DAIBMAPSLV1"
+$sourceResourceGroup = "DEV-DevOps-RG-01"
+$targetResourceGroup = "temp-delete-rg-swec-01"
+$sourceVMName = "DTAZRDEVDBWV01"
+$newVMName = "DTAZRDEVDBWV01-clone"
 $location = "swedencentral"  # Target region for new disks/VM
 $vnetrg  = "bab-sit-nw-swec-rg-01"
 $vnetName = "bab-sit-nw-swec-vnet-nonpci-01"
-$subnetName = "snet-sit-nonpci-app-01"
-$vmSize = "Standard_D8s_v5"
+$subnetName = "snet-sit-nonpci-web-01"
+$vmSize = "Standard_D4s_v5"
 
 # Storage account for VHD copy (must exist in target region and subscription)
 $storageAccountName = "babsitvmbootdiag02"
@@ -428,7 +429,7 @@ Write-Host "`n=== CREATING NETWORK INTERFACE ===" -ForegroundColor Cyan
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $vnetrg
 $subnet = $vnet | Get-AzVirtualNetworkSubnetConfig -Name $subnetName
 
-$staticIpAddress = "10.189.66.111" # Change as needed
+$staticIpAddress = "10.189.66.17" # Change as needed
 Write-Host "VNet: $vnetName, Subnet: $subnetName"
 Write-Host "Static IP: $staticIpAddress"
 

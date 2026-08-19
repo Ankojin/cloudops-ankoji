@@ -15,12 +15,12 @@
 # HARDCODED PARAMETERS - UPDATE BEFORE EXECUTION
 # ============================================================================
 
-$SubscriptionId = "43cc4f11-ffb1-4a0d-8420-0ba3746b4248"
-$VaultName = "bab-dev-backup-vault-swec-01"
-$VaultResourceGroup = "bab-dev-backup-rsv-swec-rg-01"
-$VMName = "dadhbdbsqdwv1"
-$ServerName = "d2dhbdbsqdwv1.albtests.com"
-$SQLInstanceName = "d1etl2019v2"  # SQL Server instance name
+$SubscriptionId = "e48414cd-f96d-4414-ae9e-da7fec844f77"
+$VaultName = "bab-sit-backup-vault-swec-01"
+$VaultResourceGroup = "bab-sit-backup-rsv-swec-rg-01"
+$VMName = "DADHBDBSQIWV1"
+$ServerName = "D2DHBDBSQIWV1.albtests.com"
+$SQLInstanceName = "MSSQLSERVER"  # SQL Server instance name
 
 # Set to $true to permanently delete recovery points, $false to retain (recommended)
 $RemoveRecoveryPoints = $false

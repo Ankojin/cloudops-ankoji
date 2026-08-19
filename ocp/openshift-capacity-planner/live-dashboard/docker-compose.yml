@@ -1,0 +1,95 @@
+# =============================================================
+# docker-compose.yml
+# ARO Capacity Planner — Live Monitoring Stack
+#
+# Services:
+#   postgres   — PostgreSQL 15 (stores all snapshots)
+#   api        — FastAPI backend (serves /api/v1/*)
+#   dashboard  — nginx SPA (serves UI + proxies /api)
+#   collector  — bash collector + DB insert (cron every 5 min)
+#
+# Quick start (local test):
+#   cp .env.example .env  # fill in cluster tokens
+#   docker compose up -d
+#   open http://localhost:8080
+# =============================================================
+
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     planner
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-planner}"
+      POSTGRES_DB:       capacity
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"          # remove in production — internal only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planner -d capacity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI backend ────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://planner:${DB_PASSWORD:-planner}@postgres:5432/capacity"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Dashboard (nginx) ──────────────────────────────────────
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:80"            # http://localhost:8080
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Collector (runs every 5 min via crond) ─────────────────
+  collector:
+    build:
+      context: .             # needs planner scripts in parent context
+      dockerfile: collector/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL:   "postgresql://planner:${DB_PASSWORD:-planner}@postgres:5432/capacity"
+      DEV_API:        "${DEV_API:-}"
+      DEV_TOKEN:      "${DEV_TOKEN:-}"
+      SIT_API:        "${SIT_API:-}"
+      SIT_TOKEN:      "${SIT_TOKEN:-}"
+      DEV_ENV_LABEL:  "${DEV_ENV_LABEL:-DEV}"
+      SIT_ENV_LABEL:  "${SIT_ENV_LABEL:-SIT}"
+    volumes:
+      - planner-output:/planner/output  # shared between collector + (optionally) api
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  planner-output:

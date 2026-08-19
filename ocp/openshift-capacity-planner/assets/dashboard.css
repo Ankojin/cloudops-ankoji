@@ -1,0 +1,190 @@
+body {
+
+    font-family:
+    "Segoe UI",
+    Arial,
+    sans-serif;
+
+    background:
+    #f4f6f9;
+
+    margin:
+    0;
+
+    padding:
+    20px;
+
+}
+
+
+
+.header {
+
+    background:
+    linear-gradient(
+    135deg,
+    #1f4e79,
+    #2e75b6
+    );
+
+    color:white;
+
+    padding:25px;
+
+    border-radius:12px;
+
+    margin-bottom:20px;
+
+}
+
+
+
+.grid {
+
+    display:grid;
+
+    grid-template-columns:
+    repeat(
+    auto-fit,
+    minmax(240px,1fr)
+    );
+
+    gap:20px;
+
+}
+
+
+
+.card {
+
+    background:white;
+
+    padding:20px;
+
+    border-radius:12px;
+
+    box-shadow:
+    0 4px 12px
+    rgba(0,0,0,.12);
+
+    margin-bottom:20px;
+
+}
+
+
+
+.metric {
+
+    font-size:34px;
+
+    font-weight:bold;
+
+}
+
+
+
+.green  { color:#1a7f37; }
+.yellow { color:#856404; }
+.orange { color:#b26a00; }
+.red    { color:#b00020; }
+
+/* Status badge pills */
+.badge-safe     { background:#d4edda; color:#1a7f37; padding:3px 10px; border-radius:12px; font-weight:bold; font-size:13px; }
+.badge-at_risk  { background:#fff3cd; color:#856404; padding:3px 10px; border-radius:12px; font-weight:bold; font-size:13px; }
+.badge-critical { background:#f8d7da; color:#b00020; padding:3px 10px; border-radius:12px; font-weight:bold; font-size:13px; }
+.badge-green    { background:#d4edda; color:#1a7f37; padding:3px 10px; border-radius:12px; font-weight:bold; font-size:13px; }
+.badge-yellow   { background:#fff3cd; color:#856404; padding:3px 10px; border-radius:12px; font-weight:bold; font-size:13px; }
+.badge-orange   { background:#ffe5b4; color:#b26a00; padding:3px 10px; border-radius:12px; font-weight:bold; font-size:13px; }
+.badge-red      { background:#f8d7da; color:#b00020; padding:3px 10px; border-radius:12px; font-weight:bold; font-size:13px; }
+
+/* Row background for forecast table */
+tr.row-safe     { background:#f0fff4; }
+tr.row-at_risk  { background:#fffbea; }
+tr.row-critical { background:#fff5f5; }
+
+/* Infra/tenant type badges */
+.type-infra   { background:#e8f0fe; color:#1a56db; padding:2px 8px; border-radius:8px; font-size:12px; }
+.type-tenant  { background:#e8f8e8; color:#1a7f37; padding:2px 8px; border-radius:8px; font-size:12px; }
+
+/* Progress bar */
+.bar-wrap { background:#e9ecef; border-radius:6px; height:12px; width:100%; min-width:80px; }
+.bar-fill { height:12px; border-radius:6px; }
+.bar-safe     { background:#1a7f37; }
+.bar-at_risk  { background:#ffc107; }
+.bar-critical { background:#dc3545; }
+
+/* Pressure level indicator */
+.pressure-box { padding:14px 20px; border-radius:10px; margin-bottom:16px; font-size:15px; font-weight:bold; }
+.pressure-GREEN  { background:#d4edda; color:#1a7f37; border-left:5px solid #1a7f37; }
+.pressure-YELLOW { background:#fff3cd; color:#856404; border-left:5px solid #ffc107; }
+.pressure-ORANGE { background:#ffe5b4; color:#b26a00; border-left:5px solid #fd7e14; }
+.pressure-RED    { background:#f8d7da; color:#b00020; border-left:5px solid #dc3545; }
+
+canvas { max-height:350px; }
+
+
+
+table {
+
+    width:100%;
+
+    border-collapse:
+    collapse;
+
+}
+
+
+
+th {
+
+    background:
+    #1f4e79;
+
+    color:white;
+
+    padding:
+    10px;
+
+}
+
+
+
+td {
+
+    padding:
+    8px;
+
+    border-bottom:
+    1px solid #ddd;
+
+}
+
+
+
+.badge {
+
+    padding:
+    5px 12px;
+
+    border-radius:
+    15px;
+
+    font-weight:
+    bold;
+
+}
+
+
+
+.footer {
+
+    text-align:center;
+
+    font-size:
+    12px;
+
+    color:#666;
+
+    margin-top:30px;
+
+}

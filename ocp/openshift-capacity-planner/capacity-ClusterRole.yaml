@@ -1,0 +1,25 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: capacity-collector-role
+  annotations:
+    description: Read-only access for the ARO Ops capacity collector
+rules:
+- apiGroups: [""]
+  resources: ["namespaces", "nodes", "persistentvolumeclaims", "persistentvolumes", "pods", "resourcequotas"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["machine.openshift.io"]
+  resources: ["machines", "machinesets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["config.openshift.io"]
+  resources: ["clusterversions", "infrastructures"]
+  verbs: ["get", "list"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+  verbs: ["get", "list", "watch"]

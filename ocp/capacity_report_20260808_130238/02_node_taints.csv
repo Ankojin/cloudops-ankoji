@@ -1,0 +1,11 @@
+Node,Taint_Key,Taint_Value,Taint_Effect,Classification
+bab-dev-aro-01-zm4qv-master-0,node-role.kubernetes.io/master,,NoSchedule,SYSTEM/TRANSIENT
+bab-dev-aro-01-zm4qv-master-1,node-role.kubernetes.io/master,,NoSchedule,SYSTEM/TRANSIENT
+bab-dev-aro-01-zm4qv-master-2,node-role.kubernetes.io/master,,NoSchedule,SYSTEM/TRANSIENT
+bab-dev-aro-01-zm4qv-worker-rpa-swec-01-979xq,dedicated,uipath,NoSchedule,DEDICATED/POOL-CANDIDATE
+bab-dev-aro-01-zm4qv-worker-rpa-swec-02-s9mnt,dedicated,uipath,NoSchedule,DEDICATED/POOL-CANDIDATE
+bab-dev-aro-01-zm4qv-worker-swec-03-pdt28,node.kubernetes.io/disk-pressure,,NoSchedule,SYSTEM/TRANSIENT
+bab-dev-aro-01-zm4qv-worker-swec-07-48zfr,node.kubernetes.io/disk-pressure,,NoSchedule,SYSTEM/TRANSIENT
+bab-dev-aro-01-zm4qv-worker-swec-09-7d9zr,app,sas,NoSchedule,DEDICATED/POOL-CANDIDATE
+bab-dev-aro-01-zm4qv-worker-swec-10-62m4m,app,sas,NoSchedule,DEDICATED/POOL-CANDIDATE
+bab-dev-aro-01-zm4qv-worker-swec-11-tqb4f,app,sas,NoSchedule,DEDICATED/POOL-CANDIDATE
