@@ -1,7 +1,0 @@
-Pool,Growth_Pct,Projected_CPU_Requests,Projected_Mem_Requests,Current_Nodes,Avg_CPU_Per_Node,Avg_Mem_Per_Node,Target_Util_Pct,CPU_Nodes_To_Add,Mem_Nodes_To_Add,Recommended_Nodes_To_Add,Binding_Constraint,Status
-DEDICATED,10,44.4400,132.2889,5,22.2740,93.0971,80,0,0,0,CPU,OK at +10% growth
-DEDICATED,25,50.5000,150.3282,5,22.2740,93.0971,80,0,0,0,CPU,OK at +25% growth
-DEDICATED,50,60.6000,180.3939,5,22.2740,93.0971,80,0,0,0,CPU,OK at +50% growth
-SHARED,10,82.9125,207.1532,8,15.8900,116.6984,80,0,0,0,CPU,OK at +10% growth
-SHARED,25,94.2188,235.4014,8,15.8900,116.6984,80,0,0,0,CPU,OK at +25% growth
-SHARED,50,113.0625,282.4817,8,15.8900,116.6984,80,1,0,1,CPU,ADD 1 node(s) at +50% growth
