@@ -64,7 +64,16 @@
 *.tmp
 *.temp
 *~
-
+# Large/generated files
+**/*.msi
+**/.terraform/
+**/output/
+**/ocp/capacity_report_*/
+Azure-Scripts/Appgw/AzureCLI.msi
+autoshutdown/.terraform/
+ocp/openshift-capacity-planner/output/
+ocp/openshift-capacity-planner/live-dashboard/capacity-planner/output/
+ocp/openshift-capacity-planner/live-dashboard/capacity-planner/oc
 # ============================================================
 # OS files
 # ============================================================
