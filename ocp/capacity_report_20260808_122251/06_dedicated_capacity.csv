@@ -1,2 +1,0 @@
-Capacity_Type,Node_Count,Running_Pods,Allocatable_CPU_Cores,Allocatable_Memory_GiB,CPU_Requests_Cores,Memory_Requests_GiB,Free_CPU_Cores,Free_Memory_GiB,CPU_Request_Pct,Memory_Request_Pct
-DEDICATED,5,292,111.3700,465.4854,40.1500,122.5469,71.2200,342.9385,36.05,26.33
