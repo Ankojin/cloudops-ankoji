@@ -23,3 +23,53 @@ rules:
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
   verbs: ["get", "list", "watch"]
+# NEW: required so the collector can locate the Thanos-Querier / prometheus-k8s
+# route in openshift-monitoring. Without this, collect_capacity.sh's Prometheus
+# detection step silently fails and utilization is reported as all zeros.
+- apiGroups: ["route.openshift.io"]
+  resources: ["routes"]
+  verbs: ["get", "list"]
+---
+# NEW: this binding did not exist anywhere in the repo. Without it, the
+# ClusterRole above grants nothing -- `oc get pvc --all-namespaces` and similar
+# cluster-scoped calls return Forbidden, which is the direct cause of missing
+# PVC data (and, given collect_capacity.sh has `set -Eeuo pipefail` and no
+# error handling on that call, it kills the rest of the collection run too).
+#
+# IMPORTANT: bind this to whichever identity actually runs `oc` against the
+# target cluster:
+#   - If collection uses `run.sh --token $DEV_TOKEN/$SIT_TOKEN`, the subject
+#     must be the ServiceAccount in the DEV/SIT cluster that token belongs to
+#     (created by generate-aro-tokens.sh).
+#   - If running self-monitoring in-cluster via collector.yaml with no
+#     --token, the subject is the CronJob's pod ServiceAccount instead
+#     (see the serviceAccountName note for collector.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: capacity-collector-binding
+subjects:
+- kind: ServiceAccount
+  name: capacity-collector       # e.g. capacity-collector
+  namespace: capacity-monitor  # e.g. capacity-monitor, or a dedicated ns in DEV/SIT
+roleRef:
+  kind: ClusterRole
+  name: capacity-collector-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# NEW: reaching the Thanos-Querier route (added above) is not enough on its
+# own -- OpenShift's monitoring stack authorizes requests through the route
+# via SubjectAccessReview, which requires the built-in cluster-monitoring-view
+# ClusterRole (ships with OpenShift). Bind it to the same identity as above.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: capacity-collector-monitoring-view-binding
+subjects:
+- kind: ServiceAccount
+  name: capacity-collector
+  namespace: capacity-monitor
+roleRef:
+  kind: ClusterRole
+  name: cluster-monitoring-view
+  apiGroup: rbac.authorization.k8s.io

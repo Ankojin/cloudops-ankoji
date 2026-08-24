@@ -12,6 +12,13 @@
 
 set -Eeuo pipefail
 
+# Set COLLECT_DEBUG=true as an env var on the Container App Job to get full
+# command tracing in the log for the next run — helps pinpoint exactly which
+# oc/curl/jq call is failing rather than guessing from symptoms.
+if [[ "${COLLECT_DEBUG:-false}" == "true" ]]; then
+    set -x
+fi
+
 
 #############################################
 # Environment
@@ -129,7 +136,7 @@ oc get nodes \
 
 
 NODE_COUNT=$(jq '.items | length' \
-"${CAPACITY_RAW}/nodes.json")
+"${CAPACITY_RAW}/nodes.json" 2>/dev/null || echo 0)
 
 
 
@@ -525,10 +532,13 @@ $pod,
 
 log INFO "Creating pod-to-node mapping"
 
+# Includes pod name (not just namespace+node) so analyze_capacity.sh can join
+# this against per-pod CPU/memory requests and attribute actual resource
+# demand to the specific pool a pod landed on — not just a pod count.
 jq -r '
 .items[]
 | select(.status.phase == "Running" and .spec.nodeName != null)
-| [.metadata.namespace, .spec.nodeName]
+| [.metadata.namespace, .metadata.name, .spec.nodeName]
 | @csv
 ' \
 "${CAPACITY_RAW}/pods.json" \
@@ -551,7 +561,7 @@ oc get namespaces \
 
 
 NAMESPACE_COUNT=$(jq '.items | length' \
-"${CAPACITY_RAW}/namespaces.json")
+"${CAPACITY_RAW}/namespaces.json" 2>/dev/null || echo 0)
 
 
 
@@ -586,12 +596,18 @@ log INFO "Processing PVC inventory"
 oc get pvc \
 --all-namespaces \
 -o json \
-> "${CAPACITY_RAW}/pvcs.json"
+--chunk-size=250 \
+--request-timeout=120s \
+> "${CAPACITY_RAW}/pvcs.json" 2>&1 || {
+    log ERROR "oc get pvc failed — see output below (check RBAC and/or network timeout)"
+    log ERROR "$(tail -c 2000 "${CAPACITY_RAW}/pvcs.json" 2>/dev/null)"
+    echo '{"items":[]}' > "${CAPACITY_RAW}/pvcs.json"
+}
 
 
 
 PVC_COUNT=$(jq '.items | length' \
-"${CAPACITY_RAW}/pvcs.json")
+"${CAPACITY_RAW}/pvcs.json" 2>/dev/null || echo 0)
 
 
 

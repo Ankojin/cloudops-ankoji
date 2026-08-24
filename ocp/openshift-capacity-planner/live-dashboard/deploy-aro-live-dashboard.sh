@@ -39,7 +39,11 @@
 # Usage:
 #   # Minimal — secrets prompted interactively
 #   ./deploy-aro-live-dashboard.sh
-#
+#    --rebuild-images     rebuild all 4 + update all Container Apps
+#   --rebuild-planner    rebuild capacity-planner base image only
+#   --rebuild-api        rebuild API image + update bab-aro-ops-api-01
+#   --rebuild-dashboard  rebuild dashboard image + update bab-aro-ops-dashboard-01
+#   --rebuild-collector  rebuild collector image + update bab-aro-ops-collector-01
 #   # Non-interactive (CI / pipeline)
 #   export ARO_DB_PASSWORD="..." ARO_DEV_TOKEN="..." ARO_SIT_TOKEN="..."
 #   ./deploy-aro-live-dashboard.sh --no-prompt

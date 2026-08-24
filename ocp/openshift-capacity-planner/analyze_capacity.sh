@@ -169,6 +169,125 @@ done
 
 
 #############################################
+# Node Pool Detection (dedicated worker pools)
+# MOVED EARLY: must run before the worker-pool pressure gauge below so
+# dedicated-pool node capacity can be excluded from the "standard worker
+# pool" denominator, and dedicated-pool pods can be excluded from its
+# request numerator. See "Standard vs Dedicated Worker Capacity" section.
+#
+# Looks for WORKER nodes that carry custom taints (e.g. app=sas:NoSchedule)
+# identifying dedicated pools. System/lifecycle taints (node.kubernetes.io/*)
+# are excluded. A worker node with zero qualifying taints is "standard-worker".
+#############################################
+
+log INFO "Detecting node pools (worker taints)"
+
+jq -c '
+.items[] |
+select(
+  (.metadata.labels["node-role.kubernetes.io/master"]        == null) and
+  (.metadata.labels["node-role.kubernetes.io/control-plane"] == null) and
+  (.metadata.labels["node-role.kubernetes.io/infra"]         == null)
+) |
+(
+  [.spec.taints[]? |
+    select(
+      (.key | startswith("node.kubernetes.io/")      | not) and
+      (.key | startswith("node-role.kubernetes.io/") | not)
+    )
+  ]
+) as $custom_taints |
+{
+  name:            .metadata.name,
+  custom_taints:   $custom_taints,
+  cpu_allocatable: (.status.allocatable.cpu    // "0"),
+  mem_allocatable: (.status.allocatable.memory // "0")
+}
+' "${CAPACITY_RAW}/nodes.json" \
+| jq -rs '
+[
+  .[] |
+  . as $node |
+  if ($node.custom_taints | length) > 0 then
+    $node.custom_taints[] |
+    {
+      pool_key:    (.key + (if .value and .value != "" then "=" + .value else "" end)),
+      taint_str:   (.key + (if .value and .value != "" then "=" + .value else "" end) + ":" + .effect),
+      taint_key:   .key,
+      taint_value: (.value // ""),
+      effect:      .effect,
+      node_name:   $node.name,
+      cpu:         $node.cpu_allocatable,
+      mem:         $node.mem_allocatable
+    }
+  else
+    {
+      pool_key:    "standard-worker",
+      taint_str:   "none",
+      taint_key:   "",
+      taint_value: "",
+      effect:      "none",
+      node_name:   $node.name,
+      cpu:         $node.cpu_allocatable,
+      mem:         $node.mem_allocatable
+    }
+  end
+] |
+group_by(.pool_key) |
+map(
+  . as $pool |
+  {
+    pool_name:   $pool[0].pool_key,
+    taint:       $pool[0].taint_str,
+    taint_key:   $pool[0].taint_key,
+    taint_value: $pool[0].taint_value,
+    effect:      $pool[0].effect,
+    dedicated:   ($pool[0].pool_key != "standard-worker"),
+    node_count:  ($pool | length),
+    nodes:       ($pool | map(.node_name) | unique),
+    cpu_cores: (
+      $pool | map(
+        .cpu |
+        if endswith("m") then (.[:-1] | tonumber) / 1000
+        else (tonumber? // 0)
+        end
+      ) | add // 0 | (. * 100 | round) / 100
+    ),
+    memory_gib: (
+      $pool | map(
+        .mem |
+        if endswith("Ki") then (.[:-2] | tonumber) / 1048576
+        elif endswith("Mi") then (.[:-2] | tonumber) / 1024
+        elif endswith("Gi") then (.[:-2] | tonumber)
+        elif endswith("Ti") then (.[:-2] | tonumber) * 1024
+        else (tonumber? // 0) / 1073741824
+        end
+      ) | add // 0 | (. * 10 | round) / 10
+    )
+  }
+) |
+sort_by(if .dedicated then 0 else 1 end)
+' > "${CAPACITY_JSON}/node_pools_raw.json"
+
+# Plain node -> pool_name lookup, comma-separated, no quoting — used below
+# to join individual pod requests against the pool their node belongs to.
+jq -r '
+.[] as $p | $p.nodes[] | [., $p.pool_name] | @csv
+' "${CAPACITY_JSON}/node_pools_raw.json" \
+| tr -d '"' \
+> "${CAPACITY_RAW}/node_pool_lookup.csv"
+
+# Total capacity carved out by dedicated pools — subtracted from the
+# all-worker total below to get the *standard* worker pool's own capacity.
+DEDICATED_POOL_CPU=$(jq '[.[] | select(.dedicated) | .cpu_cores] | add // 0' "${CAPACITY_JSON}/node_pools_raw.json")
+DEDICATED_POOL_MEM=$(jq '[.[] | select(.dedicated) | .memory_gib] | add // 0' "${CAPACITY_JSON}/node_pools_raw.json")
+DEDICATED_POOL_COUNT=$(jq '[.[] | select(.dedicated)] | length' "${CAPACITY_JSON}/node_pools_raw.json")
+
+log INFO "Dedicated pools found: ${DEDICATED_POOL_COUNT} (${DEDICATED_POOL_CPU} cores / ${DEDICATED_POOL_MEM} GiB carved out of the worker fleet)"
+
+
+
+#############################################
 # Cluster totals
 #############################################
 
@@ -417,6 +536,74 @@ print ns","pods[ns]","cpu_total[ns]","mem_total[ns]
 ' \
 "${CAPACITY_RAW}/pod_requests_raw.csv" \
 >> "${CAPACITY_CSV}/namespace_usage.csv"
+
+
+
+#############################################
+# Pool Request Attribution
+#
+# BUG FIX: the cluster-wide CPU_REQUEST/MEM_REQUEST totals (computed later,
+# from namespace_usage.csv) include every pod in every namespace regardless
+# of which node it actually landed on. Comparing that global total against
+# worker-only (or standard-worker-only) capacity overstates pressure whenever
+# infra nodes or dedicated/tainted worker pools are carrying real load —
+# those pods' requests get counted against capacity they were never
+# competing for.
+#
+# This join attributes each pod's request to the specific pool (standard
+# worker vs. a named dedicated pool) its node belongs to, using the
+# pod-name-enriched pod_node_map.csv and the node_pool_lookup.csv built
+# earlier from node_pools_raw.json. Pods on master/infra nodes are dropped
+# entirely — they were never eligible to consume worker capacity.
+#############################################
+
+log INFO "Attributing pod requests to worker pools"
+
+POOL_REQUESTS_CSV="${CAPACITY_JSON}/pool_requests.csv"
+
+if [[ -f "${CAPACITY_RAW}/pod_node_map.csv" && -f "${CAPACITY_RAW}/node_pool_lookup.csv" ]]; then
+  awk -F',' '
+  # File 1: node_pool_lookup.csv -> node,pool_name (unquoted)
+  FNR==NR { node_pool[$1] = $2; next }
+
+  # File 2: pod_node_map.csv -> "namespace","pod","node" (quoted)
+  FILENAME ~ /pod_node_map/ {
+    gsub(/"/, "", $0)
+    n = split($0, f, ",")
+    if (n >= 3) pod_node[f[1] SUBSEP f[2]] = f[3]
+    next
+  }
+
+  # File 3: pod_requests_raw.csv -> "namespace","pod",cpu,mem (quoted ns/pod)
+  {
+    gsub(/"/, "", $1); gsub(/"/, "", $2)
+    ns = $1; pod = $2; cpu = $3 + 0; mem = $4 + 0
+    key = ns SUBSEP pod
+    if (!(key in pod_node)) next          # pod not Running / not mapped — skip
+    node = pod_node[key]
+    if (!(node in node_pool)) next        # master/infra node — not worker capacity, skip
+    pool = node_pool[node]
+    pool_cpu[pool] += cpu
+    pool_mem[pool] += mem
+  }
+  END {
+    for (p in pool_cpu) printf "%s,%.3f,%.3f\n", p, pool_cpu[p], pool_mem[p]+0
+  }
+  ' "${CAPACITY_RAW}/node_pool_lookup.csv" "${CAPACITY_RAW}/pod_node_map.csv" "${CAPACITY_RAW}/pod_requests_raw.csv" \
+  > "${POOL_REQUESTS_CSV}" 2>/dev/null || echo "" > "${POOL_REQUESTS_CSV}"
+else
+  log INFO "WARN: pod_node_map.csv or node_pool_lookup.csv missing — pool-level request attribution unavailable, standard-worker figures will read as 0"
+  echo "" > "${POOL_REQUESTS_CSV}"
+fi
+
+# Standard worker pool's own requested CPU/memory (excludes dedicated pools
+# and excludes anything scheduled on master/infra nodes).
+STANDARD_WORKER_CPU_REQUEST=$(awk -F',' '$1=="standard-worker"{print $2}' "${POOL_REQUESTS_CSV}")
+STANDARD_WORKER_MEM_REQUEST=$(awk -F',' '$1=="standard-worker"{print $3}' "${POOL_REQUESTS_CSV}")
+STANDARD_WORKER_CPU_REQUEST="${STANDARD_WORKER_CPU_REQUEST:-0}"
+STANDARD_WORKER_MEM_REQUEST="${STANDARD_WORKER_MEM_REQUEST:-0}"
+
+log INFO "Standard worker pool requested: ${STANDARD_WORKER_CPU_REQUEST} cores / ${STANDARD_WORKER_MEM_REQUEST} GiB (dedicated pools and infra/master excluded)"
 
 
 
@@ -933,6 +1120,17 @@ NR>1 { gsub(/"/,"",$2); if($2=="worker") sum+=$4 }
 END { printf "%.2f", sum+0 }
 ' "${CAPACITY_CSV}/node_capacity.csv")
 
+# BUG FIX: WORKER_CPU/WORKER_MEM above are ALL worker-labeled nodes, which
+# includes any dedicated/tainted pools (node_pools_raw.json, built earlier,
+# still classifies them role="worker"). The pressure gauge below must be
+# scoped to the STANDARD worker pool only — general-purpose, untainted
+# nodes — otherwise dedicated-pool capacity and demand get blended into the
+# same number as standard-worker capacity/demand, which is meaningless for
+# either one. DEDICATED_POOL_CPU/MEM were computed in the Node Pool
+# Detection section above.
+STANDARD_WORKER_CPU=$(awk "BEGIN{ v=${WORKER_CPU}-${DEDICATED_POOL_CPU}; printf \"%.3f\",(v<0?0:v) }")
+STANDARD_WORKER_MEM=$(awk "BEGIN{ v=${WORKER_MEM}-${DEDICATED_POOL_MEM}; printf \"%.2f\",(v<0?0:v) }")
+
 WORKER_COUNT=$(awk -F',' 'NR>1 { gsub(/"/,"",$2); if($2=="worker") c++ } END { print c+0 }' \
 "${CAPACITY_CSV}/node_capacity.csv")
 
@@ -967,26 +1165,31 @@ END { printf "%.2f", sum+0 }
 INFRA_NODE_COUNT=$(awk -F',' 'NR>1 { gsub(/"/,"",$2); if($2=="infra") c++ } END { print c+0 }' \
 "${CAPACITY_CSV}/node_capacity.csv")
 
-# Safe threshold = 80% of worker capacity
-WORKER_CPU_SAFE=$(awk "BEGIN{printf \"%.3f\",${WORKER_CPU}*0.80}")
-WORKER_MEM_SAFE=$(awk "BEGIN{printf \"%.2f\",${WORKER_MEM}*0.80}")
+# Safe threshold = 80% of STANDARD worker pool capacity (dedicated pools excluded)
+WORKER_CPU_SAFE=$(awk "BEGIN{printf \"%.3f\",${STANDARD_WORKER_CPU}*0.80}")
+WORKER_MEM_SAFE=$(awk "BEGIN{printf \"%.2f\",${STANDARD_WORKER_MEM}*0.80}")
 
-# How many cores/GB remain before hitting safe threshold
+# How many cores/GB remain before hitting safe threshold.
+# BUG FIX: previously used the cluster-wide CPU_REQUEST/MEM_REQUEST, which
+# included pods on infra nodes and on dedicated/tainted pools — resources
+# those pods were never competing with standard workers for. Now uses
+# STANDARD_WORKER_CPU_REQUEST/MEM_REQUEST, attributed per-pod via actual
+# node placement (see "Pool Request Attribution" section).
 WORKER_CPU_AVAILABLE=$(awk "BEGIN{
-    v=${WORKER_CPU_SAFE}-${CPU_REQUEST}
+    v=${WORKER_CPU_SAFE}-${STANDARD_WORKER_CPU_REQUEST}
     printf \"%.3f\",(v<0?0:v)
 }")
 WORKER_MEM_AVAILABLE=$(awk "BEGIN{
-    v=${WORKER_MEM_SAFE}-${MEM_REQUEST}
+    v=${WORKER_MEM_SAFE}-${STANDARD_WORKER_MEM_REQUEST}
     printf \"%.2f\",(v<0?0:v)
 }")
 
-# Utilization % against worker pool
+# Utilization % against the STANDARD worker pool only
 WORKER_CPU_PCT=$(awk "BEGIN{
-    printf \"%.2f\",(${WORKER_CPU}>0)?(${CPU_REQUEST}/${WORKER_CPU})*100:0
+    printf \"%.2f\",(${STANDARD_WORKER_CPU}>0)?(${STANDARD_WORKER_CPU_REQUEST}/${STANDARD_WORKER_CPU})*100:0
 }")
 WORKER_MEM_PCT=$(awk "BEGIN{
-    printf \"%.2f\",(${WORKER_MEM}>0)?(${MEM_REQUEST}/${WORKER_MEM})*100:0
+    printf \"%.2f\",(${STANDARD_WORKER_MEM}>0)?(${STANDARD_WORKER_MEM_REQUEST}/${STANDARD_WORKER_MEM})*100:0
 }")
 
 # Pressure level
@@ -1006,16 +1209,19 @@ BEGIN{
         print 0
 }')
 
-# Growth forecast — grows total requests, checks against worker pool
+# Growth forecast — grows STANDARD WORKER pool demand, checks against
+# STANDARD WORKER pool capacity (dedicated pools excluded — same fix as the
+# pressure gauge above; growing the blended global request against blended
+# worker capacity inherited the same overstatement bug).
 create_growth()
 {
     local percent=$1
     awk \
-    -v cpu="${CPU_REQUEST}" \
-    -v mem="${MEM_REQUEST}" \
+    -v cpu="${STANDARD_WORKER_CPU_REQUEST}" \
+    -v mem="${STANDARD_WORKER_MEM_REQUEST}" \
     -v factor="${percent}" \
-    -v worker_cpu="${WORKER_CPU}" \
-    -v worker_mem="${WORKER_MEM}" '
+    -v worker_cpu="${STANDARD_WORKER_CPU}" \
+    -v worker_mem="${STANDARD_WORKER_MEM}" '
     BEGIN{
         cpu_future = cpu*(1+factor/100)
         mem_future = mem*(1+factor/100)
@@ -1053,7 +1259,7 @@ log INFO "Generating capacity planning summary"
 cat > "${CAPACITY_JSON}/capacity_planning.json" <<EOF
 {
     "generated": "$(date -Iseconds)",
-    "note": "All thresholds computed against worker-node pool only. Masters are excluded — they run control-plane components and cannot schedule tenant workloads.",
+    "note": "Pressure/utilization figures below are scoped to the STANDARD worker pool only (dedicated/tainted pools excluded). See dedicated_pools block and node_pools.json for per-project-pool figures. Masters are excluded entirely — they run control-plane components and cannot schedule tenant workloads.",
 
     "master_pool": {
         "master_nodes": ${MASTER_COUNT},
@@ -1076,12 +1282,26 @@ cat > "${CAPACITY_JSON}/capacity_planning.json" <<EOF
         "cpu_cores_per_node": ${NODE_CPU},
         "cpu_cores_total": ${WORKER_CPU},
         "memory_gb_total": ${WORKER_MEM},
-        "schedulable": true
+        "schedulable": true,
+        "note": "ALL worker-labeled nodes, including any dedicated/tainted pools. Informational only — pressure/utilization below use standard_worker_pool, not this total."
+    },
+
+    "standard_worker_pool": {
+        "cpu_cores_total": ${STANDARD_WORKER_CPU},
+        "memory_gb_total": ${STANDARD_WORKER_MEM},
+        "note": "worker_pool minus dedicated/tainted pool capacity. This is what current_utilization, safe_threshold_80pct, headroom_for_new_projects, and pressure_level below are actually computed against."
+    },
+
+    "dedicated_pools": {
+        "pool_count": ${DEDICATED_POOL_COUNT},
+        "cpu_cores_total": ${DEDICATED_POOL_CPU},
+        "memory_gb_total": ${DEDICATED_POOL_MEM},
+        "note": "Aggregate across all dedicated/tainted pools. Per-pool capacity, requested CPU/memory, utilization %, and per-project pod attribution are in node_pools.json."
     },
 
     "current_utilization": {
-        "cpu_cores_requested": ${CPU_REQUEST},
-        "memory_gb_requested": ${MEM_REQUEST},
+        "cpu_cores_requested": ${STANDARD_WORKER_CPU_REQUEST},
+        "memory_gb_requested": ${STANDARD_WORKER_MEM_REQUEST},
         "cpu_pct_of_workers": ${WORKER_CPU_PCT},
         "memory_pct_of_workers": ${WORKER_MEM_PCT},
         "pressure_level": "${PRESSURE_LEVEL}"
@@ -1305,116 +1525,16 @@ ${CAPACITY_JSON}/recommendations.json
 
 
 #############################################
-# DEDICATED NODE POOL ANALYSIS
-# Looks for WORKER nodes that carry custom taints
-# (e.g. app=sas:NoSchedule) identifying dedicated pools.
-# System/lifecycle taints (node.kubernetes.io/*) are excluded.
+# DEDICATED NODE POOL ANALYSIS — namespace/request attribution
+# Node/taint detection itself (node_pools_raw.json) now runs earlier,
+# right after node_capacity.csv, so it's available to the worker-pool
+# pressure gauge above. This section maps tenant namespaces and actual
+# CPU/memory requests onto those pools.
 #############################################
 
-log INFO "Analyzing dedicated node pools (worker taints)"
+log INFO "Attributing namespaces and requests to node pools"
 
-# Step 1: Extract WORKER nodes only, capturing every non-system taint.
-# A worker node is one that does NOT have the master or infra role label.
-# Dedicated pool key = "taint_key=taint_value" (e.g. "app=sas")
-# Standard workers  = worker nodes with zero qualifying taints.
-jq -c '
-.items[] |
-# --- keep only worker nodes -------------------------------------------
-select(
-  (.metadata.labels["node-role.kubernetes.io/master"]        == null) and
-  (.metadata.labels["node-role.kubernetes.io/control-plane"] == null) and
-  (.metadata.labels["node-role.kubernetes.io/infra"]         == null)
-) |
-# --- strip out system lifecycle taints --------------------------------
-(
-  [.spec.taints[]? |
-    select(
-      (.key | startswith("node.kubernetes.io/")      | not) and
-      (.key | startswith("node-role.kubernetes.io/") | not)
-    )
-  ]
-) as $custom_taints |
-{
-  name:            .metadata.name,
-  custom_taints:   $custom_taints,
-  cpu_allocatable: (.status.allocatable.cpu    // "0"),
-  mem_allocatable: (.status.allocatable.memory // "0")
-}
-' "${CAPACITY_RAW}/nodes.json" \
-| jq -rs '
-# -------------------------------------------------------------------
-# Expand: one entry per (node, taint) pair — or one "standard-worker"
-# entry if the node has no qualifying taints.
-# -------------------------------------------------------------------
-[
-  .[] |
-  . as $node |
-  if ($node.custom_taints | length) > 0 then
-    $node.custom_taints[] |
-    {
-      pool_key:    (.key + (if .value and .value != "" then "=" + .value else "" end)),
-      taint_str:   (.key + (if .value and .value != "" then "=" + .value else "" end) + ":" + .effect),
-      taint_key:   .key,
-      taint_value: (.value // ""),
-      effect:      .effect,
-      node_name:   $node.name,
-      cpu:         $node.cpu_allocatable,
-      mem:         $node.mem_allocatable
-    }
-  else
-    {
-      pool_key:    "standard-worker",
-      taint_str:   "none",
-      taint_key:   "",
-      taint_value: "",
-      effect:      "none",
-      node_name:   $node.name,
-      cpu:         $node.cpu_allocatable,
-      mem:         $node.mem_allocatable
-    }
-  end
-] |
-# -------------------------------------------------------------------
-# Group by pool_key (e.g. "app=sas" or "standard-worker")
-# -------------------------------------------------------------------
-group_by(.pool_key) |
-map(
-  . as $pool |
-  {
-    pool_name:   $pool[0].pool_key,
-    taint:       $pool[0].taint_str,
-    taint_key:   $pool[0].taint_key,
-    taint_value: $pool[0].taint_value,
-    effect:      $pool[0].effect,
-    dedicated:   ($pool[0].pool_key != "standard-worker"),
-    node_count:  ($pool | length),
-    nodes:       ($pool | map(.node_name) | unique),
-    cpu_cores: (
-      $pool | map(
-        .cpu |
-        if endswith("m") then (.[:-1] | tonumber) / 1000
-        else (tonumber? // 0)
-        end
-      ) | add // 0 | (. * 100 | round) / 100
-    ),
-    memory_gib: (
-      $pool | map(
-        .mem |
-        if endswith("Ki") then (.[:-2] | tonumber) / 1048576
-        elif endswith("Mi") then (.[:-2] | tonumber) / 1024
-        elif endswith("Gi") then (.[:-2] | tonumber)
-        elif endswith("Ti") then (.[:-2] | tonumber) * 1024
-        else (tonumber? // 0) / 1073741824
-        end
-      ) | add // 0 | (. * 10 | round) / 10
-    )
-  }
-) |
-# Put dedicated pools first, standard-worker last
-sort_by(if .dedicated then 0 else 1 end)
-' > "${CAPACITY_JSON}/node_pools_raw.json"
 
-# Step 2: Map TENANT namespaces to node pools via pod_node_map.csv.
 # Infra/platform namespaces (openshift-*, kube-*, etc.) are excluded —
 # DaemonSet pods from those namespaces run on every node and add noise
 # to the "Projects on Pool" list without being meaningful tenant workloads.
@@ -1437,11 +1557,12 @@ if [[ -f "${POD_NODE_MAP}" ]]; then
     }
   }
   {
-    # Input CSV: "namespace","node_name"
+    # Input CSV: "namespace","pod","node_name" (pod field added so requests
+    # can be attributed per-pod elsewhere; not needed for this pod-count pass)
     gsub(/"/, "", $0)
     split($0, f, ",")
     ns   = f[1]
-    node = f[2]
+    node = f[3]
 
     # ── Skip infra / platform namespaces ──────────────────────────────
     # Same patterns as chargeback classification in the main analysis.
@@ -1474,8 +1595,23 @@ else
   touch "${CAPACITY_JSON}/pool_ns_pods.tmp"
 fi
 
-# Step 3: Merge namespace usage into final node_pools.json
-jq --rawfile usage "${CAPACITY_JSON}/pool_ns_pods.tmp" '
+# Step 3: Merge namespace pod counts AND actual requested CPU/memory
+# (from pool_requests.csv, computed earlier in "Pool Request Attribution")
+# into the final node_pools.json — so every pool, dedicated or standard,
+# shows real utilization and headroom, not just which projects are on it.
+[[ -f "${POOL_REQUESTS_CSV}" ]] || POOL_REQUESTS_CSV="/dev/null"
+
+jq -Rs '
+[
+  (split("\n")[] | select(length > 0) | split(",") | select(length == 3) |
+   { pool: .[0], cpu: (.[1] | tonumber? // 0), mem: (.[2] | tonumber? // 0) })
+] | (reduce .[] as $r ({}; . + { ($r.pool): { cpu: $r.cpu, mem: $r.mem } }))
+' "${POOL_REQUESTS_CSV}" > "${CAPACITY_JSON}/pool_requests.json" 2>/dev/null \
+|| echo '{}' > "${CAPACITY_JSON}/pool_requests.json"
+
+jq \
+  --rawfile usage "${CAPACITY_JSON}/pool_ns_pods.tmp" \
+  --slurpfile requests "${CAPACITY_JSON}/pool_requests.json" '
 def parse_usage:
   [
     ($usage | split("\n"))[] |
@@ -1485,11 +1621,30 @@ def parse_usage:
     { pool: .[0], ns: .[1], pods: (.[2] | tonumber? // 0) }
   ]
 ;
+($requests[0] // {}) as $req |
 . as $pools |
 parse_usage as $rows |
 $pools | map(
   . as $p |
+  ($req[$p.pool_name].cpu // 0) as $cpu_req |
+  ($req[$p.pool_name].mem // 0) as $mem_req |
+  ($cpu_req | . * 100 | round / 100) as $cpu_req_r |
+  ($mem_req | . * 100 | round / 100) as $mem_req_r |
+  (if $p.cpu_cores > 0 then (($cpu_req / $p.cpu_cores) * 100) else 0 end) as $cpu_pct |
+  (if $p.memory_gib > 0 then (($mem_req / $p.memory_gib) * 100) else 0 end) as $mem_pct |
+  ([$cpu_pct, $mem_pct] | max) as $max_pct |
   $p + {
+    cpu_cores_requested: $cpu_req_r,
+    memory_gib_requested: $mem_req_r,
+    cpu_utilization_pct: ($cpu_pct * 100 | round / 100),
+    memory_utilization_pct: ($mem_pct * 100 | round / 100),
+    pressure_level: (
+      if   $max_pct > 90 then "RED"
+      elif $max_pct > 80 then "ORANGE"
+      elif $max_pct > 60 then "YELLOW"
+      else "GREEN"
+      end
+    ),
     namespaces: [
       $rows[] |
       select(.pool == $p.pool_name) |
@@ -1501,7 +1656,7 @@ $pools | map(
 > "${CAPACITY_JSON}/node_pools.json" 2>/dev/null \
 || cp "${CAPACITY_JSON}/node_pools_raw.json" "${CAPACITY_JSON}/node_pools.json"
 
-rm -f "${CAPACITY_JSON}/node_pools_raw.json" "${CAPACITY_JSON}/pool_ns_pods.tmp" "${NS_ACTUAL_USAGE}"
+rm -f "${CAPACITY_JSON}/node_pools_raw.json" "${CAPACITY_JSON}/pool_ns_pods.tmp" "${CAPACITY_JSON}/pool_requests.json" "${NS_ACTUAL_USAGE}"
 
 DEDICATED_COUNT=$(jq '[.[] | select(.dedicated == true)] | length' "${CAPACITY_JSON}/node_pools.json" 2>/dev/null || echo 0)
 log INFO "Dedicated node pool analysis complete → node_pools.json"
