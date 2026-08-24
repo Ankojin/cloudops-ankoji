@@ -365,6 +365,50 @@ then
             'sum(rate(container_network_transmit_bytes_total{namespace!=""}[5m]))' \
             "${PROM_HOST}" "${PROM_TOKEN}")
 
+        #############################################
+        # Per-Namespace Actual Usage via Prometheus
+        #
+        # FIX: chargeback/tenant-project cards were showing "Metrics
+        # unavailable" for every namespace even when the cluster-wide
+        # utilization above succeeded. Root cause: per-namespace actual
+        # usage was sourced ONLY from `oc get podmetrics` (the
+        # metrics.k8s.io / prometheus-adapter API), which is a DIFFERENT,
+        # separately-gated API from the Thanos route used above — a
+        # cluster can have a working Prometheus/Thanos route with no
+        # prometheus-adapter installed at all, which is exactly what
+        # metrics_available.txt=false vs. prometheus_available.txt=true
+        # indicates when both are compared. Since we already have a
+        # confirmed-working Prometheus connection right here, query it
+        # directly, grouped by namespace, as a same-source alternative
+        # analyze_capacity.sh can fall back to.
+        #############################################
+
+        prom_query_vector()
+        {
+            local QUERY="$1"
+            curl -sk \
+                -H "Authorization: Bearer ${PROM_TOKEN}" \
+                "https://${PROM_HOST}/api/v1/query?query=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "${QUERY}" 2>/dev/null || echo "${QUERY}" | sed 's/ /%20/g;s/{/%7B/g;s/}/%7D/g;s/"/%22/g;s/=/%3D/g;s/!/%21/g;s/,/%2C/g;s|/|%2F|g')" \
+                2>/dev/null \
+            | jq -c '[.data.result[]? | {namespace: (.metric.namespace // "unknown"), value: ((.value[1] // "0") | tonumber? // 0)}]' 2>/dev/null \
+            || echo '[]'
+        }
+
+        _ns_cpu_json=$(prom_query_vector 'sum by (namespace) (rate(container_cpu_usage_seconds_total{namespace!="",container!="",id=~"/kubepods.*"}[5m]))')
+        _ns_mem_json=$(prom_query_vector 'sum by (namespace) (container_memory_working_set_bytes{namespace!="",container!="",id=~"/kubepods.*"})')
+
+        jq -n \
+            --argjson cpu "${_ns_cpu_json:-[]}" \
+            --argjson mem "${_ns_mem_json:-[]}" '
+            reduce ($cpu[] | {ns: .namespace, k: "cpu_cores", v: .value}) as $r
+                ({}; .[$r.ns] = ((.[$r.ns] // {}) + {($r.k): $r.v})) as $step1 |
+            reduce ($mem[] | {ns: .namespace, k: "mem_gb", v: (.value / 1073741824)}) as $r
+                ($step1; .[$r.ns] = ((.[$r.ns] // {}) + {($r.k): $r.v}))
+        ' > "${CAPACITY_JSON}/ns_actual_usage_prom.json" 2>/dev/null \
+        || echo '{}' > "${CAPACITY_JSON}/ns_actual_usage_prom.json"
+
+        log INFO "Per-namespace Prometheus usage: $(jq 'length' "${CAPACITY_JSON}/ns_actual_usage_prom.json" 2>/dev/null || echo 0) namespaces"
+
         # Actual pod ephemeral storage used (container overlay fs, emptyDir, logs)
         # This is the real disk consumed by pods — distinct from full-node Filesystem above
         EPHEM_POD_BYTES=$(prom_query \
@@ -429,6 +473,7 @@ EOF
         log INFO "Pod count from oc fallback: ${_fallback_pods}"
         echo "{\"source\":\"unavailable\",\"cpu\":{\"used_cores\":0},\"memory\":{\"used_gib\":0},\"filesystem\":{\"used_tib\":0,\"total_tib\":0,\"avail_tib\":0},\"ephemeral_pod_storage\":{\"used_gib\":0},\"network\":{\"rx_mbps\":0,\"tx_mbps\":0},\"pods\":{\"running\":${_fallback_pods}}}" \
         > "${CAPACITY_JSON}/cluster_utilization.json"
+        echo '{}' > "${CAPACITY_JSON}/ns_actual_usage_prom.json"
 
     fi
 
@@ -440,6 +485,7 @@ else
     log INFO "Pod count from oc fallback: ${_fallback_pods}"
     echo "{\"source\":\"unavailable\",\"cpu\":{\"used_cores\":0},\"memory\":{\"used_gib\":0},\"filesystem\":{\"used_tib\":0,\"total_tib\":0,\"avail_tib\":0},\"ephemeral_pod_storage\":{\"used_gib\":0},\"network\":{\"rx_mbps\":0,\"tx_mbps\":0},\"pods\":{\"running\":${_fallback_pods}}}" \
     > "${CAPACITY_JSON}/cluster_utilization.json"
+    echo '{}' > "${CAPACITY_JSON}/ns_actual_usage_prom.json"
 
 fi
 

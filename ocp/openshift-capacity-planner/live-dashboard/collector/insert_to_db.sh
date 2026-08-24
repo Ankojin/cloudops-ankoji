@@ -73,7 +73,13 @@ echo "INFO: Inserting ${ENV} snapshot from ${OUTPUT_DIR}"
 
 # ── Read summary ──────────────────────────────────────────────
 TOTAL_CPU=$(    jqr '.cluster_capacity.cpu_cores'           "0" "${SUMMARY_FILE}")
-TOTAL_MEM=$(    jqr '.cluster_capacity.memory_gib'          "0" "${SUMMARY_FILE}")
+# BUG FIX: analyze_capacity.sh writes this key as "memory_gb" (not
+# "memory_gib") in capacity_summary.json — the mismatched key name meant
+# this always silently defaulted to 0, while memory_requested_percent (a
+# different, correctly-matched key) still showed a real percentage. That
+# combination — a nonzero % of a 0.0 GiB total — is exactly the "24.3% of
+# 0.0 GiB" seen on the dashboard.
+TOTAL_MEM=$(    jqr '.cluster_capacity.memory_gb'           "0" "${SUMMARY_FILE}")
 CPU_PCT=$(      jqr '.utilization.cpu_requested_percent'    "0" "${SUMMARY_FILE}")
 MEM_PCT=$(      jqr '.utilization.memory_requested_percent' "0" "${SUMMARY_FILE}")
 
@@ -83,8 +89,15 @@ NS_COUNT=$(     jqr '.namespaces' "0" "${COLLECT_FILE}")
 
 # ── Read planning ─────────────────────────────────────────────
 WORKER_NODES=$( jqr '.worker_pool.worker_nodes'         "0" "${PLANNING_FILE}")
-WORKER_CPU=$(   jqr '.worker_pool.cpu_cores_total'      "0" "${PLANNING_FILE}")
-WORKER_MEM=$(   jqr '.worker_pool.memory_gb_total'      "0" "${PLANNING_FILE}")
+# BUG FIX: worker_pool.cpu_cores_total/memory_gb_total are the BLENDED
+# all-worker figures (dedicated/tainted pools included) — kept for
+# inventory purposes. current_utilization's percentages and pressure_level
+# are computed against standard_worker_pool (dedicated pools excluded), so
+# the capacity figures shown alongside them must come from the same block
+# or the dashboard shows a denominator that doesn't match the percentage
+# next to it (this was the ~238.5-vs-~127-core discrepancy).
+WORKER_CPU=$(   jqr '.standard_worker_pool.cpu_cores_total' "0" "${PLANNING_FILE}")
+WORKER_MEM=$(   jqr '.standard_worker_pool.memory_gb_total' "0" "${PLANNING_FILE}")
 PRESSURE=$(     jqr '.current_utilization.pressure_level' '"UNKNOWN"' "${PLANNING_FILE}")
 
 MASTER_NODES=$( jqr '.master_pool.master_nodes'         "0" "${PLANNING_FILE}")

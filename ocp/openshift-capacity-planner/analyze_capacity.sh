@@ -910,7 +910,7 @@ NS_ACTUAL_USAGE="${CAPACITY_JSON}/ns_actual_usage.tmp"
 if [[ -s "${CAPACITY_RAW}/pod_metrics.json" ]] && \
    jq -e '.items | length > 0' "${CAPACITY_RAW}/pod_metrics.json" &>/dev/null
 then
-    log INFO "Aggregating per-namespace actual usage from pod_metrics.json"
+    log INFO "Aggregating per-namespace actual usage from pod_metrics.json (metrics.k8s.io)"
     jq -r '
     .items[] |
     .metadata.namespace as $ns |
@@ -936,8 +936,26 @@ then
     }
     END { for (ns in sum_cpu) printf "%s,%.3f,%.4f\n", ns, sum_cpu[ns], sum_mem[ns] }
     ' > "${NS_ACTUAL_USAGE}"
+
+elif [[ -s "${CAPACITY_JSON}/ns_actual_usage_prom.json" ]] && \
+     jq -e 'keys | length > 0' "${CAPACITY_JSON}/ns_actual_usage_prom.json" &>/dev/null
+then
+    # FIX: metrics.k8s.io (prometheus-adapter) can be entirely absent on a
+    # cluster while the raw Prometheus/Thanos route still works fine — that
+    # combination previously meant every namespace showed "Metrics
+    # unavailable" even though usable data existed. collect_capacity.sh now
+    # queries Prometheus directly, grouped by namespace, as a same-source
+    # fallback whenever pod_metrics.json comes back empty.
+    log INFO "pod_metrics.json unavailable — using Prometheus per-namespace fallback (ns_actual_usage_prom.json)"
+    jq -r '
+    to_entries[] |
+    [.key, (.value.cpu_cores // 0), (.value.mem_gb // 0)] | @csv
+    ' "${CAPACITY_JSON}/ns_actual_usage_prom.json" \
+    | tr -d '"' \
+    > "${NS_ACTUAL_USAGE}"
+
 else
-    log INFO "pod_metrics.json unavailable — actual usage columns will be 0"
+    log INFO "No per-namespace metrics source available (pod_metrics.json and Prometheus fallback both empty) — actual usage columns will be 0"
     : > "${NS_ACTUAL_USAGE}"
 fi
 
