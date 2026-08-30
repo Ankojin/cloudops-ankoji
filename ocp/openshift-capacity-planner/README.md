@@ -13,6 +13,14 @@ Generates:
 - Growth forecasting
 - Capacity recommendations
 
+Additional CSV exports provide an auditable scheduling inventory:
+
+- `node_inventory_detailed.csv`
+- `node_taints.csv`
+- `pod_effective_requests.csv`
+- `pod_tolerations.csv`
+- `pool_capacity_detail.csv`
+
 
 ---
 
@@ -24,10 +32,13 @@ Collects:
 
 - Nodes
 - Node roles
+- Ready and schedulable state
+- Node taints, worker-pool classification, VM type, and zone
 - MachineSets
 - VM sizes (ARO)
 - Namespaces
 - Pods
+- Pod placement, effective requests, init-container reservations, and tolerations
 - PVCs
 - StorageClasses
 

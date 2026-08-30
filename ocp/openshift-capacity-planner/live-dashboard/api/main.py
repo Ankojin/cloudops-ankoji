@@ -179,7 +179,7 @@ async def history(
     env: str,
     hours: int = Query(default=24, ge=1, le=168),
 ):
-    """Time-series data for trend sparklines (last N hours, max 50 points)."""
+    """Time-series data for the requested lookback window (up to seven days)."""
     env = env.upper()
     if env not in ("DEV", "SIT"):
         raise HTTPException(status_code=400, detail="env must be DEV or SIT")
@@ -187,13 +187,18 @@ async def history(
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT collected_at, cpu_pct, mem_pct, pods_running, pressure,
-                   worker_nodes, cpu_used, mem_used_gib
+            SELECT collected_at,
+                   CASE WHEN worker_cpu > 0
+                        THEN (worker_cpu_requested / worker_cpu) * 100
+                        ELSE 0 END AS cpu_pct,
+                   CASE WHEN worker_mem_gib > 0
+                        THEN (worker_mem_gib_requested / worker_mem_gib) * 100
+                        ELSE 0 END AS mem_pct,
+                   pods_running, pressure, worker_nodes, cpu_used, mem_used_gib
             FROM capacity_snapshots
             WHERE env = $1
               AND collected_at >= NOW() - ($2 || ' hours')::interval
             ORDER BY collected_at ASC
-            LIMIT 50
             """,
             env,
             str(hours),
@@ -670,4 +675,3 @@ async def desired_replicas(env: str, limit: int = 200):
         detail = detail[:limit]
 
     return {"env": env, "snapshot_id": snap["id"], "controllers": detail}
-

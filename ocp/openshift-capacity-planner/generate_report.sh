@@ -1759,6 +1759,7 @@ Generated Files
 <li><a href="json/dedicated_capacity_summary.json">Dedicated Capacity Summary JSON</a></li>
 <li><a href="json/recommendations.json">Recommendations JSON</a></li>
 <li>CSV reports: <b><a href="csv/chargeback_by_namespace.csv">chargeback_by_namespace.csv</a></b> &nbsp;|&nbsp; <b><a href="csv/dedicated_node_recommendations.csv">dedicated_node_recommendations.csv</a></b> &nbsp;|&nbsp; <b><a href="csv/misplaced_dedicated_workloads.csv">misplaced_dedicated_workloads.csv</a></b> &nbsp;|&nbsp; <a href="csv/">csv/</a></li>
+<li>Scheduling inventory: <a href="csv/node_inventory_detailed.csv">node inventory</a> &nbsp;|&nbsp; <a href="csv/node_taints.csv">node taints</a> &nbsp;|&nbsp; <a href="csv/pod_effective_requests.csv">effective pod requests</a> &nbsp;|&nbsp; <a href="csv/pod_tolerations.csv">pod tolerations</a> &nbsp;|&nbsp; <a href="csv/pool_capacity_detail.csv">pool capacity</a></li>
 
 
 </ul>

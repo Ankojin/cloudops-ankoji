@@ -286,6 +286,72 @@ DEDICATED_POOL_COUNT=$(jq '[.[] | select(.dedicated)] | length' "${CAPACITY_JSON
 log INFO "Dedicated pools found: ${DEDICATED_POOL_COUNT} (${DEDICATED_POOL_CPU} cores / ${DEDICATED_POOL_MEM} GiB carved out of the worker fleet)"
 
 
+#############################################
+# Detailed Scheduling Inventory
+#
+# The main planner already uses the effective-request and pool-attribution
+# logic from capacity_report_auto_html_v2.sh.  Publish the corresponding
+# inventory extracts as CSVs so an operator can audit the assumptions behind
+# each capacity recommendation without having to parse the raw Kubernetes
+# objects.  These files are deliberately based on the same node-pool lookup
+# used by the planning calculations below.
+#############################################
+
+log INFO "Exporting detailed node and taint inventory"
+
+jq -r --slurpfile pools "${CAPACITY_JSON}/node_pools_raw.json" '
+def cpu_cores:
+  if . == null or . == "" then 0
+  elif test("m$") then (sub("m$";"") | tonumber) / 1000
+  else (tonumber? // 0) end;
+def mem_gib:
+  if . == null or . == "" then 0
+  elif test("Ki$") then (sub("Ki$";"") | tonumber) / 1048576
+  elif test("Mi$") then (sub("Mi$";"") | tonumber) / 1024
+  elif test("Gi$") then (sub("Gi$";"") | tonumber)
+  elif test("Ti$") then (sub("Ti$";"") | tonumber) * 1024
+  else (tonumber? // 0) / 1073741824 end;
+def node_role:
+  if (.metadata.labels["node-role.kubernetes.io/master"] != null or
+      .metadata.labels["node-role.kubernetes.io/control-plane"] != null) then "master"
+  elif .metadata.labels["node-role.kubernetes.io/infra"] != null then "infra"
+  elif (.metadata.labels["node-role.kubernetes.io/worker"] != null or
+        .metadata.labels["node-role.kubernetes.io/compute"] != null) then "worker"
+  else "other" end;
+($pools[0] // []) as $pools |
+([ $pools[] | . as $pool | $pool.nodes[] | {key: ., value: $pool.pool_name} ] | from_entries) as $node_pool |
+["node","role","ready","schedulable","pool","classification","instance_type","zone","cpu_allocatable_cores","memory_allocatable_gib","taints"] | @csv,
+(.items[] |
+  . as $n |
+  (($n.status.conditions // [] | map(select(.type == "Ready")) | .[0].status) // "Unknown") as $ready |
+  (node_role) as $role |
+  ($node_pool[$n.metadata.name] // $role) as $pool |
+  [ $n.spec.taints[]? | ((.key // "") + "=" + (.value // "") + ":" + (.effect // "NoSchedule")) ] | join(";") as $taints |
+  [ $n.metadata.name, $role, $ready,
+    (if ($n.spec.unschedulable // false) then "false" else "true" end),
+    $pool, (if ($node_pool[$n.metadata.name] // "standard-worker") == "standard-worker" then "SHARED" elif ($node_pool[$n.metadata.name] != null) then "DEDICATED" else "N/A" end),
+    ($n.metadata.labels["node.kubernetes.io/instance-type"] // $n.metadata.labels["beta.kubernetes.io/instance-type"] // ""),
+    ($n.metadata.labels["topology.kubernetes.io/zone"] // $n.metadata.labels["failure-domain.beta.kubernetes.io/zone"] // ""),
+    (($n.status.allocatable.cpu // "0") | cpu_cores),
+    (($n.status.allocatable.memory // "0") | mem_gib),
+    $taints ] | @csv
+ )
+' "${CAPACITY_RAW}/nodes.json" > "${CAPACITY_CSV}/node_inventory_detailed.csv"
+
+jq -r '
+["node","role","taint_key","taint_value","effect","time_added"] | @csv,
+(.items[] |
+  . as $n |
+  (if (.metadata.labels["node-role.kubernetes.io/master"] != null or .metadata.labels["node-role.kubernetes.io/control-plane"] != null) then "master"
+   elif .metadata.labels["node-role.kubernetes.io/infra"] != null then "infra"
+   elif (.metadata.labels["node-role.kubernetes.io/worker"] != null or .metadata.labels["node-role.kubernetes.io/compute"] != null) then "worker"
+   else "other" end) as $role |
+  .spec.taints[]? |
+  [$n.metadata.name, $role, (.key // ""), (.value // ""), (.effect // "NoSchedule"), (.timeAdded // "")] | @csv
+ )
+' "${CAPACITY_RAW}/nodes.json" > "${CAPACITY_CSV}/node_taints.csv"
+
+
 
 #############################################
 # Cluster totals
@@ -474,6 +540,59 @@ def mem_gib:
 ' \
 "${CAPACITY_RAW}/pods.json" \
 > "${CAPACITY_RAW}/pod_requests_raw.csv"
+
+
+# Operator-facing pod inventory.  Keep app, init, and effective requests so
+# the scheduler reservation can be verified for any individual workload.
+# Pool is resolved from the exact node-to-pool map used for planning.
+log INFO "Exporting pod placement, toleration, and effective-request inventory"
+
+jq -r --slurpfile pools "${CAPACITY_JSON}/node_pools_raw.json" '
+def cpu_cores:
+  if . == null or . == "" then 0
+  elif test("m$") then (sub("m$";"") | tonumber) / 1000
+  else (tonumber? // 0) end;
+def mem_gib:
+  if . == null or . == "" then 0
+  elif test("Ki$") then (sub("Ki$";"") | tonumber) / 1048576
+  elif test("Mi$") then (sub("Mi$";"") | tonumber) / 1024
+  elif test("Gi$") then (sub("Gi$";"") | tonumber)
+  elif test("Ti$") then (sub("Ti$";"") | tonumber) * 1024
+  else (tonumber? // 0) / 1073741824 end;
+def controller:
+  ((.metadata.ownerReferences // []) | map(select(.controller == true)) |
+   if length > 0 then (.[0].kind + "/" + .[0].name) else "standalone" end);
+($pools[0] // []) as $pools |
+([ $pools[] | . as $pool | $pool.nodes[] | {key: ., value: $pool.pool_name} ] | from_entries) as $node_pool |
+["namespace","pod","phase","node","pool","controller","app_cpu_request_cores","init_cpu_request_cores","effective_cpu_request_cores","app_memory_request_gib","init_memory_request_gib","effective_memory_request_gib"] | @csv,
+(.items[] |
+  select(.status.phase == "Running" or .status.phase == "Pending") |
+  . as $pod |
+  ([ ($pod.spec.containers // [])[] | (.resources.requests.cpu // "0" | cpu_cores) ] | add // 0) as $app_cpu |
+  ([ ($pod.spec.initContainers // [])[] | (.resources.requests.cpu // "0" | cpu_cores) ] | max // 0) as $init_cpu |
+  ([ ($pod.spec.containers // [])[] | (.resources.requests.memory // "0" | mem_gib) ] | add // 0) as $app_mem |
+  ([ ($pod.spec.initContainers // [])[] | (.resources.requests.memory // "0" | mem_gib) ] | max // 0) as $init_mem |
+  [ $pod.metadata.namespace, $pod.metadata.name, $pod.status.phase, ($pod.spec.nodeName // ""),
+    ($node_pool[$pod.spec.nodeName] // if ($pod.spec.nodeName // "") == "" then "unscheduled" else "non-worker" end),
+    ($pod | controller), $app_cpu, $init_cpu, ([$app_cpu, $init_cpu] | max),
+    $app_mem, $init_mem, ([$app_mem, $init_mem] | max) ] | @csv
+ )
+' "${CAPACITY_RAW}/pods.json" > "${CAPACITY_CSV}/pod_effective_requests.csv"
+
+jq -r --slurpfile pools "${CAPACITY_JSON}/node_pools_raw.json" '
+($pools[0] // []) as $pools |
+([ $pools[] | . as $pool | $pool.nodes[] | {key: ., value: $pool.pool_name} ] | from_entries) as $node_pool |
+["namespace","pod","phase","node","pool","controller","toleration_key","operator","value","effect","toleration_seconds"] | @csv,
+(.items[] |
+  select(.status.phase == "Running" or .status.phase == "Pending") |
+  . as $pod |
+  .spec.tolerations[]? |
+  [ $pod.metadata.namespace, $pod.metadata.name, $pod.status.phase, ($pod.spec.nodeName // ""),
+    ($node_pool[$pod.spec.nodeName] // if ($pod.spec.nodeName // "") == "" then "unscheduled" else "non-worker" end),
+    (($pod.metadata.ownerReferences // []) | map(select(.controller == true)) | if length > 0 then (.[0].kind + "/" + .[0].name) else "standalone" end),
+    (.key // ""), (.operator // "Equal"), (.value // ""), (.effect // ""), (.tolerationSeconds // "") ] | @csv
+ )
+' "${CAPACITY_RAW}/pods.json" > "${CAPACITY_CSV}/pod_tolerations.csv"
 
 
 
@@ -1402,7 +1521,7 @@ NODES_NEEDED=$(awk \
     -v net_cpu="${NET_CPU_PER_NODE}" \
     -v cur_mem="${STANDARD_WORKER_MEM_REQUEST}" \
     -v cap_mem="${STANDARD_WORKER_MEM}" \
-    -v net_mem="${NET_CPU_PER_NODE}" \
+    -v net_mem="${NET_MEM_PER_NODE}" \
     -v tgt=0.80 '
 BEGIN{
     cpu_head = cap_cpu*tgt - cur_cpu
@@ -1886,6 +2005,23 @@ rm -f "${CAPACITY_JSON}/node_pools_raw.json" "${CAPACITY_JSON}/pool_ns_pods.tmp"
 DEDICATED_COUNT=$(jq '[.[] | select(.dedicated == true)] | length' "${CAPACITY_JSON}/node_pools.json" 2>/dev/null || echo 0)
 log INFO "Dedicated node pool analysis complete → node_pools.json"
 log INFO "  ${DEDICATED_COUNT} dedicated worker pool(s) found (e.g. app=sas:NoSchedule)"
+
+# Flat companion export for spreadsheet users.  node_pools.json remains the
+# API/report source; this CSV makes the same pool inventory easy to filter,
+# sort, and reconcile with the node and pod extracts above.
+jq -r '
+["pool","classification","taint","nodes","cpu_allocatable_cores","memory_allocatable_gib","cpu_requested_cores","memory_requested_gib","cpu_request_pct","memory_request_pct","pressure","tenant_namespaces"] | @csv,
+(.[] |
+ [ .pool_name,
+   (if .dedicated then "DEDICATED" else "SHARED" end),
+   (.taint // ""),
+   (.node_count // 0), (.cpu_cores // 0), (.memory_gib // 0),
+   (.cpu_cores_requested // 0), (.memory_gib_requested // 0),
+   (.cpu_utilization_pct // 0), (.memory_utilization_pct // 0),
+   (.pressure_level // "UNKNOWN"),
+   ((.namespaces // []) | map(.namespace + " (" + (.pod_count | tostring) + " pods)") | join(";"))
+ ] | @csv)
+' "${CAPACITY_JSON}/node_pools.json" > "${CAPACITY_CSV}/pool_capacity_detail.csv"
 
 
 

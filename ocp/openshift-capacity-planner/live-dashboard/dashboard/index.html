@@ -458,6 +458,43 @@ function setBar(id,val){
   const el=$(id); if(!el) return;
   el.style.width=cap(val)+'%'; el.className='bar-fill '+barClass(val);
 }
+function planningData(d){
+  const raw=d&&d.raw_planning;
+  if(!raw) return {};
+  if(typeof raw==='string'){try{return JSON.parse(raw);}catch(_){return {};}}
+  return raw;
+}
+function standardPressure(d){
+  const cpu=+(d.worker_cpu||0), mem=+(d.worker_mem_gib||0);
+  return {
+    cpu:cpu>0?(+(d.worker_cpu_requested||0)/cpu)*100:0,
+    mem:mem>0?(+(d.worker_mem_gib_requested||0)/mem)*100:0
+  };
+}
+function forecastDemand(d){
+  const currentCpu=+(d.worker_cpu_requested||0), currentMem=+(d.worker_mem_gib_requested||0);
+  const desired=(planningData(d).desired_replica_detail||[])
+    .filter(r=>(r.pool_hint||'SHARED')==='SHARED')
+    .reduce((t,r)=>({cpu:t.cpu+(+(r.desired_cpu_cores||0)),mem:t.mem+(+(r.desired_mem_gib||0))}),{cpu:0,mem:0});
+  // Desired replicas expose scaled-down controllers; retain current demand for
+  // non-controller workloads that are not represented in that inventory.
+  return {cpu:Math.max(currentCpu,desired.cpu),mem:Math.max(currentMem,desired.mem),desired:desired.cpu>0||desired.mem>0};
+}
+function netCapacityPerNode(d){
+  const expansion=planningData(d).expansion_planning||{};
+  const cpu=+(expansion.net_schedulable_cpu_per_new_node||0);
+  const mem=+(expansion.net_schedulable_mem_gib_per_new_node||0);
+  if(cpu>0&&mem>0) return {cpu,mem,daemonSetAware:true};
+  const nodes=+(d.worker_nodes||0);
+  return {cpu:nodes>0?+(d.worker_cpu||0)/nodes:0,mem:nodes>0?+(d.worker_mem_gib||0)/nodes:0,daemonSetAware:false};
+}
+function standardWorkerNodes(env,d){
+  const standard=((_pools[env]||{}).pools||[]).find(pool=>pool.pool_name==='standard-worker');
+  if(standard&&Number.isFinite(+standard.node_count)) return +standard.node_count;
+  // Older snapshots have no pool rows; retain a display-only fallback.
+  const allCpu=+(d.all_worker_cpu||0), workers=+(d.worker_nodes||0), standardCpu=+(d.worker_cpu||0);
+  return allCpu>0&&workers>0?Math.round(standardCpu/(allCpu/workers)):workers;
+}
 
 // ── Build per-env tab HTML ───────────────────────────────────
 function buildEnvTab(env){
@@ -526,7 +563,7 @@ function buildEnvTab(env){
   </div>
   <div class="card">
     <h2>Growth Forecast (vs Worker Pool)</h2>
-    <p style="color:#555;font-size:13px">Safe threshold = 80% of worker capacity. Green=safe · Yellow=monitor · Red=action needed.</p>
+    <p style="color:#555;font-size:13px">Uses the greater of running requests and desired-replica demand. Safe threshold = 80% of standard-worker capacity. Green=safe · Yellow=monitor · Red=action needed.</p>
     <table style="width:100%">
       <thead><tr style="background:#f5f5f5;font-size:11px;color:#555;text-align:left">
         <th style="font-weight:600;padding:6px 8px">Scenario</th>
@@ -566,7 +603,7 @@ function buildEnvTab(env){
         <option value="12">12 h</option><option value="24" selected>24 h</option>
       </select>
     </h2>
-    <p style="color:#555;font-size:13px">CPU% and Memory% requested — collected every 5 minutes.</p>
+    <p style="color:#555;font-size:13px">Standard-worker CPU% and Memory% requested — collected every 5 minutes.</p>
     <canvas id="${p}-history-chart" height="110"></canvas>
   </div>
 </div>`;
@@ -623,29 +660,20 @@ function buildHistoryChart(env,points){
 // ── Growth forecast rows ─────────────────────────────────────
 function growthRows(d){
   const wCpu=+(d.worker_cpu||0), wMem=+(d.worker_mem_gib||0);
-  const cReq=+(d.worker_cpu_requested||0);
-  const mReq=+(d.worker_mem_gib_requested||0);
-  // Standard-worker count only — worker_nodes includes dedicated pool nodes.
-  // Use worker_cpu / (worker_cpu per node) to derive standard-worker count,
-  // or fall back to total minus any dedicated nodes visible from pools data.
-  // Simplest reliable proxy: worker_cpu / avg_node_cpu.
-  // avg node cpu ≈ all_worker_cpu / worker_nodes if both are available.
-  const totalWorkerNodes = +(d.worker_nodes||1);
-  const allWCpu = +(d.all_worker_cpu||wCpu*1.5||1);
-  const cpuPerNode = totalWorkerNodes > 0 ? allWCpu / totalWorkerNodes : 0;
-  const stdNodeCount = (cpuPerNode > 0) ? Math.round(wCpu / cpuPerNode) : totalWorkerNodes;
-  const netPerNode = stdNodeCount > 0 ? wCpu / stdNodeCount : 0;
+  const demand=forecastDemand(d), cReq=demand.cpu, mReq=demand.mem;
+  const net=netCapacityPerNode(d);
 
   const rows = [{l:'Current (now)',f:0},{l:'+25% growth',f:.25},{l:'+50% growth',f:.5},{l:'+75% growth',f:.75},{l:'+100% growth',f:1}]
     .map(s=>{
       const fCpu=cReq*(1+s.f), fMem=mReq*(1+s.f);
       const cP=wCpu>0?(fCpu/wCpu)*100:0, mP=wMem>0?(fMem/wMem)*100:0;
       const remCpu=wCpu*0.80-fCpu, remMem=wMem*0.80-fMem;
-      // Match exactly the same thresholds as the pressure gauge
-      const st=cP>90?'critical':cP>80?'at_risk':'safe';
-      const stLabel=cP>90?'critical':cP>80?'at risk':'safe';
-      let nodesNeeded=0;
-      if(remCpu<0 && netPerNode*0.80>0) nodesNeeded=Math.ceil(-remCpu/(netPerNode*0.80));
+      const maxP=Math.max(cP,mP);
+      const st=maxP>90?'critical':maxP>80?'at_risk':'safe';
+      const stLabel=maxP>90?'critical':maxP>80?'at risk':'safe';
+      const cpuNodes=remCpu<0&&net.cpu>0?Math.ceil(-remCpu/(net.cpu*0.80)):0;
+      const memNodes=remMem<0&&net.mem>0?Math.ceil(-remMem/(net.mem*0.80)):0;
+      const nodesNeeded=Math.max(cpuNodes,memNodes);
       const nodesColor=nodesNeeded===0?'#16a085':'#c0392b';
       const remCpuColor=remCpu>=0?'#16a085':'#c0392b';
       const remMemColor=remMem>=0?'#16a085':'#c0392b';
@@ -665,7 +693,9 @@ function renderOverview(envs){
   ENVS.forEach(env=>{
     const d=envs[env]; if(!d) return;
     const p=env.toLowerCase();
-    const cpuP=+(d.cpu_pct||0), memP=+(d.mem_pct||0);
+    // Overview percentages and pressure both describe the standard worker
+    // pool. Inventory totals below intentionally remain all-worker figures.
+    const pressure=standardPressure(d), cpuP=pressure.cpu, memP=pressure.mem;
     ($('ov-'+p+'-time')||{}).textContent=d.collected_at?new Date(d.collected_at).toLocaleString():'—';
     ($('ov-'+p+'-workers')||{}).textContent=d.worker_nodes??'—';
     ($('ov-'+p+'-masters')||{}).textContent=d.master_nodes??'—';
@@ -691,7 +721,8 @@ function renderOverview(envs){
 // ── Render per-env tab ───────────────────────────────────────
 function renderEnvTab(env,d,hist){
   const p=env.toLowerCase();
-  const cpuP=+(d.cpu_pct||0), memP=+(d.mem_pct||0);
+  const planPressure=standardPressure(d);
+  const cpuP=planPressure.cpu, memP=planPressure.mem;
   // Worker Pool Utilization widget: ALL worker nodes, dedicated pools
   // included — reflects total worker inventory (actual usage isn't
   // currently split per-pool, only requested is, so this stays blended).
@@ -715,11 +746,11 @@ function renderEnvTab(env,d,hist){
   const pb=$(`${p}-pressure-badge`); if(pb){pb.textContent=pressure;pb.className=pressureBadge(pressure);}
   const hs=$(`${p}-health-score`); if(hs){hs.textContent=health+'/100';hs.className='metric '+stCls;}
   ($(`${p}-cpu-pct`)||{}).textContent=pct(cpuP);
-  ($(`${p}-cpu-req`)||{}).textContent=f1(+(d.total_cpu||0)*(cpuP/100))+' cores';
-  ($(`${p}-cpu-total`)||{}).textContent=f1(d.total_cpu);
+  ($(`${p}-cpu-req`)||{}).textContent=f1(+(d.worker_cpu_requested||0))+' cores';
+  ($(`${p}-cpu-total`)||{}).textContent=f1(stdWCpu);
   ($(`${p}-mem-pct`)||{}).textContent=pct(memP);
-  ($(`${p}-mem-req`)||{}).textContent=f1(+(d.total_mem_gib||0)*(memP/100))+' GiB';
-  ($(`${p}-mem-total`)||{}).textContent=f1(d.total_mem_gib);
+  ($(`${p}-mem-req`)||{}).textContent=f1(+(d.worker_mem_gib_requested||0))+' GiB';
+  ($(`${p}-mem-total`)||{}).textContent=f1(stdWMem);
   ($(`${p}-nodes`)||{}).textContent=d.node_count??'—';
   ($(`${p}-workers`)||{}).textContent=d.worker_nodes??'—';
   ($(`${p}-masters`)||{}).textContent=d.master_nodes??'—';
@@ -738,10 +769,7 @@ function renderEnvTab(env,d,hist){
   const us=$(`${p}-util-source`); if(us){us.textContent=cpuUsed>0?'✓ Metrics Server':'Metrics unavailable';us.style.background=cpuUsed>0?'#d4edda':'#fff3cd';us.style.color=cpuUsed>0?'#1a7f37':'#856404';}
   const gr=$(`${p}-growth-rows`); if(gr) gr.innerHTML=growthRows(d);
   ($(`${p}-plan-workers-total`)||{}).textContent=d.worker_nodes||'—';
-  // Standard-worker node count = standard_worker_cpu / (all_worker_cpu / worker_nodes)
-  const allWCpuPlan = +(d.all_worker_cpu||0)||stdWCpu;
-  const cpuPerNodePlan = (+(d.worker_nodes||0)>0) ? allWCpuPlan/(+(d.worker_nodes)) : 0;
-  const stdNodesPlan = (cpuPerNodePlan>0) ? Math.round(stdWCpu/cpuPerNodePlan) : (d.worker_nodes||'—');
+  const stdNodesPlan=standardWorkerNodes(env,d);
   ($(`${p}-plan-workers`)||{}).textContent=stdNodesPlan;
   ($(`${p}-plan-cpu`)||{}).textContent=f1(stdWCpu)+' cores';
   ($(`${p}-plan-mem`)||{}).textContent=f1(stdWMem)+' GiB';
@@ -757,11 +785,12 @@ function renderEnvTab(env,d,hist){
   if(remCpuEl){ remCpuEl.textContent=(remCpu>=0?'+':'')+remCpu.toFixed(1)+' cores'; remCpuEl.style.color=remCpu>=0?'#16a085':'#c0392b'; }
   const remMemEl = $(`${p}-plan-mem-rem`);
   if(remMemEl){ remMemEl.textContent=(remMem>=0?'+':'')+remMem.toFixed(1)+' GiB'; remMemEl.style.color=remMem>=0?'#16a085':'#c0392b'; }
-  // Nodes to add (DaemonSet-aware estimate)
-  const nodesTotal2 = +(d.worker_nodes||1);
-  const netPerNode2 = nodesTotal2>0 ? stdWCpu/nodesTotal2 : 0;
-  let nodesNeeded2 = 0;
-  if(remCpu<0 && netPerNode2*0.80>0) nodesNeeded2=Math.ceil(-remCpu/(netPerNode2*0.80));
+  // Nodes to add: whichever of CPU or memory needs more DaemonSet-aware
+  // capacity determines the recommendation.
+  const net=netCapacityPerNode(d);
+  const cpuNodes2=remCpu<0&&net.cpu>0?Math.ceil(-remCpu/(net.cpu*0.80)):0;
+  const memNodes2=remMem<0&&net.mem>0?Math.ceil(-remMem/(net.mem*0.80)):0;
+  const nodesNeeded2=Math.max(cpuNodes2,memNodes2);
   const naEl = $(`${p}-plan-nodes-add`);
   if(naEl){ naEl.textContent = nodesNeeded2===0 ? 'None needed ✓' : '+'+nodesNeeded2+' node(s)'; naEl.style.color = nodesNeeded2===0?'#16a085':'#c0392b'; }
   ($(`${p}-plan-ns`)||{}).textContent=d.ns_count||'—';
@@ -866,7 +895,7 @@ async function fetchAll(){
     _status=await statusRes.json();
     if(!_status.envs||Object.keys(_status.envs).length===0){
       $('overlay-msg').textContent='⏳ Awaiting first collection run — retrying in 30s';
-      setTimeout(loadStatus,30000);
+      setTimeout(fetchAll,30000);
       return;
     }
     if(_status.envs) renderOverview(_status.envs);
