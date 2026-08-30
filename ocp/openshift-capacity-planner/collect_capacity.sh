@@ -394,8 +394,8 @@ then
             || echo '[]'
         }
 
-        _ns_cpu_json=$(prom_query_vector 'sum by (namespace) (rate(container_cpu_usage_seconds_total{namespace!="",container!="",id=~"/kubepods.*"}[5m]))')
-        _ns_mem_json=$(prom_query_vector 'sum by (namespace) (container_memory_working_set_bytes{namespace!="",container!="",id=~"/kubepods.*"})')
+        _ns_cpu_json=$(prom_query_vector 'sum by (namespace) (rate(container_cpu_usage_seconds_total{namespace!="",container!=""}[5m]))')
+        _ns_mem_json=$(prom_query_vector 'sum by (namespace) (container_memory_working_set_bytes{namespace!="",container!=""})')
 
         jq -n \
             --argjson cpu "${_ns_cpu_json:-[]}" \
@@ -407,7 +407,49 @@ then
         ' > "${CAPACITY_JSON}/ns_actual_usage_prom.json" 2>/dev/null \
         || echo '{}' > "${CAPACITY_JSON}/ns_actual_usage_prom.json"
 
-        log INFO "Per-namespace Prometheus usage: $(jq 'length' "${CAPACITY_JSON}/ns_actual_usage_prom.json" 2>/dev/null || echo 0) namespaces"
+        _prom_ns_count=$(jq 'length' "${CAPACITY_JSON}/ns_actual_usage_prom.json" 2>/dev/null || echo 0)
+        log INFO "Per-namespace Prometheus usage: ${_prom_ns_count} namespaces"
+
+        # If Prometheus returned zero namespaces (e.g. ARO cgroup path differs),
+        # fall back to oc adm top pods — works on any OpenShift cluster,
+        # doesn't require Prometheus/Thanos. Approach borrowed from
+        # capacity_report_auto_html_v2.sh which uses this as primary source.
+        if [[ "${_prom_ns_count}" == "0" ]]; then
+            log INFO "Prometheus per-namespace query returned 0 rows — falling back to oc adm top pods"
+            # oc adm top pods --all-namespaces output:
+            #   NAMESPACE  NAME  CPU(cores)  MEMORY(bytes)
+            # CPU can be: 250m, 1 (no suffix = cores), 0 (zero)
+            # Memory can be: 512Mi, 2Gi, 1024Ki, 100 (bytes, rare)
+            oc adm top pods --all-namespaces --no-headers 2>/dev/null \
+            | awk '
+            {
+                ns=$1; cpu=$3; mem=$4
+                # CPU: strip unit, convert to cores
+                if (cpu ~ /m$/) { sub(/m$/,"",cpu); cpu_cores=cpu/1000 }
+                else if (cpu+0 > 0) { cpu_cores=cpu+0 }
+                else { cpu_cores=0 }
+                # Memory: strip unit, convert to GiB
+                if (mem ~ /Gi$/) { sub(/Gi$/,"",mem); mem_gib=mem+0 }
+                else if (mem ~ /Mi$/) { sub(/Mi$/,"",mem); mem_gib=mem/1024 }
+                else if (mem ~ /Ki$/) { sub(/Ki$/,"",mem); mem_gib=mem/1048576 }
+                else if (mem+0 > 0) { mem_gib=mem/1073741824 }
+                else { mem_gib=0 }
+                sum_cpu[ns] += cpu_cores
+                sum_mem[ns] += mem_gib
+            }
+            END {
+                for (ns in sum_cpu)
+                    if (ns != "" && ns != "NAMESPACE")
+                        printf "{\"ns\":\"%s\",\"cpu\":%.4f,\"mem\":%.4f}\n", ns, sum_cpu[ns], sum_mem[ns]
+            }' \
+            | jq -Rs '
+            [ split("\n")[] | select(length>0) | fromjson ] |
+            reduce .[] as $r
+                ({}; .[$r.ns] = {cpu_cores: $r.cpu, mem_gb: $r.mem})
+            ' > "${CAPACITY_JSON}/ns_actual_usage_prom.json" 2>/dev/null \
+            || echo '{}' > "${CAPACITY_JSON}/ns_actual_usage_prom.json"
+            log INFO "oc adm top fallback: $(jq 'length' "${CAPACITY_JSON}/ns_actual_usage_prom.json" 2>/dev/null || echo 0) namespaces"
+        fi
 
         # Actual pod ephemeral storage used (container overlay fs, emptyDir, logs)
         # This is the real disk consumed by pods — distinct from full-node Filesystem above
@@ -506,10 +548,15 @@ oc get pods \
 -o json \
 --chunk-size=250 \
 --request-timeout=120s \
-> "${CAPACITY_RAW}/pods.json" 2>&1 || {
+> "${CAPACITY_RAW}/pods.json" \
+2>"${CAPACITY_RAW}/pods_stderr.txt" || {
     log INFO "WARN: oc get pods returned non-zero — writing empty list and continuing"
     echo '{"items":[]}' > "${CAPACITY_RAW}/pods.json"
 }
+if ! jq -e '.items' "${CAPACITY_RAW}/pods.json" > /dev/null 2>&1; then
+    log ERROR "pods.json is not valid JSON — stderr: $(cat "${CAPACITY_RAW}/pods_stderr.txt" 2>/dev/null | head -3)"
+    echo '{"items":[]}' > "${CAPACITY_RAW}/pods.json"
+fi
 
 POD_COUNT=$(jq '.items | length' \
 "${CAPACITY_RAW}/pods.json" 2>/dev/null || echo 0)
@@ -593,6 +640,72 @@ jq -r '
 
 
 #############################################
+# Pod Effective Requests
+# (Red Hat best practice — Kubernetes scheduling semantics)
+#
+# Effective pod request = max(sum(app containers), max(init containers))
+# for each resource. A heavy init container counts even though it
+# does not run alongside app containers.
+#
+# Source: capacity_report_auto_html_v2.sh (uploaded reference script)
+# Ref: https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
+#      #resource-sharing-between-init-containers-and-app-containers
+#############################################
+
+log INFO "Computing effective pod requests (app containers vs init containers)"
+
+jq -r '
+def cpu_cores:
+  if . == null or . == "" then 0
+  elif test("m$") then (sub("m$";"") | tonumber) / 1000
+  else (tonumber? // 0) end;
+
+def mem_gib:
+  if . == null or . == "" then 0
+  elif test("Ki$") then (sub("Ki$";"") | tonumber) / 1048576
+  elif test("Mi$") then (sub("Mi$";"") | tonumber) / 1024
+  elif test("Gi$") then (sub("Gi$";"") | tonumber)
+  elif test("Ti$") then (sub("Ti$";"") | tonumber) * 1024
+  else (tonumber? // 0) / 1073741824 end;
+
+.items[] |
+select(.status.phase == "Running" or .status.phase == "Pending") |
+(.spec.nodeName // "") as $node |
+
+# App containers: sum of requests
+([ (.spec.containers // [])[] |
+   .resources.requests.cpu // "0" | cpu_cores ] | add // 0) as $app_cpu |
+([ (.spec.containers // [])[] |
+   .resources.requests.memory // "0" | mem_gib ] | add // 0) as $app_mem |
+
+# Init containers: max of individual requests (they run sequentially)
+([ (.spec.initContainers // [])[] |
+   .resources.requests.cpu // "0" | cpu_cores ] | max // 0) as $init_cpu |
+([ (.spec.initContainers // [])[] |
+   .resources.requests.memory // "0" | mem_gib ] | max // 0) as $init_mem |
+
+# Effective = max(app, init) — what the scheduler actually reserves
+([$app_cpu, $init_cpu] | max) as $eff_cpu |
+([$app_mem, $init_mem] | max) as $eff_mem |
+
+[
+  .metadata.namespace,
+  .metadata.name,
+  $node,
+  $eff_cpu,
+  $eff_mem,
+  ((.metadata.ownerReferences // []) | map(select(.controller==true)) |
+   if length>0 then (.[0].kind + "/" + .[0].name) else "standalone" end)
+] | @csv
+' \
+"${CAPACITY_RAW}/pods.json" \
+> "${CAPACITY_RAW}/pod_requests_raw.csv" 2>/dev/null || true
+
+log INFO "Effective pod requests: $(wc -l < "${CAPACITY_RAW}/pod_requests_raw.csv" 2>/dev/null || echo 0) pods"
+
+
+
+#############################################
 # Namespaces
 #############################################
 
@@ -644,11 +757,17 @@ oc get pvc \
 -o json \
 --chunk-size=250 \
 --request-timeout=120s \
-> "${CAPACITY_RAW}/pvcs.json" 2>&1 || {
-    log ERROR "oc get pvc failed — see output below (check RBAC and/or network timeout)"
-    log ERROR "$(tail -c 2000 "${CAPACITY_RAW}/pvcs.json" 2>/dev/null)"
+> "${CAPACITY_RAW}/pvcs.json" \
+2>"${CAPACITY_RAW}/pvcs_stderr.txt" || {
+    log ERROR "oc get pvc failed — stderr: $(cat "${CAPACITY_RAW}/pvcs_stderr.txt" 2>/dev/null | head -5)"
     echo '{"items":[]}' > "${CAPACITY_RAW}/pvcs.json"
 }
+
+# Validate the JSON is not corrupted (e.g. by warnings mixed into stdout)
+if ! jq -e '.items' "${CAPACITY_RAW}/pvcs.json" > /dev/null 2>&1; then
+    log ERROR "pvcs.json is not valid JSON — likely stderr mixed in. Writing empty list."
+    echo '{"items":[]}' > "${CAPACITY_RAW}/pvcs.json"
+fi
 
 
 
@@ -758,8 +877,91 @@ jq -r '
 
 
 #############################################
-# Pod Metrics Collection
+# Desired Replica Collection
+# (Red Hat practice #6: desired replicas = primary planning signal)
+#
+# Running pods tell you CURRENT pressure.
+# Desired replicas (spec.replicas × template requests) tell you what
+# the cluster MUST support if all workloads are healthy — the correct
+# basis for capacity planning decisions.
+#
+# Produces: desired_capacity.json  (per-namespace desired CPU/mem)
+#           desired_vs_running.csv (gap between desired and running)
 #############################################
+
+log INFO "Collecting desired replica capacity (Deployments + StatefulSets)"
+
+# Collect Deployments
+oc get deployments --all-namespaces -o json \
+    --chunk-size=250 --request-timeout=120s \
+> "${CAPACITY_RAW}/deployments.json" 2>/dev/null || echo '{"items":[]}' > "${CAPACITY_RAW}/deployments.json"
+
+# Collect StatefulSets
+oc get statefulsets --all-namespaces -o json \
+    --chunk-size=250 --request-timeout=120s \
+> "${CAPACITY_RAW}/statefulsets.json" 2>/dev/null || echo '{"items":[]}' > "${CAPACITY_RAW}/statefulsets.json"
+
+# Compute desired CPU/mem per namespace:
+# desired_cpu = spec.replicas × sum(container cpu requests in template)
+# desired_mem = spec.replicas × sum(container mem requests in template)
+jq -rs '
+def cpu_to_cores(v):
+  if v == null or v == "0" then 0
+  elif (v | test("m$")) then ((v[:-1] | tonumber) / 1000)
+  else (v | tonumber? // 0) end;
+
+def mem_to_gib(v):
+  if v == null or v == "0" then 0
+  elif (v | test("Ki$")) then ((v[:-2] | tonumber) / 1048576)
+  elif (v | test("Mi$")) then ((v[:-2] | tonumber) / 1024)
+  elif (v | test("Gi$")) then (v[:-2] | tonumber)
+  elif (v | test("Ti$")) then ((v[:-2] | tonumber) * 1024)
+  else 0 end;
+
+[ .[].items[] |
+  {
+    namespace: .metadata.namespace,
+    name:      .metadata.name,
+    kind:      .kind,
+    replicas:  (.spec.replicas // 1),
+    cpu_per_replica: ([
+      .spec.template.spec.containers[]?.resources.requests.cpu? // "0"
+    ] | map(cpu_to_cores(.)) | add // 0),
+    mem_per_replica: ([
+      .spec.template.spec.containers[]?.resources.requests.memory? // "0"
+    ] | map(mem_to_gib(.)) | add // 0)
+  } |
+  . + {
+    desired_cpu: (.replicas * .cpu_per_replica),
+    desired_mem: (.replicas * .mem_per_replica)
+  }
+] |
+group_by(.namespace) |
+map({
+  namespace: .[0].namespace,
+  desired_cpu_cores:  (map(.desired_cpu) | add // 0 | (. * 1000 | round) / 1000),
+  desired_mem_gib:    (map(.desired_mem) | add // 0 | (. * 100 | round) / 100),
+  workload_count:     length,
+  workloads: map({name, kind, replicas, cpu_per_replica, mem_per_replica, desired_cpu, desired_mem})
+}) |
+{
+  generated: now | todate,
+  note: "Desired = spec.replicas × template requests. Compare against running_requested (from namespace_usage) to find scheduling gaps and rightsizing opportunities.",
+  namespaces: .
+}
+' "${CAPACITY_RAW}/deployments.json" "${CAPACITY_RAW}/statefulsets.json" \
+> "${CAPACITY_JSON}/desired_capacity.json" 2>/dev/null \
+|| echo '{"namespaces":[]}' > "${CAPACITY_JSON}/desired_capacity.json"
+
+# Produce CSV for Excel (matching the spirit of the capacity_report_auto_html_v2.sh approach)
+echo "namespace,desired_cpu_cores,desired_mem_gib,workload_count" \
+> "${CAPACITY_CSV}/desired_capacity_by_namespace.csv"
+jq -r '.namespaces[] | [.namespace, .desired_cpu_cores, .desired_mem_gib, .workload_count] | @csv' \
+"${CAPACITY_JSON}/desired_capacity.json" \
+>> "${CAPACITY_CSV}/desired_capacity_by_namespace.csv" 2>/dev/null || true
+
+DESIRED_NS_COUNT=$(jq '.namespaces | length' "${CAPACITY_JSON}/desired_capacity.json" 2>/dev/null || echo 0)
+log INFO "Desired capacity: ${DESIRED_NS_COUNT} namespaces with workloads"
 
 log INFO "Collecting pod metrics"
 
@@ -791,31 +993,63 @@ fi
 
 
 #############################################
-# Node Metrics Collection
+# Node Metrics — oc adm top nodes
+# (Red Hat practice #7: usage vs Requests for rightsizing)
+#
+# PRIMARY:  oc adm top nodes — works on any OpenShift cluster with
+#           metrics-server. Produces 14_node_metrics.csv matching the
+#           format from capacity_report_auto_html_v2.sh.
+# FALLBACK: metrics.k8s.io raw API — used when oc adm top fails.
+# Purpose:  Rightsizing signal: compare CPU/Mem Usage against Requests
+#           to identify over-provisioned (Requests >> Usage) or
+#           under-provisioned (Usage >> Requests) namespaces/pods.
 #############################################
 
-log INFO "Collecting node metrics"
+log INFO "Collecting node metrics (oc adm top nodes)"
 
+NODE_METRICS_CSV="${CAPACITY_CSV}/14_node_metrics.csv"
+echo "Node,CPU_Usage_Cores,CPU_Usage_Pct,Memory_Usage_GiB,Memory_Usage_Pct" \
+> "${NODE_METRICS_CSV}"
 
-
-if [[ "$(cat "${CAPACITY_JSON}/metrics_available.txt")" == "true" ]]
-then
-
-
-oc get --raw \
-"/apis/metrics.k8s.io/v1beta1/nodes" \
-> "${CAPACITY_RAW}/node_metrics.json" \
-2>/dev/null || true
-
-
+if oc adm top nodes --no-headers > "${CAPACITY_RAW}/adm_top_nodes.txt" 2>/dev/null \
+   && [[ $(wc -l < "${CAPACITY_RAW}/adm_top_nodes.txt") -gt 0 ]]; then
+    log INFO "oc adm top nodes: OK"
+    awk '{
+        name=$1; cpu=$2; cpu_pct=$3; mem=$4; mem_pct=$5
+        # Strip units: m=millicores, %
+        gsub(/%/, "", cpu_pct); gsub(/%/, "", mem_pct)
+        # CPU: could be e.g. 250m or 2 (cores)
+        cpu_cores = (cpu ~ /m$/) ? (substr(cpu,1,length(cpu)-1)+0)/1000 : cpu+0
+        # Memory: Mi or Gi
+        if (mem ~ /Gi$/) mem_gib = substr(mem,1,length(mem)-2)+0
+        else if (mem ~ /Mi$/) mem_gib = (substr(mem,1,length(mem)-2)+0)/1024
+        else mem_gib = mem+0
+        printf "%s,%.4f,%s,%.2f,%s\n", name, cpu_cores, cpu_pct, mem_gib, mem_pct
+    }' "${CAPACITY_RAW}/adm_top_nodes.txt" >> "${NODE_METRICS_CSV}"
+    echo "true" > "${CAPACITY_JSON}/metrics_available.txt"
 else
-
-
-echo '{}' \
-> "${CAPACITY_RAW}/node_metrics.json"
-
-
+    log INFO "oc adm top nodes unavailable — trying metrics.k8s.io raw API"
+    if oc get --raw "/apis/metrics.k8s.io/v1beta1/nodes" \
+       > "${CAPACITY_RAW}/node_metrics.json" 2>/dev/null; then
+        jq -r '.items[] | [
+            .metadata.name,
+            (.usage.cpu | if test("m$") then (.[:-1]|tonumber)/1000 else (tonumber? // 0) end),
+            0,
+            (.usage.memory | if test("Ki$") then (.[:-2]|tonumber)/1048576
+             elif test("Mi$") then (.[:-2]|tonumber)/1024
+             elif test("Gi$") then (.[:-2]|tonumber) else 0 end),
+            0
+        ] | @csv' "${CAPACITY_RAW}/node_metrics.json" \
+        | tr -d '"' >> "${NODE_METRICS_CSV}" 2>/dev/null || true
+        echo "true" > "${CAPACITY_JSON}/metrics_available.txt"
+    else
+        echo '{}' > "${CAPACITY_RAW}/node_metrics.json"
+        echo "false" > "${CAPACITY_JSON}/metrics_available.txt"
+        log INFO "WARN: Node metrics unavailable from both oc adm top and metrics.k8s.io"
+    fi
 fi
+
+log INFO "Node metrics CSV: ${NODE_METRICS_CSV}"
 
 
 

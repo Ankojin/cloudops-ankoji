@@ -26,6 +26,8 @@ body{font-family:"Segoe UI",Arial,sans-serif;background:#f4f6f9;margin:0;padding
 .tab-bar button:hover:not(.active){color:#fff}
 .tab-panel{display:none}
 .tab-panel.active{display:block}
+.tab-content{display:none}
+.tab-content.active{display:block}
 .header-right{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:.82rem;color:#adc6e0}
 #countdown{font-weight:700;color:#79c0ff;font-size:.95rem;min-width:2.5ch}
 .btn-refresh{background:#2e6fad;border:1px solid #3b84c7;color:#fff;
@@ -122,6 +124,10 @@ tr:last-child td{border-bottom:none}
   <button onclick="switchTab('sit',this)">SIT Details</button>
   <button onclick="switchTab('pools',this)">Dedicated Node Pools</button>
   <button onclick="switchTab('namespaces',this)">Namespaces</button>
+  <button onclick="switchTab('nodepressure',this)">&#128202; Node Pressure</button>
+  <button onclick="switchTab('desiredreplicas',this)">&#128295; Desired Replicas</button>
+  <button onclick="switchTab('misplaced',this)">&#9888; Misplaced</button>
+  <button onclick="switchTab('pvcs',this)">&#128190; PVC Inventory</button>
   <button onclick="switchTab('analytics',this)">&#128202; Analytics</button>
   <div class="header-right">
     <span>Refresh in <span id="countdown">5:00</span></span>
@@ -252,8 +258,105 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 
+<!-- ══ Node Pressure tab ══ -->
+<div id="tab-nodepressure" class="tab-content" style="display:none">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <h2 style="margin:0">&#128202; Worker Node Pressure</h2>
+      <select id="np-env-select" onchange="renderNodePressureTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px">
+        <option value="DEV">DEV</option><option value="SIT">SIT</option>
+      </select>
+    </div>
+    <div class="info" style="margin-bottom:12px"><b>CPU/Mem Request %</b> = scheduled demand vs allocatable (scheduler pressure).
+    <b>CPU/Mem Used %</b> = real consumption from <code>oc adm top nodes</code>. High Request% with low Used% = over-provisioned workloads (rightsizing opportunity). High Used% = actual saturation risk.</div>
+    <div id="np-table-wrap"><p style="color:#aaa">Loading…</p></div>
+  </div>
+</div>
+
+<!-- ══ Desired Replicas tab ══ -->
+<div id="tab-desiredreplicas" class="tab-content" style="display:none">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <h2 style="margin:0">&#128295; Desired Replica Demand</h2>
+      <select id="dr-env-select" onchange="renderDesiredReplicasTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px">
+        <option value="DEV">DEV</option><option value="SIT">SIT</option>
+      </select>
+      <input id="dr-filter" type="text" placeholder="Filter namespace/controller…" oninput="filterDesiredTable()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;width:240px"/>
+    </div>
+    <div class="info" style="margin-bottom:12px">
+      <b>Primary planning signal</b> (Red Hat practice #6): <code>spec.replicas × template requests</code> = what the cluster must support if all workloads are fully scaled.
+      Compare against Running requests in the Namespaces tab to identify scheduling gaps. Replicas=0 = intentionally scaled-down (still counts toward desired capacity when scaled up).
+    </div>
+    <div id="dr-table-wrap"><p style="color:#aaa">Loading…</p></div>
+  </div>
+</div>
+
+<!-- ══ Misplaced Workloads tab ══ -->
+<div id="tab-misplaced" class="tab-content" style="display:none">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <h2 style="margin:0">&#9888; Misplaced Dedicated Workloads</h2>
+      <select id="mp-env-select" onchange="renderMisplacedTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px">
+        <option value="DEV">DEV</option><option value="SIT">SIT</option>
+      </select>
+    </div>
+    <div class="info" style="margin-bottom:12px">
+      Pods whose <b>nodeSelector or nodeAffinity targets a dedicated taint key</b> (e.g. <code>app=sas</code>, <code>dedicated=uipath</code>)
+      but are <b>running on shared nodes</b>. Toleration-alone is not flagged — that is common on operators.
+      These pods are likely using shared capacity they weren't supposed to consume.
+    </div>
+    <div id="mp-alert-wrap"></div>
+    <div id="mp-table-wrap"><p style="color:#aaa">Loading…</p></div>
+  </div>
+</div>
+
+<!-- ══ PVC Inventory tab ══ -->
+<div id="tab-pvcs" class="tab-content" style="display:none">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <h2 style="margin:0">&#128190; PVC Inventory</h2>
+      <select id="pvc-env-select" onchange="renderPvcTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer">
+        <option value="DEV">DEV</option>
+        <option value="SIT">SIT</option>
+      </select>
+      <input id="pvc-ns-filter" type="text" placeholder="Filter namespace…"
+        oninput="renderPvcTable()"
+        style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;width:180px"/>
+      <input id="pvc-sc-filter" type="text" placeholder="Filter storage class…"
+        oninput="renderPvcTable()"
+        style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;width:180px"/>
+      <button onclick="exportPvcCsv()" style="margin-left:auto;background:#2e75b6;color:#fff;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px">&#8681; Export CSV</button>
+    </div>
+
+    <!-- Summary cards -->
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div class="card" style="flex:1;min-width:140px;padding:12px 16px">
+        <div style="font-size:12px;color:#888">Total PVCs</div>
+        <div id="pvc-total-count" style="font-size:22px;font-weight:700;color:#2e75b6">—</div>
+      </div>
+      <div class="card" style="flex:1;min-width:140px;padding:12px 16px">
+        <div style="font-size:12px;color:#888">Total Capacity</div>
+        <div id="pvc-total-gib" style="font-size:22px;font-weight:700;color:#16a085">—</div>
+      </div>
+      <div class="card" style="flex:2;min-width:240px;padding:12px 16px">
+        <div style="font-size:12px;color:#888;margin-bottom:6px">By Storage Class</div>
+        <div id="pvc-by-sc" style="font-size:13px">—</div>
+      </div>
+      <div class="card" style="flex:2;min-width:240px;padding:12px 16px">
+        <div style="font-size:12px;color:#888;margin-bottom:6px">Top Namespaces by Capacity</div>
+        <div id="pvc-by-ns" style="font-size:13px">—</div>
+      </div>
+    </div>
+
+    <!-- PVC table -->
+    <div id="pvc-table-wrap" style="overflow-x:auto">
+      <p style="color:#aaa">Loading…</p>
+    </div>
+  </div>
+</div>
+
 <!-- ══ Analytics tab ══ -->
-<div class="tab-panel" id="tab-analytics">
+<div class="tab-content" id="tab-analytics" style="display:none">
   <div class="wrap">
     <div class="card">
       <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -275,24 +378,33 @@ tr:last-child td{border-bottom:none}
     </div>
     <div class="card">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-        <h3 style="margin:0">Data Table</h3>
-        <button onclick="exportAnalyticsCsv()" style="background:#27ae60;color:#fff;border:none;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px">&#8681; Aggregated CSV</button>
-        <button onclick="exportAnalyticsCsvRaw()" style="background:#555;color:#fff;border:none;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px">&#8681; Raw Snapshots CSV</button>
+        <h3 style="margin:0">Data Table — Standard Worker Pool</h3>
+        <span id="an-notice" style="font-size:12px;color:#e67e22"></span>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button onclick="exportAnalyticsCsv()" style="background:#27ae60;color:#fff;border:none;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px">&#8681; Aggregated CSV</button>
+          <button onclick="exportAnalyticsCsvRaw()" style="background:#555;color:#fff;border:none;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:12px">&#8681; Raw Snapshots CSV</button>
+        </div>
       </div>
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
-            <th>Period</th><th>Snapshots</th>
-            <th>Avg CPU %</th><th>Max CPU %</th>
-            <th>Avg Mem %</th><th>Max Mem %</th>
-            <th>Avg Pods</th><th>Max Pods</th>
+            <th>Period</th>
+            <th>Snapshots</th>
+            <th>Avg CPU % <small>(workers)</small></th>
+            <th>Max CPU % <small>(workers)</small></th>
+            <th>Avg Mem % <small>(workers)</small></th>
+            <th>Max Mem % <small>(workers)</small></th>
+            <th>Avg CPU Used <small>(cores)</small></th>
+            <th>Avg Mem Used <small>(GiB)</small></th>
+            <th>Avg Pods</th>
+            <th>Max Pods</th>
             <th>Avg Workers</th>
-            <th>Avg CPU Used (cores)</th>
-            <th>Avg Mem Used (GiB)</th>
-            <th>Total CPU</th><th>Total Mem (GiB)</th>
+            <th>Avg Worker CPU <small>(cores)</small></th>
+            <th>Avg Worker Mem <small>(GiB)</small></th>
+            <th>Total Cluster CPU</th>
           </tr></thead>
           <tbody id="analytics-tbody">
-            <tr><td colspan="13" style="text-align:center;color:#aaa">Loading…</td></tr>
+            <tr><td colspan="14" style="text-align:center;color:#aaa">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -313,11 +425,20 @@ let _remaining = REFRESH_SECS;
 
 // ── Tab switching ────────────────────────────────────────────
 function switchTab(id,btn){
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-panel,.tab-content').forEach(p=>{
+    p.classList.remove('active');
+    // Ensure inline display:none is applied when not active (for tab-content tabs set with style="display:none")
+    if(!p.classList.contains('active')) p.style.display='none';
+  });
   document.querySelectorAll('.tab-bar button').forEach(b=>b.classList.remove('active'));
-  document.getElementById('tab-'+id).classList.add('active');
+  const tab = document.getElementById('tab-'+id);
+  if(tab){ tab.classList.add('active'); tab.style.display='block'; }
   btn.classList.add('active');
-  if(id==='analytics') renderAnalyticsTab();
+  if(id==='analytics')      renderAnalyticsTab();
+  if(id==='pvcs')           renderPvcTab();
+  if(id==='nodepressure')   renderNodePressureTab();
+  if(id==='desiredreplicas')renderDesiredReplicasTab();
+  if(id==='misplaced')      renderMisplacedTab();
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -406,21 +527,35 @@ function buildEnvTab(env){
   <div class="card">
     <h2>Growth Forecast (vs Worker Pool)</h2>
     <p style="color:#555;font-size:13px">Safe threshold = 80% of worker capacity. Green=safe · Yellow=monitor · Red=action needed.</p>
-    <table><tr><th>Scenario</th><th>CPU % of Workers</th><th>Memory % of Workers</th><th>Status</th></tr>
-    <tbody id="${p}-growth-rows"><tr><td colspan="4" style="text-align:center;color:#aaa">Loading…</td></tr></tbody></table>
+    <table style="width:100%">
+      <thead><tr style="background:#f5f5f5;font-size:11px;color:#555;text-align:left">
+        <th style="font-weight:600;padding:6px 8px">Scenario</th>
+        <th style="padding:6px 8px">CPU % of Workers</th>
+        <th style="padding:6px 8px">Memory % of Workers</th>
+        <th style="padding:6px 8px">Remaining CPU</th>
+        <th style="padding:6px 8px">Remaining Mem</th>
+        <th style="padding:6px 8px">Nodes to Add</th>
+        <th style="padding:6px 8px">Status</th>
+      </tr></thead>
+      <tbody id="${p}-growth-rows"><tr><td colspan="7" style="text-align:center;color:#aaa">Loading…</td></tr></tbody>
+    </table>
   </div>
   <div class="card">
     <h2>Capacity Planning — Worker Pool</h2>
     <div id="${p}-pressure-box" class="pressure-box pressure-GREEN">&#9888; Pressure: GREEN</div>
     <table>
       <tr><th>Metric</th><th>Value</th></tr>
-      <tr><td>Worker Nodes</td><td><b id="${p}-plan-workers">—</b></td></tr>
-      <tr><td>Worker CPU Capacity</td><td><b id="${p}-plan-cpu">—</b> cores</td></tr>
-      <tr><td>Worker Memory Capacity</td><td><b id="${p}-plan-mem">—</b> GiB</td></tr>
-      <tr><td>CPU Requested (% of workers)</td><td><b id="${p}-plan-cpu-pct">—</b>%</td></tr>
-      <tr><td>Memory Requested (% of workers)</td><td><b id="${p}-plan-mem-pct">—</b>%</td></tr>
+      <tr><td>Total Worker Nodes (all pools)</td><td><b id="${p}-plan-workers-total">—</b></td></tr>
+      <tr><td>Standard Worker Nodes (dedicated excluded)</td><td><b id="${p}-plan-workers">—</b></td></tr>
+      <tr><td>Worker CPU Capacity (Standard)</td><td><b id="${p}-plan-cpu">—</b> cores</td></tr>
+      <tr><td>Worker Memory Capacity (Standard)</td><td><b id="${p}-plan-mem">—</b> GiB</td></tr>
+      <tr><td>CPU Requested (% of workers)</td><td><b id="${p}-plan-cpu-pct">—</b></td></tr>
+      <tr><td>Memory Requested (% of workers)</td><td><b id="${p}-plan-mem-pct">—</b></td></tr>
       <tr><td>CPU Actual Used</td><td><b id="${p}-plan-cpu-used">—</b> cores</td></tr>
       <tr><td>Memory Actual Used</td><td><b id="${p}-plan-mem-used">—</b> GiB</td></tr>
+      <tr style="background:#f0f9f4"><td>Remaining CPU (before 80% threshold)</td><td><b id="${p}-plan-cpu-rem" style="color:#16a085">—</b></td></tr>
+      <tr style="background:#f0f9f4"><td>Remaining Memory (before 80% threshold)</td><td><b id="${p}-plan-mem-rem" style="color:#16a085">—</b></td></tr>
+      <tr style="background:#fff8f0"><td>Nodes to Add (to restore safe headroom)</td><td><b id="${p}-plan-nodes-add" style="color:#c0392b">—</b></td></tr>
       <tr><td>Namespaces</td><td><b id="${p}-plan-ns">—</b></td></tr>
     </table>
   </div>
@@ -488,18 +623,41 @@ function buildHistoryChart(env,points){
 // ── Growth forecast rows ─────────────────────────────────────
 function growthRows(d){
   const wCpu=+(d.worker_cpu||0), wMem=+(d.worker_mem_gib||0);
-  const cReq=+(d.total_cpu||0)*(+(d.cpu_pct||0)/100);
-  const mReq=+(d.total_mem_gib||0)*(+(d.mem_pct||0)/100);
-  return [{l:'Current (now)',f:0},{l:'+25% growth',f:.25},{l:'+50% growth',f:.5},{l:'+75% growth',f:.75},{l:'+100% growth',f:1}]
+  const cReq=+(d.worker_cpu_requested||0);
+  const mReq=+(d.worker_mem_gib_requested||0);
+  // Standard-worker count only — worker_nodes includes dedicated pool nodes.
+  // Use worker_cpu / (worker_cpu per node) to derive standard-worker count,
+  // or fall back to total minus any dedicated nodes visible from pools data.
+  // Simplest reliable proxy: worker_cpu / avg_node_cpu.
+  // avg node cpu ≈ all_worker_cpu / worker_nodes if both are available.
+  const totalWorkerNodes = +(d.worker_nodes||1);
+  const allWCpu = +(d.all_worker_cpu||wCpu*1.5||1);
+  const cpuPerNode = totalWorkerNodes > 0 ? allWCpu / totalWorkerNodes : 0;
+  const stdNodeCount = (cpuPerNode > 0) ? Math.round(wCpu / cpuPerNode) : totalWorkerNodes;
+  const netPerNode = stdNodeCount > 0 ? wCpu / stdNodeCount : 0;
+
+  const rows = [{l:'Current (now)',f:0},{l:'+25% growth',f:.25},{l:'+50% growth',f:.5},{l:'+75% growth',f:.75},{l:'+100% growth',f:1}]
     .map(s=>{
       const fCpu=cReq*(1+s.f), fMem=mReq*(1+s.f);
       const cP=wCpu>0?(fCpu/wCpu)*100:0, mP=wMem>0?(fMem/wMem)*100:0;
-      const st=cP>85?'critical':cP>70?'at_risk':'safe';
+      const remCpu=wCpu*0.80-fCpu, remMem=wMem*0.80-fMem;
+      // Match exactly the same thresholds as the pressure gauge
+      const st=cP>90?'critical':cP>80?'at_risk':'safe';
+      const stLabel=cP>90?'critical':cP>80?'at risk':'safe';
+      let nodesNeeded=0;
+      if(remCpu<0 && netPerNode*0.80>0) nodesNeeded=Math.ceil(-remCpu/(netPerNode*0.80));
+      const nodesColor=nodesNeeded===0?'#16a085':'#c0392b';
+      const remCpuColor=remCpu>=0?'#16a085':'#c0392b';
+      const remMemColor=remMem>=0?'#16a085':'#c0392b';
       return `<tr class="row-${st}"><td><b>${s.l}</b></td>
-        <td><div style="display:flex;align-items:center;gap:8px"><div class="bar-wrap" style="flex:1;height:10px"><div class="bar-fill bar-${st}" style="width:${cap(cP).toFixed(1)}%;height:10px"></div></div><span>${cP.toFixed(1)}%</span></div><small style="color:#888">${fCpu.toFixed(1)} cores</small></td>
+        <td><div style="display:flex;align-items:center;gap:8px"><div class="bar-wrap" style="flex:1;height:10px"><div class="bar-fill bar-${st}" style="width:${Math.min(cP,100).toFixed(1)}%;height:10px"></div></div><span>${cP.toFixed(1)}%</span></div><small style="color:#888">${fCpu.toFixed(1)} cores</small></td>
         <td>${mP.toFixed(1)}% <small style="color:#888">(${fMem.toFixed(1)} GiB)</small></td>
-        <td><span class="badge-${st}">${st.replace('_',' ')}</span></td></tr>`;
+        <td style="color:${remCpuColor};font-weight:600">${remCpu>=0?'+':''}${remCpu.toFixed(1)} cores</td>
+        <td style="color:${remMemColor};font-weight:600">${remMem>=0?'+':''}${remMem.toFixed(1)} GiB</td>
+        <td style="color:${nodesColor};font-weight:700;text-align:center">${nodesNeeded===0?'—':'+'+nodesNeeded}</td>
+        <td><span class="badge-${st}">${stLabel}</span></td></tr>`;
     }).join('');
+  return rows;
 }
 
 // ── Render overview cards ────────────────────────────────────
@@ -511,8 +669,16 @@ function renderOverview(envs){
     ($('ov-'+p+'-time')||{}).textContent=d.collected_at?new Date(d.collected_at).toLocaleString():'—';
     ($('ov-'+p+'-workers')||{}).textContent=d.worker_nodes??'—';
     ($('ov-'+p+'-masters')||{}).textContent=d.master_nodes??'—';
-    ($('ov-'+p+'-cpu')||{}).textContent=f1(d.worker_cpu);
-    ($('ov-'+p+'-mem')||{}).textContent=f1(d.worker_mem_gib);
+    // all_worker_cpu/mem is populated from the first post-rebuild collection run.
+    // Fall back gracefully to total_cpu/total_mem_gib for any older snapshot
+    // (shows whole cluster rather than nothing, still useful).
+    // all_worker_cpu = blended all-worker (dedicated+standard, no masters/infra)
+    // Falls back to worker_cpu (standard-only) when all_worker_cpu not yet populated
+    // Only falls back to total_cpu as absolute last resort (includes masters)
+    const allCpu = +(d.all_worker_cpu||0) || +(d.worker_cpu||0)+(+(d.dedicated_cpu||0)) || +(d.total_cpu||0);
+    const allMem = +(d.all_worker_mem_gib||0) || +(d.worker_mem_gib||0) || +(d.total_mem_gib||0);
+    ($('ov-'+p+'-cpu')||{}).textContent=allCpu>0?f1(allCpu):'—';
+    ($('ov-'+p+'-mem')||{}).textContent=allMem>0?f1(allMem):'—';
     ($('ov-'+p+'-pods')||{}).textContent=d.pods_running??'—';
     ($('ov-'+p+'-cpupct')||{}).textContent=pct(cpuP);
     ($('ov-'+p+'-mempct')||{}).textContent=pct(memP);
@@ -526,10 +692,19 @@ function renderOverview(envs){
 function renderEnvTab(env,d,hist){
   const p=env.toLowerCase();
   const cpuP=+(d.cpu_pct||0), memP=+(d.mem_pct||0);
-  const wCpu=+(d.worker_cpu||0), wMem=+(d.worker_mem_gib||0);
+  // Worker Pool Utilization widget: ALL worker nodes, dedicated pools
+  // included — reflects total worker inventory (actual usage isn't
+  // currently split per-pool, only requested is, so this stays blended).
+  const allWCpu=+(d.all_worker_cpu||0), allWMem=+(d.all_worker_mem_gib||0);
+  // Capacity Planning / Growth Forecast: STANDARD worker pool only,
+  // dedicated/tainted pools excluded — this is what pressure/scaling
+  // decisions should be based on.
+  const stdWCpu=+(d.worker_cpu||0), stdWMem=+(d.worker_mem_gib||0);
+  const stdCpuReqPct=stdWCpu>0?((+(d.worker_cpu_requested||0)/stdWCpu)*100):0;
+  const stdMemReqPct=stdWMem>0?((+(d.worker_mem_gib_requested||0)/stdWMem)*100):0;
   const cpuUsed=+(d.cpu_used||0), memUsed=+(d.mem_used_gib||0);
-  const wCpuBar=wCpu>0?Math.min((cpuUsed/wCpu)*100,100):0;
-  const wMemBar=wMem>0?Math.min((memUsed/wMem)*100,100):0;
+  const wCpuBar=allWCpu>0?Math.min((cpuUsed/allWCpu)*100,100):0;
+  const wMemBar=allWMem>0?Math.min((memUsed/allWMem)*100,100):0;
   const health=Math.max(0,100-Math.max(cpuP,memP)).toFixed(0);
   const st=cpuP>85||memP>85?'CRITICAL':cpuP>70||memP>70?'WARNING':'HEALTHY';
   const stCls={CRITICAL:'red',WARNING:'orange',HEALTHY:'green'}[st];
@@ -552,23 +727,43 @@ function renderEnvTab(env,d,hist){
   ($(`${p}-pods`)||{}).textContent=d.pods_running??'—';
   ($(`${p}-worker-label`)||{}).textContent=(d.worker_nodes??'—')+' worker nodes';
   ($(`${p}-cpu-used-val`)||{}).textContent=f1(cpuUsed)+' cores';
-  ($(`${p}-cpu-avail-txt`)||{}).textContent=f1(Math.max(0,wCpu-cpuUsed))+' cores free of '+f1(wCpu)+' total';
+  ($(`${p}-cpu-avail-txt`)||{}).textContent=f1(Math.max(0,allWCpu-cpuUsed))+' cores free of '+f1(allWCpu)+' total';
   ($(`${p}-cpu-bar-pct`)||{}).textContent=wCpuBar.toFixed(1)+'% utilized';
   const cpuBarEl=$(`${p}-cpu-bar-el`); if(cpuBarEl){cpuBarEl.style.width=cap(wCpuBar)+'%';cpuBarEl.style.background=wCpuBar>85?'#c0392b':wCpuBar>60?'#e67e22':'#2e75b6';}
   ($(`${p}-mem-used-val`)||{}).textContent=f1(memUsed)+' GiB';
-  ($(`${p}-mem-avail-txt`)||{}).textContent=f1(Math.max(0,wMem-memUsed))+' GiB free of '+f1(wMem)+' total';
+  ($(`${p}-mem-avail-txt`)||{}).textContent=f1(Math.max(0,allWMem-memUsed))+' GiB free of '+f1(allWMem)+' total';
   ($(`${p}-mem-bar-pct`)||{}).textContent=wMemBar.toFixed(1)+'% utilized';
   const memBarEl=$(`${p}-mem-bar-el`); if(memBarEl){memBarEl.style.width=cap(wMemBar)+'%';memBarEl.style.background=wMemBar>85?'#c0392b':wMemBar>60?'#e67e22':'#16a085';}
   ($(`${p}-pods-running`)||{}).textContent=d.pods_running??'—';
   const us=$(`${p}-util-source`); if(us){us.textContent=cpuUsed>0?'✓ Metrics Server':'Metrics unavailable';us.style.background=cpuUsed>0?'#d4edda':'#fff3cd';us.style.color=cpuUsed>0?'#1a7f37':'#856404';}
   const gr=$(`${p}-growth-rows`); if(gr) gr.innerHTML=growthRows(d);
-  ($(`${p}-plan-workers`)||{}).textContent=d.worker_nodes||'—';
-  ($(`${p}-plan-cpu`)||{}).textContent=f1(wCpu);
-  ($(`${p}-plan-mem`)||{}).textContent=f1(wMem);
-  ($(`${p}-plan-cpu-pct`)||{}).textContent=pct(cpuP);
-  ($(`${p}-plan-mem-pct`)||{}).textContent=pct(memP);
-  ($(`${p}-plan-cpu-used`)||{}).textContent=f1(cpuUsed);
-  ($(`${p}-plan-mem-used`)||{}).textContent=f1(memUsed);
+  ($(`${p}-plan-workers-total`)||{}).textContent=d.worker_nodes||'—';
+  // Standard-worker node count = standard_worker_cpu / (all_worker_cpu / worker_nodes)
+  const allWCpuPlan = +(d.all_worker_cpu||0)||stdWCpu;
+  const cpuPerNodePlan = (+(d.worker_nodes||0)>0) ? allWCpuPlan/(+(d.worker_nodes)) : 0;
+  const stdNodesPlan = (cpuPerNodePlan>0) ? Math.round(stdWCpu/cpuPerNodePlan) : (d.worker_nodes||'—');
+  ($(`${p}-plan-workers`)||{}).textContent=stdNodesPlan;
+  ($(`${p}-plan-cpu`)||{}).textContent=f1(stdWCpu)+' cores';
+  ($(`${p}-plan-mem`)||{}).textContent=f1(stdWMem)+' GiB';
+  ($(`${p}-plan-cpu-pct`)||{}).textContent=pct(stdCpuReqPct);
+  ($(`${p}-plan-mem-pct`)||{}).textContent=pct(stdMemReqPct);
+  ($(`${p}-plan-cpu-used`)||{}).textContent=f1(cpuUsed)+' cores';
+  ($(`${p}-plan-mem-used`)||{}).textContent=f1(memUsed)+' GiB';
+  // Remaining headroom before the 80% safe threshold
+  const stdCpuReq = +(d.worker_cpu_requested||0);
+  const stdMemReq = +(d.worker_mem_gib_requested||0);
+  const remCpu = (stdWCpu*0.80 - stdCpuReq), remMem = (stdWMem*0.80 - stdMemReq);
+  const remCpuEl = $(`${p}-plan-cpu-rem`);
+  if(remCpuEl){ remCpuEl.textContent=(remCpu>=0?'+':'')+remCpu.toFixed(1)+' cores'; remCpuEl.style.color=remCpu>=0?'#16a085':'#c0392b'; }
+  const remMemEl = $(`${p}-plan-mem-rem`);
+  if(remMemEl){ remMemEl.textContent=(remMem>=0?'+':'')+remMem.toFixed(1)+' GiB'; remMemEl.style.color=remMem>=0?'#16a085':'#c0392b'; }
+  // Nodes to add (DaemonSet-aware estimate)
+  const nodesTotal2 = +(d.worker_nodes||1);
+  const netPerNode2 = nodesTotal2>0 ? stdWCpu/nodesTotal2 : 0;
+  let nodesNeeded2 = 0;
+  if(remCpu<0 && netPerNode2*0.80>0) nodesNeeded2=Math.ceil(-remCpu/(netPerNode2*0.80));
+  const naEl = $(`${p}-plan-nodes-add`);
+  if(naEl){ naEl.textContent = nodesNeeded2===0 ? 'None needed ✓' : '+'+nodesNeeded2+' node(s)'; naEl.style.color = nodesNeeded2===0?'#16a085':'#c0392b'; }
   ($(`${p}-plan-ns`)||{}).textContent=d.ns_count||'—';
   const prBox=$(`${p}-pressure-box`); if(prBox){prBox.className='pressure-box pressure-'+pressure;prBox.innerHTML='&#9888; Pressure: '+pressure;}
 
@@ -587,13 +782,29 @@ function renderEnvTab(env,d,hist){
 // ── Render node pools ────────────────────────────────────────
 function renderPools(env,data){
   const el=$('pools-'+env.toLowerCase()+'-content'); if(!el) return;
-  if(!data.pools||!data.pools.length){el.innerHTML='<p style="color:#aaa">No pool data available.</p>';return;}
-  let h='<table><thead><tr><th>Pool / Taint</th><th>Nodes</th><th>CPU</th><th>Memory</th><th>Type</th></tr></thead><tbody>';
-  data.pools.forEach(pool=>{
-    const bg=pool.dedicated?'#f5f9ff':'#fafafa';
-    const nc=pool.dedicated?'#1f4e79':'#555';
+  const dedicated = (data.pools||[]).filter(p=>p.dedicated);
+  if(!dedicated.length){
+    el.innerHTML='<p style="color:#aaa">No dedicated/tainted worker pools detected in this environment.</p>';
+    return;
+  }
+  // Only dedicated pools shown here — standard-worker is shown in Capacity Planning tab
+  let h='<table><thead><tr><th>Pool / Taint</th><th>Nodes</th><th>CPU Capacity</th><th>CPU Requested</th><th>Memory Capacity</th><th>Memory Requested</th><th>Utilization</th><th>Pressure</th><th>Type</th></tr></thead><tbody>';
+  dedicated.forEach(pool=>{
     const taint=pool.taint_key?`<br><small style="font-family:monospace;color:#888">${pool.taint_key}=${pool.taint_value||''}:${pool.effect||''}</small>`:'';
-    h+=`<tr style="background:${bg};border-bottom:1px solid #eee"><td><b style="color:${nc}">${pool.pool_name||'—'}</b>${taint}</td><td>${pool.node_count||0}</td><td>${f1(pool.cpu_cores)} cores</td><td>${f1(pool.memory_gib)} GiB</td><td>${pool.dedicated?'<span class="type-tenant">dedicated</span>':'<span style="color:#888;font-size:11px">standard</span>'}</td></tr>`;
+    const cpuU=+(pool.cpu_utilization_pct||0), memU=+(pool.memory_utilization_pct||0);
+    const maxU=Math.max(cpuU,memU);
+    const pressure=(pool.pressure_level||'GREEN').toUpperCase();
+    h+=`<tr style="background:#f5f9ff;border-bottom:1px solid #eee">
+      <td><b style="color:#1f4e79">${pool.pool_name||'—'}</b>${taint}</td>
+      <td>${pool.node_count||0}</td>
+      <td>${f1(pool.cpu_cores)} cores</td>
+      <td>${f1(pool.cpu_cores_requested)} cores</td>
+      <td>${f1(pool.memory_gib)} GiB</td>
+      <td>${f1(pool.memory_gib_requested)} GiB</td>
+      <td><b style="color:${utilColor(maxU)}">${maxU.toFixed(1)}%</b></td>
+      <td><span class="${pressureBadge(pressure)}">${pressure}</span></td>
+      <td><span class="type-tenant">dedicated</span></td>
+    </tr>`;
   });
   h+='</tbody></table>';
   el.innerHTML=h;
@@ -614,13 +825,13 @@ function renderNamespacesTab(){
     if(typeFilter==='infra'&&!isInfra) return;
     const cU=+(ns.cpu_util_pct||0), mU=+(ns.mem_util_pct||0);
     const cColor=utilColor(cU), mColor=utilColor(mU);
-    const hasAct=(+(ns.cpu_actual||0)>0||+(ns.mem_actual||0)>0);
+    const hasAct=(+(ns.cpu_used||0)>0||+(ns.mem_used_gib||0)>0);
     let bg; if(isInfra){bg='#f3e8ff';}else{tenantRow++;bg=(tenantRow%2===0)?'#eaf4fb':'#ffffff';}
     rows+=`<tr style="background:${bg};border-bottom:1px solid #e0e0e0">
       <td>${ns.namespace}</td><td><span class="${isInfra?'type-infra':'type-tenant'}">${isInfra?'infra':'tenant'}</span></td>
-      <td>${ns.pod_count||0}</td><td>${f3(ns.cpu_req)}</td><td>${f3(ns.cpu_actual||0)}</td>
+      <td>${ns.pod_count||0}</td><td>${f3(ns.cpu_req)}</td><td>${f3(ns.cpu_used||0)}</td>
       <td><b style="color:${cColor}">${cU.toFixed(1)}%</b></td>
-      <td>${f1(ns.mem_req_gib||ns.mem_req||0)}</td><td>${f1(ns.mem_actual||0)}</td>
+      <td>${f1(ns.mem_req_gib||ns.mem_req||0)}</td><td>${f1(ns.mem_used_gib||0)}</td>
       <td><b style="color:${mColor}">${mU.toFixed(1)}%</b></td></tr>`;
     if(!isInfra){
       const bc=!hasAct?'#2e75b6':cU>90?'#c0392b':cU>50?'#1a7f37':'#d35400';
@@ -631,11 +842,11 @@ function renderNamespacesTab(){
         </div>
         <table style="width:100%;font-size:12px">
           <tr><td style="color:#555">CPU Reserved</td><td style="text-align:right;font-weight:700;color:#2e75b6">${f3(ns.cpu_req)} cores</td></tr>
-          ${hasAct?`<tr><td style="color:#555">CPU Actual</td><td style="text-align:right;font-weight:700;color:#e67e22">${f3(ns.cpu_actual||0)} cores</td></tr>
+          ${hasAct?`<tr><td style="color:#555">CPU Actual</td><td style="text-align:right;font-weight:700;color:#e67e22">${f3(ns.cpu_used||0)} cores</td></tr>
           <tr><td colspan="2"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#e9ecef;border-radius:4px;height:7px"><div style="width:${cap(cU).toFixed(1)}%;height:7px;border-radius:4px;background:${bc}"></div></div><span style="font-size:11px;color:${bc};font-weight:700">${cU.toFixed(1)}% util</span></div></td></tr>`
           :'<tr><td colspan="2" style="color:#888;font-size:11px">Actual: Metrics unavailable</td></tr>'}
           <tr><td style="color:#555">Mem Reserved</td><td style="text-align:right;font-weight:700;color:#16a085">${f1(ns.mem_req_gib||ns.mem_req||0)} GiB</td></tr>
-          ${hasAct?`<tr><td style="color:#555">Mem Actual</td><td style="text-align:right;font-weight:700;color:#e74c3c">${f1(ns.mem_actual||0)} GiB</td></tr>
+          ${hasAct?`<tr><td style="color:#555">Mem Actual</td><td style="text-align:right;font-weight:700;color:#e74c3c">${f1(ns.mem_used_gib||0)} GiB</td></tr>
           <tr><td colspan="2"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#e9ecef;border-radius:4px;height:7px"><div style="width:${cap(mU).toFixed(1)}%;height:7px;border-radius:4px;background:${mColor}"></div></div><span style="font-size:11px;color:${mColor};font-weight:700">${mU.toFixed(1)}% util</span></div></td></tr>`
           :'<tr><td colspan="2" style="color:#888;font-size:11px">Actual: Metrics unavailable</td></tr>'}
         </table></div>`;
@@ -706,34 +917,339 @@ async function changeHistoryRange(env){
 // ── Boot ──────────────────────────────────────────────────────
 fetchAll();
 
+// ── Node Pressure tab ────────────────────────────────────────
+let _npData = {};
+
+async function renderNodePressureTab(){
+  const env = ($('np-env-select')||{value:'DEV'}).value||'DEV';
+  const wrap = $('np-table-wrap'); if(!wrap) return;
+  wrap.innerHTML='<p style="color:#aaa">Loading…</p>';
+  try {
+    const r = await fetch(`/api/v1/node-pressure/${env}`);
+    if(!r.ok) throw new Error(await r.text());
+    _npData[env] = await r.json();
+    const nodes = (_npData[env].nodes||[]);
+    if(!nodes.length){ wrap.innerHTML='<p style="color:#aaa">No per-node data — run a collection with oc adm top nodes access.</p>'; return; }
+
+    const pct_color = p => p>85?'#c0392b':p>60?'#e67e22':'#16a085';
+    const bar = (p,c) => `<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:8px;background:#eef1f6;border-radius:4px;min-width:60px"><div style="width:${Math.min(p,100).toFixed(1)}%;height:8px;border-radius:4px;background:${c}"></div></div><span style="font-size:11px;color:${c};font-weight:600;min-width:36px">${p.toFixed(1)}%</span></div>`;
+
+    let h=`<div style="overflow-x:auto;max-height:520px;border:1px solid #e4e7ec;border-radius:10px">
+    <table>
+    <thead><tr>
+      <th>Node</th><th>Pool</th>
+      <th>CPU Request</th><th>CPU Usage</th>
+      <th>Mem Request</th><th>Mem Usage</th>
+      <th>CPU Req Cores</th><th>CPU Used</th>
+      <th>Mem Req GiB</th><th>Mem Used GiB</th>
+    </tr></thead><tbody>`;
+
+    nodes.forEach((n,i)=>{
+      const bg = n.pool==='standard-worker'?'#fafafa':'#f5f9ff';
+      const poolBadge = n.pool==='standard-worker'
+        ?`<span style="font-size:11px;color:#666">standard</span>`
+        :`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${n.pool}</span>`;
+      h+=`<tr style="background:${bg}">
+        <td style="font-family:monospace;font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis" title="${n.node||''}">${(n.node||'').split('-').slice(-3).join('-')}</td>
+        <td>${poolBadge}</td>
+        <td>${bar(+(n.cpu_req_pct||0), pct_color(+(n.cpu_req_pct||0)))}</td>
+        <td>${(n.cpu_used_pct>0)?bar(+(n.cpu_used_pct||0),'#2e75b6'):'<span style="color:#aaa;font-size:11px">n/a</span>'}</td>
+        <td>${bar(+(n.mem_req_pct||0), pct_color(+(n.mem_req_pct||0)))}</td>
+        <td>${(n.mem_used_pct>0)?bar(+(n.mem_used_pct||0),'#2e75b6'):'<span style="color:#aaa;font-size:11px">n/a</span>'}</td>
+        <td style="font-size:12px">${f1(n.cpu_req)} / ${f1(n.cpu_alloc)}</td>
+        <td style="font-size:12px">${n.cpu_used>0?f1(n.cpu_used):'—'}</td>
+        <td style="font-size:12px">${f1(n.mem_req_gib)} / ${f1(n.mem_alloc_gib)}</td>
+        <td style="font-size:12px">${n.mem_used_gib>0?f1(n.mem_used_gib):'—'}</td>
+      </tr>`;
+    });
+    h+='</tbody></table></div>';
+    wrap.innerHTML=h;
+  } catch(e) {
+    wrap.innerHTML=`<p style="color:red">Failed to load: ${e.message}</p>`;
+  }
+}
+
+// ── Desired Replicas tab ──────────────────────────────────────
+let _drData = {};
+
+async function renderDesiredReplicasTab(){
+  const env = ($('dr-env-select')||{value:'DEV'}).value||'DEV';
+  const wrap = $('dr-table-wrap'); if(!wrap) return;
+  wrap.innerHTML='<p style="color:#aaa">Loading…</p>';
+  try {
+    const r = await fetch(`/api/v1/desired-replicas/${env}?limit=500`);
+    if(!r.ok) throw new Error(await r.text());
+    _drData[env] = await r.json();
+    filterDesiredTable();
+  } catch(e) {
+    wrap.innerHTML=`<p style="color:red">Failed to load: ${e.message}</p>`;
+  }
+}
+
+function filterDesiredTable(){
+  const env = ($('dr-env-select')||{value:'DEV'}).value||'DEV';
+  const q   = (($('dr-filter')||{}).value||'').toLowerCase();
+  const wrap = $('dr-table-wrap'); if(!wrap) return;
+  const data = _drData[env];
+  if(!data) return;
+
+  let rows = (data.controllers||[]).filter(r=>
+    !q || (r.namespace+r.controller).toLowerCase().includes(q)
+  );
+
+  if(!rows.length){ wrap.innerHTML='<p style="color:#aaa">No controllers match.</p>'; return; }
+
+  const poolBadge = p => p==='DEDICATED'
+    ?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">DEDICATED</span>`
+    :`<span style="font-size:11px;color:#888">SHARED</span>`;
+
+  let h=`<p style="font-size:12px;color:#667085;margin:0 0 8px">
+    Showing ${rows.length} controllers. Total desired CPU: <b>${rows.reduce((s,r)=>s+(+(r.desired_cpu_cores||0)),0).toFixed(2)} cores</b>
+    · Total desired Mem: <b>${rows.reduce((s,r)=>s+(+(r.desired_mem_gib||0)),0).toFixed(1)} GiB</b>
+  </p>
+  <div style="overflow-x:auto;max-height:560px;border:1px solid #e4e7ec;border-radius:10px">
+  <table><thead><tr>
+    <th>Namespace</th><th>Controller</th><th>Replicas</th>
+    <th>CPU/Replica</th><th>Mem GiB/Replica</th>
+    <th>Desired CPU</th><th>Desired Mem GiB</th><th>Pool</th>
+  </tr></thead><tbody>`;
+
+  rows.forEach((r,i)=>{
+    const bg=i%2===0?'#fff':'#f9f9f9';
+    const replClass = r.desired_replicas===0?'style="color:#aaa"':'';
+    h+=`<tr style="background:${bg}">
+      <td style="font-size:12px">${r.namespace||'—'}</td>
+      <td style="font-family:monospace;font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis" title="${r.controller||''}">${r.controller||'—'}</td>
+      <td style="text-align:center" ${replClass}>${r.desired_replicas}</td>
+      <td style="text-align:right">${(+(r.cpu_per_replica||0)).toFixed(4)}</td>
+      <td style="text-align:right">${(+(r.mem_gib_per_replica||0)).toFixed(4)}</td>
+      <td style="text-align:right;font-weight:600;color:#1e40af">${(+(r.desired_cpu_cores||0)).toFixed(3)}</td>
+      <td style="text-align:right;font-weight:600;color:#16a085">${(+(r.desired_mem_gib||0)).toFixed(3)}</td>
+      <td>${poolBadge(r.pool_hint||'SHARED')}</td>
+    </tr>`;
+  });
+  h+='</tbody></table></div>';
+  wrap.innerHTML=h;
+}
+
+// ── Misplaced Workloads tab ───────────────────────────────────
+let _mpData = {};
+
+async function renderMisplacedTab(){
+  const env = ($('mp-env-select')||{value:'DEV'}).value||'DEV';
+  const wrap = $('mp-table-wrap');
+  const alertWrap = $('mp-alert-wrap');
+  if(!wrap) return;
+  wrap.innerHTML='<p style="color:#aaa">Loading…</p>';
+  if(alertWrap) alertWrap.innerHTML='';
+
+  try {
+    const r = await fetch(`/api/v1/misplaced/${env}`);
+    if(!r.ok) throw new Error(await r.text());
+    _mpData[env] = await r.json();
+    const d = _mpData[env];
+    const count = d.misplaced_count||0;
+
+    if(alertWrap){
+      if(count===0){
+        alertWrap.innerHTML=`<div style="background:#d1fae5;border-left:4px solid #16a34a;padding:12px 14px;border-radius:8px;margin-bottom:12px;font-size:13px">
+          <b>&#10003; None detected</b> — dedicated-targeted workloads are running on dedicated nodes.</div>`;
+      } else {
+        alertWrap.innerHTML=`<div style="background:#fff1f2;border-left:4px solid #dc2626;padding:12px 14px;border-radius:8px;margin-bottom:12px;font-size:13px">
+          <b>&#9888; ${count} pod(s)</b> from ${(d.controllers||[]).length} controller(s) appear misplaced on shared nodes.</div>`;
+      }
+    }
+
+    if(!count || !(d.controllers||[]).length){
+      wrap.innerHTML='';
+      return;
+    }
+
+    // By-controller summary
+    let h=`<h3 style="font-size:14px;margin:0 0 8px;color:#1a2332">By controller</h3>
+    <div style="overflow-x:auto;border:1px solid #e4e7ec;border-radius:10px;margin-bottom:16px">
+    <table><thead><tr>
+      <th>Namespace</th><th>Controller</th><th>Pods</th>
+      <th>CPU Requests</th><th>Mem GiB</th><th>Target Keys</th>
+    </tr></thead><tbody>`;
+
+    (d.controllers||[]).forEach((c,i)=>{
+      const bg=i%2===0?'#fff':'#f9f9f9';
+      h+=`<tr style="background:${bg}">
+        <td style="font-size:12px">${c.namespace||'—'}</td>
+        <td style="font-family:monospace;font-size:11px">${c.controller||'—'}</td>
+        <td style="text-align:center;font-weight:600;color:#dc2626">${c.pods||0}</td>
+        <td style="text-align:right">${(+(c.cpu_req||0)).toFixed(3)}</td>
+        <td style="text-align:right">${(+(c.mem_gib||0)).toFixed(3)}</td>
+        <td style="font-family:monospace;font-size:11px;color:#7c3aed">${c.target_keys||'—'}</td>
+      </tr>`;
+    });
+    h+='</tbody></table></div>';
+
+    // Pod sample
+    const sample = (d.pod_sample||[]).slice(0,30);
+    if(sample.length){
+      h+=`<h3 style="font-size:14px;margin:0 0 8px;color:#1a2332">Pod sample (up to 30)</h3>
+      <div style="overflow-x:auto;border:1px solid #e4e7ec;border-radius:10px">
+      <table><thead><tr>
+        <th>Namespace</th><th>Pod</th><th>Node (running on)</th>
+        <th>Controller</th><th>Target Keys</th>
+      </tr></thead><tbody>`;
+      sample.forEach((p,i)=>{
+        const bg=i%2===0?'#fff':'#fef2f2';
+        h+=`<tr style="background:${bg}">
+          <td style="font-size:12px">${p.namespace||'—'}</td>
+          <td style="font-family:monospace;font-size:11px">${(p.pod||'').slice(0,48)}</td>
+          <td style="font-family:monospace;font-size:11px;color:#dc2626">${(p.node||'').split('-').slice(-3).join('-')}</td>
+          <td style="font-family:monospace;font-size:11px">${p.controller||'—'}</td>
+          <td style="font-family:monospace;font-size:11px;color:#7c3aed">${p.target_keys||'—'}</td>
+        </tr>`;
+      });
+      h+='</tbody></table></div>';
+    }
+    wrap.innerHTML=h;
+  } catch(e) {
+    wrap.innerHTML=`<p style="color:red">Failed to load: ${e.message}</p>`;
+  }
+}
+
+// ── PVC Inventory tab ─────────────────────────────────────────
+let _pvcData = {};
+
+async function renderPvcTab(){
+  const env = ($('pvc-env-select')||{value:'DEV'}).value || 'DEV';
+  ($('pvc-table-wrap')||{}).innerHTML = '<p style="color:#aaa">Loading…</p>';
+  try {
+    const r = await fetch(`/api/v1/pvcs/${env}?limit=2000`);
+    if(!r.ok) throw new Error(await r.text());
+    _pvcData[env] = await r.json();
+    renderPvcSummary(env);
+    renderPvcTable();
+  } catch(e) {
+    ($('pvc-table-wrap')||{}).innerHTML = `<p style="color:red">Failed to load PVC data: ${e.message}</p>`;
+  }
+}
+
+function renderPvcSummary(env){
+  const d = _pvcData[env]; if(!d) return;
+  const s = d.summary || {};
+  ($('pvc-total-count')||{}).textContent = s.total_pvcs ?? '—';
+  ($('pvc-total-gib')||{}).textContent   = f1(s.total_capacity_gib) + ' GiB';
+
+  const scEl = $('pvc-by-sc');
+  if(scEl && s.by_storageclass){
+    scEl.innerHTML = s.by_storageclass.map(r=>
+      `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #f0f0f0">
+        <span style="font-family:monospace;font-size:12px">${r.storageclass||'(none)'}</span>
+        <span>${r.pvc_count} PVCs · <b>${f1(r.total_gib)} GiB</b></span>
+      </div>`
+    ).join('');
+  }
+
+  const nsEl = $('pvc-by-ns');
+  if(nsEl && s.top_namespaces_by_capacity){
+    nsEl.innerHTML = s.top_namespaces_by_capacity.slice(0,10).map(r=>
+      `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #f0f0f0">
+        <span style="font-size:12px">${r.namespace}</span>
+        <span>${r.pvc_count} PVCs · <b>${f1(r.total_gib)} GiB</b></span>
+      </div>`
+    ).join('');
+  }
+}
+
+function renderPvcTable(){
+  const env  = ($('pvc-env-select')||{value:'DEV'}).value || 'DEV';
+  const nsF  = (($('pvc-ns-filter')||{}).value||'').toLowerCase();
+  const scF  = (($('pvc-sc-filter')||{}).value||'').toLowerCase();
+  const d    = _pvcData[env]; if(!d) return;
+  const wrap = $('pvc-table-wrap'); if(!wrap) return;
+
+  let rows = (d.pvcs||[]).filter(r=>
+    (!nsF || (r.namespace||'').toLowerCase().includes(nsF)) &&
+    (!scF || (r.storageclass||'').toLowerCase().includes(scF))
+  );
+
+  if(!rows.length){
+    wrap.innerHTML='<p style="color:#aaa">No PVCs match the current filter.</p>';
+    return;
+  }
+
+  const statusColor = s => s==='Bound'?'#1a7f37':s==='Pending'?'#856404':'#c0392b';
+
+  let h=`<table>
+    <thead><tr>
+      <th>Namespace</th><th>PVC Name</th><th>Status</th>
+      <th>Capacity (GiB)</th><th>Storage Class</th>
+    </tr></thead><tbody>`;
+  rows.forEach((r,i)=>{
+    const bg = i%2===0?'#fff':'#f9f9f9';
+    h+=`<tr style="background:${bg}">
+      <td style="font-size:12px">${r.namespace||'—'}</td>
+      <td style="font-family:monospace;font-size:12px">${r.pvc_name||'—'}</td>
+      <td><span style="color:${statusColor(r.status)};font-weight:600">${r.status||'—'}</span></td>
+      <td style="text-align:right">${f1(r.capacity_gib)}</td>
+      <td style="font-size:12px;color:#555">${r.storageclass||'—'}</td>
+    </tr>`;
+  });
+  h+='</tbody></table>';
+  wrap.innerHTML=h;
+}
+
+function exportPvcCsv(){
+  const env = ($('pvc-env-select')||{value:'DEV'}).value || 'DEV';
+  const d   = _pvcData[env]; if(!d||!d.pvcs) return;
+  const nsF = (($('pvc-ns-filter')||{}).value||'').toLowerCase();
+  const scF = (($('pvc-sc-filter')||{}).value||'').toLowerCase();
+  const rows = d.pvcs.filter(r=>
+    (!nsF||(r.namespace||'').toLowerCase().includes(nsF))&&
+    (!scF||(r.storageclass||'').toLowerCase().includes(scF))
+  );
+  const csv = ['namespace,pvc_name,status,capacity_gib,storageclass',
+    ...rows.map(r=>`${r.namespace},${r.pvc_name},${r.status},${f1(r.capacity_gib)},${r.storageclass}`)
+  ].join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download=`pvc_inventory_${env}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
 // ── Analytics tab ─────────────────────────────────────────────
 let _analyticsChart = null;
-let _analyticsData  = {};   // cache: key = "ENV:period"
+let _analyticsData  = {};
 
 async function renderAnalyticsTab(){
   const env    = ($('an-env-select')    ||{value:'DEV'}).value;
   const period = ($('an-period-select') ||{value:'monthly'}).value;
   const key    = env+':'+period;
   const tbody  = $('analytics-tbody');
-  if(tbody) tbody.innerHTML='<tr><td colspan="13" style="text-align:center;color:#aaa">Loading…</td></tr>';
+  const notice = $('an-notice');
+  if(tbody)  tbody.innerHTML='<tr><td colspan="14" style="text-align:center;color:#aaa">Loading…</td></tr>';
+  if(notice) notice.textContent='';
 
   if(!_analyticsData[key]){
     try{
       const r = await fetch(API+'/api/v1/aggregate/'+env+'?period='+period);
-      if(r.ok) _analyticsData[key] = await r.json();
-      else{ if(tbody) tbody.innerHTML='<tr><td colspan="13" style="color:#c0392b;text-align:center">API error: '+r.status+'</td></tr>'; return; }
-    }catch(e){
-      if(tbody) tbody.innerHTML='<tr><td colspan="13" style="color:#c0392b;text-align:center">Fetch failed: '+e+'</td></tr>'; return;
+      if(r.ok){
+        _analyticsData[key] = await r.json();
+      } else {
+        const msg='API error: '+r.status;
+        if(tbody) tbody.innerHTML=`<tr><td colspan="14" style="color:#c0392b;text-align:center">${msg}</td></tr>`;
+        return;
+      }
+    } catch(e){
+      if(tbody) tbody.innerHTML=`<tr><td colspan="14" style="color:#c0392b;text-align:center">Fetch failed: ${e}</td></tr>`;
+      return;
     }
   }
 
   const d = _analyticsData[key];
   if(!d||!d.data||!d.data.length){
-    if(tbody) tbody.innerHTML='<tr><td colspan="13" style="text-align:center;color:#aaa">No historical data yet. Data accumulates over time.</td></tr>';
+    if(tbody) tbody.innerHTML='<tr><td colspan="14" style="text-align:center;color:#aaa;padding:24px">No historical data yet — data accumulates across collection runs over time.<br><small>Monthly view needs data across at least one calendar month.</small></td></tr>';
+    if(notice) notice.textContent='No data for this period/env combination yet.';
     return;
   }
 
-  // ── Table ──
+  // Period label formatter
   const pFmt = p => {
     const dt = new Date(p);
     if(period==='yearly')    return dt.getUTCFullYear();
@@ -744,59 +1260,113 @@ async function renderAnalyticsTab(){
     return dt.toLocaleDateString('en-GB',{month:'short',year:'numeric',timeZone:'UTC'});
   };
 
-  const cpuColor  = v => v>85?'color:#c0392b;font-weight:700':v>60?'color:#e67e22;font-weight:600':'';
-  const memColor  = v => v>85?'color:#c0392b;font-weight:700':v>60?'color:#e67e22;font-weight:600':'';
-  const f1 = v => v!=null?parseFloat(v).toFixed(1):'—';
-  const f2 = v => v!=null?parseFloat(v).toFixed(2):'—';
-  const fi = v => v!=null?Math.round(v):'—';
+  // Colour helpers
+  const cpuCol = v=>v>85?'color:#c0392b;font-weight:700':v>60?'color:#e67e22;font-weight:600':'';
+  const memCol = v=>v>85?'color:#c0392b;font-weight:700':v>60?'color:#e67e22;font-weight:600':'';
+  const f1 = v=>v!=null?parseFloat(v).toFixed(1):'—';
+  const f2 = v=>v!=null?parseFloat(v).toFixed(2)+'%':'—';
+  const fc = v=>v!=null?parseFloat(v).toFixed(2):'—'; // cores/GiB
+  const fi = v=>v!=null?Math.round(v):'—';
 
+  // ── Table — 14 columns ──────────────────────────────────────
+  // Uses worker-scoped CPU/Mem % (matching Growth Forecast) not cluster-wide cpu_pct.
+  // Includes actual CPU/Mem used for rightsizing context (Red Hat practice #3).
   let html='';
   d.data.forEach(row=>{
-    const avgCpu = parseFloat(row.avg_cpu_pct)||0;
-    const avgMem = parseFloat(row.avg_mem_pct)||0;
+    const wCpu = parseFloat(row.avg_worker_cpu_pct)||0;
+    const wMem = parseFloat(row.avg_worker_mem_pct)||0;
+    const mwCpu= parseFloat(row.max_worker_cpu_pct)||0;
+    const mwMem= parseFloat(row.max_worker_mem_pct)||0;
     html+=`<tr>
-      <td><strong>${pFmt(row.period_start)}</strong></td>
+      <td><b>${pFmt(row.period_start)}</b></td>
       <td style="text-align:center">${row.snapshot_count||0}</td>
-      <td style="text-align:right;${cpuColor(avgCpu)}">${f2(row.avg_cpu_pct)}%</td>
-      <td style="text-align:right;${cpuColor(parseFloat(row.max_cpu_pct)||0)}">${f2(row.max_cpu_pct)}%</td>
-      <td style="text-align:right;${memColor(avgMem)}">${f2(row.avg_mem_pct)}%</td>
-      <td style="text-align:right;${memColor(parseFloat(row.max_mem_pct)||0)}">${f2(row.max_mem_pct)}%</td>
+      <td style="text-align:right;${cpuCol(wCpu)}">${f2(row.avg_worker_cpu_pct)}</td>
+      <td style="text-align:right;${cpuCol(mwCpu)}">${f2(row.max_worker_cpu_pct)}</td>
+      <td style="text-align:right;${memCol(wMem)}">${f2(row.avg_worker_mem_pct)}</td>
+      <td style="text-align:right;${memCol(mwMem)}">${f2(row.max_worker_mem_pct)}</td>
+      <td style="text-align:right">${fc(row.avg_cpu_used)}</td>
+      <td style="text-align:right">${fc(row.avg_mem_used_gib)}</td>
       <td style="text-align:right">${fi(row.avg_pods)}</td>
       <td style="text-align:right">${fi(row.max_pods)}</td>
       <td style="text-align:right">${f1(row.avg_worker_nodes)}</td>
-      <td style="text-align:right">${f2(row.avg_cpu_used)}</td>
-      <td style="text-align:right">${f2(row.avg_mem_used_gib)}</td>
+      <td style="text-align:right">${f1(row.avg_worker_cpu)}</td>
+      <td style="text-align:right">${f1(row.avg_worker_mem_gib)}</td>
       <td style="text-align:right">${f1(row.avg_total_cpu)}</td>
-      <td style="text-align:right">${f1(row.avg_total_mem_gib)}</td>
     </tr>`;
   });
   if(tbody) tbody.innerHTML = html;
 
-  // ── Chart ──
-  const labels  = d.data.map(r=>pFmt(r.period_start));
-  const avgCpus = d.data.map(r=>parseFloat(r.avg_cpu_pct)||0);
-  const maxCpus = d.data.map(r=>parseFloat(r.max_cpu_pct)||0);
-  const avgMems = d.data.map(r=>parseFloat(r.avg_mem_pct)||0);
-  const maxMems = d.data.map(r=>parseFloat(r.max_mem_pct)||0);
+  // ── Chart ────────────────────────────────────────────────────
+  const labels   = d.data.map(r=>pFmt(r.period_start));
+  const avgWCpu  = d.data.map(r=>parseFloat(r.avg_worker_cpu_pct)||0);
+  const maxWCpu  = d.data.map(r=>parseFloat(r.max_worker_cpu_pct)||0);
+  const avgWMem  = d.data.map(r=>parseFloat(r.avg_worker_mem_pct)||0);
+  const avgCpuUsedPct = d.data.map(r=>{
+    const cpu=parseFloat(r.avg_worker_cpu)||0;
+    const used=parseFloat(r.avg_cpu_used)||0;
+    return cpu>0?parseFloat(((used/cpu)*100).toFixed(2)):0;
+  });
+  const n = labels.length;
+  const threshold80 = Array(n).fill(80);
+  const threshold100 = Array(n).fill(100);
 
   const canvas = $('analytics-chart');
   if(!canvas) return;
   if(_analyticsChart){ _analyticsChart.destroy(); _analyticsChart=null; }
-  _analyticsChart = new Chart(canvas, {
+
+  _analyticsChart = new Chart(canvas,{
     type:'bar',
     data:{
       labels,
       datasets:[
-        {label:'Avg CPU %',  data:avgCpus, backgroundColor:'rgba(46,117,182,0.7)',  yAxisID:'y'},
-        {label:'Max CPU %',  data:maxCpus, backgroundColor:'rgba(46,117,182,0.25)', yAxisID:'y', borderColor:'rgba(46,117,182,0.9)',borderWidth:1},
-        {label:'Avg Mem %',  data:avgMems, backgroundColor:'rgba(22,160,133,0.7)',  yAxisID:'y'},
-        {label:'Max Mem %',  data:maxMems, backgroundColor:'rgba(22,160,133,0.25)', yAxisID:'y', borderColor:'rgba(22,160,133,0.9)',borderWidth:1},
+        // Bars first so lines overlay them
+        {
+          type:'bar', label:'Avg CPU Request % (workers)',
+          data:avgWCpu, backgroundColor:'rgba(46,117,182,0.55)',
+          yAxisID:'y', order:3
+        },
+        {
+          type:'bar', label:'Avg Mem Request % (workers)',
+          data:avgWMem, backgroundColor:'rgba(22,160,133,0.45)',
+          yAxisID:'y', order:3
+        },
+        // Lines overlay
+        {
+          type:'line', label:'Max CPU Request % (workers)',
+          data:maxWCpu, borderColor:'rgba(46,117,182,1)',
+          backgroundColor:'transparent', borderWidth:2,
+          pointRadius:3, tension:0.3, yAxisID:'y', order:2
+        },
+        {
+          type:'line', label:'Avg CPU Actual Used %',
+          data:avgCpuUsedPct, borderColor:'rgba(230,126,34,0.9)',
+          backgroundColor:'transparent', borderWidth:2,
+          borderDash:[4,3], pointRadius:3, tension:0.3, yAxisID:'y', order:2
+        },
+        // 80% threshold reference line
+        {
+          type:'line', label:'80% safe threshold',
+          data:threshold80, borderColor:'rgba(231,76,60,0.7)',
+          backgroundColor:'transparent', borderWidth:1.5,
+          borderDash:[6,4], pointRadius:0, tension:0, yAxisID:'y', order:1
+        },
       ]
     },
     options:{
       responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{position:'top'}, title:{display:true, text:`${env} – ${period.charAt(0).toUpperCase()+period.slice(1)} Capacity Utilisation`}},
-      scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%'},title:{display:true,text:'Utilisation (%)'}}}
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{position:'top', labels:{boxWidth:12, font:{size:11}}},
+        title:{display:true, text:`${env} – ${period.charAt(0).toUpperCase()+period.slice(1)} Capacity Trend (Standard Worker Pool)`, font:{size:13}},
+        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`}}
+      },
+      scales:{
+        y:{
+          min:0, max:Math.min(Math.max(...[...avgWCpu,...maxWCpu,...avgWMem])+20,130),
+          ticks:{callback:v=>v+'%'},
+          title:{display:true, text:'% of Standard Worker Pool Capacity'}
+        }
+      }
     }
   });
 }
@@ -811,8 +1381,6 @@ function exportAnalyticsCsvRaw(){
   const env = ($('an-env-select')||{value:'DEV'}).value;
   window.location.href = API+'/api/v1/export/'+env+'?period=raw';
 }
-
-// (analytics loading is handled directly in switchTab above)
 </script>
 </body>
 </html>

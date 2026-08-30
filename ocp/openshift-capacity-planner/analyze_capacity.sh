@@ -429,62 +429,48 @@ echo \
 
 
 jq -r '
+# Effective pod request = max(sum(app containers), max(init containers))
+# This is what the Kubernetes scheduler actually reserves — not just app containers.
+# Reference: Red Hat capacity management best practices (2024)
+def cpu_cores:
+  if . == null or . == "" then 0
+  elif test("m$") then (sub("m$";"") | tonumber) / 1000
+  else (tonumber? // 0) end;
+
+def mem_gib:
+  if . == null or . == "" then 0
+  elif test("Ki$") then (sub("Ki$";"") | tonumber) / 1048576
+  elif test("Mi$") then (sub("Mi$";"") | tonumber) / 1024
+  elif test("Gi$") then (sub("Gi$";"") | tonumber)
+  elif test("Ti$") then (sub("Ti$";"") | tonumber) * 1024
+  else (tonumber? // 0) / 1073741824 end;
 
 .items[]
-
-# Skip evicted pods (phase=Failed, reason=Evicted) and completed pods.
-# ALL namespaces (infra + tenant) are included here so that
-# capacity_summary.json reflects true cluster-wide utilization.
-# The chargeback section classifies infra vs tenant separately.
 | select(
     (.status.phase != "Failed" or .status.reason != "Evicted") and
     (.status.phase != "Succeeded")
-)
-
-|
-
-.metadata.namespace as $ns
-
-|
-
-[
-$ns,
-
-.metadata.name,
-
-(
-[
-.spec.containers[].resources.requests.cpu? // "0"
-]
-| map(
-if test("m$")
-then (.[:-1] | tonumber) / 1000
-else (tonumber? // 0)
-end
-)
-| add // 0
-),
-
-(
-[
-.spec.containers[].resources.requests.memory? // "0"
-]
-| map(
-if test("Ki$") then (.[:-2] | tonumber) / 1024 / 1024
-elif test("Mi$") then (.[:-2] | tonumber) / 1024
-elif test("Gi$") then (.[:-2] | tonumber)
-elif test("Ti$") then (.[:-2] | tonumber) * 1024
-else 0
-end
-)
-| add // 0
-)
-
-]
-
+  )
+| (.spec.nodeName // "") as $node
+| ([ (.spec.containers // [])[] |
+     .resources.requests.cpu // "0" | cpu_cores ] | add // 0) as $app_cpu
+| ([ (.spec.containers // [])[] |
+     .resources.requests.memory // "0" | mem_gib ] | add // 0) as $app_mem
+| ([ (.spec.initContainers // [])[] |
+     .resources.requests.cpu // "0" | cpu_cores ] | max // 0) as $init_cpu
+| ([ (.spec.initContainers // [])[] |
+     .resources.requests.memory // "0" | mem_gib ] | max // 0) as $init_mem
+| ([$app_cpu, $init_cpu] | max) as $eff_cpu
+| ([$app_mem, $init_mem] | max) as $eff_mem
+| [
+    .metadata.namespace,
+    .metadata.name,
+    $node,
+    $eff_cpu,
+    $eff_mem,
+    ((.metadata.ownerReferences // []) | map(select(.controller==true)) |
+     if length>0 then (.[0].kind + "/" + .[0].name) else "standalone" end)
+  ]
 | @csv
-
-
 ' \
 "${CAPACITY_RAW}/pods.json" \
 > "${CAPACITY_RAW}/pod_requests_raw.csv"
@@ -494,12 +480,11 @@ end
 awk -F',' '
 
 {
-
+# New 6-column format: namespace(1), pod(2), node(3), cpu(4), mem(5), controller(6)
 namespace=$1
 
-
-cpu=$3
-memory=$4
+cpu=$4
+memory=$5
 
 
 if(cpu=="")
@@ -574,10 +559,11 @@ if [[ -f "${CAPACITY_RAW}/pod_node_map.csv" && -f "${CAPACITY_RAW}/node_pool_loo
     next
   }
 
-  # File 3: pod_requests_raw.csv -> "namespace","pod",cpu,mem (quoted ns/pod)
+  # File 3: pod_requests_raw.csv -> "namespace","pod","node",cpu,mem,"controller"
+  # New 6-column format from effective_requests update.
   {
     gsub(/"/, "", $1); gsub(/"/, "", $2)
-    ns = $1; pod = $2; cpu = $3 + 0; mem = $4 + 0
+    ns = $1; pod = $2; cpu = $4 + 0; mem = $5 + 0
     key = ns SUBSEP pod
     if (!(key in pod_node)) next          # pod not Running / not mapped — skip
     node = pod_node[key]
@@ -959,18 +945,34 @@ else
     : > "${NS_ACTUAL_USAGE}"
 fi
 
-echo "namespace,type,running_pods,cpu_cores_reserved,memory_gb_reserved,cpu_pct_of_cluster,memory_pct_of_cluster,cpu_actual_cores,mem_actual_gb,cpu_util_pct,mem_util_pct" \
+echo "namespace,type,running_pods,cpu_cores_reserved,memory_gb_reserved,cpu_pct_of_cluster,memory_pct_of_cluster,cpu_actual_cores,mem_actual_gb,cpu_util_pct,mem_util_pct,cpu_overcommit_ratio,no_cpu_limit,rightsizing_signal" \
 > "${CAPACITY_CSV}/chargeback_by_namespace.csv"
 
 
 
 awk -F',' \
 -v total_cpu="${TOTAL_CPU}" \
--v total_mem="${TOTAL_MEMORY}" '
+-v total_mem="${TOTAL_MEMORY}" \
+-v overcommit_csv="${OVERCOMMIT_CSV}" \
+-v desired_csv="${CAPACITY_CSV}/desired_capacity_by_namespace.csv" '
+
+# Load overcommit data
+BEGIN {
+    while ((getline line < overcommit_csv) > 0) {
+        n = split(line, f, ",")
+        if (n < 4 || f[1] == "namespace") continue
+        cpu_oc_ratio[f[1]] = f[4]+0
+        no_cpu_lim[f[1]]   = f[8]+0
+    }
+    # Load desired capacity for rightsizing signal
+    while ((getline line < desired_csv) > 0) {
+        n = split(line, f, ",")
+        if (n < 2 || f[1] == "namespace") continue
+        desired_cpu[f[1]] = f[2]+0
+    }
+}
 
 FNR==NR {
-    # First file: ns_actual_usage.tmp  (no header)
-    # columns: namespace, cpu_actual_cores, mem_actual_gb
     gsub(/"/, "", $1)
     if ($1 != "") {
         cpu_act[$1] = $2+0
@@ -979,7 +981,7 @@ FNR==NR {
     next
 }
 
-FNR==1 { next }   # skip namespace_usage.csv header
+FNR==1 { next }
 
 {
     gsub(/"/, "", $1)
@@ -1024,12 +1026,29 @@ FNR==1 { next }   # skip namespace_usage.csv header
     m_act    = mem_act[ns]+0
 
     # Utilization % = actual used / requested × 100
-    # "You requested 10 cores and pods are using 5 → 50% utilization"
     cpu_util = (cpu > 0) ? (c_act / cpu) * 100 : 0
     mem_util = (mem > 0) ? (m_act / mem) * 100 : 0
 
-    printf "%s,%s,%s,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.1f,%.1f\n",
-        ns, type, pods, cpu, mem, cpu_pct, mem_pct, c_act, m_act, cpu_util, mem_util
+    # Overcommit and rightsizing signal (Red Hat practices #2, #3, #6)
+    oc_ratio  = cpu_oc_ratio[ns]+0
+    no_cpu_l  = no_cpu_lim[ns]+0
+    des_cpu   = desired_cpu[ns]+0
+
+    # Rightsizing signal:
+    # OVER_PROVISIONED = actual usage < 50% of requested (waste)
+    # CAPACITY_RISK    = desired > running requested (gap risk)
+    # HEALTHY          = 50-90% util
+    # TIGHT            = > 90% util
+    signal = "HEALTHY"
+    if (c_act > 0 && cpu > 0) {
+        if (cpu_util < 50)      signal = "OVER_PROVISIONED"
+        else if (cpu_util > 90) signal = "TIGHT"
+    }
+    if (des_cpu > 0 && des_cpu > cpu * 1.1) signal = "CAPACITY_RISK"
+
+    printf "%s,%s,%s,%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.1f,%.1f,%.2f,%d,%s\n",
+        ns, type, pods, cpu, mem, cpu_pct, mem_pct, c_act, m_act, cpu_util, mem_util,
+        oc_ratio, no_cpu_l, signal
 }
 
 ' \
@@ -1107,6 +1126,112 @@ log INFO "Chargeback CSV   : ${CAPACITY_CSV}/chargeback_by_namespace.csv"
 
 
 #############################################
+# Overcommit Ratio (Red Hat practice #2)
+# Limits/Requests per namespace.
+# Overcommit means Limits > Requests — NOT
+# more Requests than Allocatable.
+# High overcommit = pods can burst above
+# their Request; low = tightly controlled.
+# Scheduler uses Requests only.
+#############################################
+
+log INFO "Computing overcommit ratios"
+
+OVERCOMMIT_CSV="${CAPACITY_CSV}/overcommit_by_namespace.csv"
+echo "namespace,cpu_requests,cpu_limits,cpu_overcommit_ratio,mem_requests_gib,mem_limits_gib,mem_overcommit_ratio,no_cpu_limit_count,no_mem_limit_count" \
+> "${OVERCOMMIT_CSV}"
+
+awk -F',' '
+NR==1 { next }
+{
+    gsub(/"/, "", $0)
+    ns=$1; cpu_r=$4; mem_r=$5; cpu_l=$6; mem_l=$7
+
+    # Convert CPU to millicores for summation
+    if (cpu_r ~ /m$/) { sub(/m$/,"",cpu_r); cpu_r=cpu_r/1000 }
+    else cpu_r=cpu_r+0
+    if (cpu_l == "0" || cpu_l == "") { no_cpu_lim[ns]++ } else {
+        if (cpu_l ~ /m$/) { sub(/m$/,"",cpu_l); cpu_l=cpu_l/1000 }
+        else cpu_l=cpu_l+0
+        sum_cpu_l[ns]+=cpu_l
+    }
+
+    # Memory to GiB
+    split("Ki Mi Gi Ti", units)
+    div_r = 1; div_l = 1
+    if (mem_r ~ /Ki$/) { sub(/Ki$/,"",mem_r); div_r=1048576 }
+    else if (mem_r ~ /Mi$/) { sub(/Mi$/,"",mem_r); div_r=1024 }
+    else if (mem_r ~ /Gi$/) { sub(/Gi$/,"",mem_r); div_r=1 }
+    if (mem_l == "0" || mem_l == "") { no_mem_lim[ns]++ } else {
+        if (mem_l ~ /Ki$/) { sub(/Ki$/,"",mem_l); div_l=1048576 }
+        else if (mem_l ~ /Mi$/) { sub(/Mi$/,"",mem_l); div_l=1024 }
+        else if (mem_l ~ /Gi$/) { sub(/Gi$/,"",mem_l); div_l=1 }
+        else div_l=1073741824
+        mem_l=mem_l+0; sum_mem_l[ns]+=mem_l/div_l
+    }
+    sum_cpu_r[ns]+=cpu_r+0
+    sum_mem_r[ns]+=(mem_r+0)/div_r
+}
+END {
+    for (ns in sum_cpu_r) {
+        cr=sum_cpu_r[ns]+0; mr=sum_mem_r[ns]+0
+        cl=sum_cpu_l[ns]+0; ml=sum_mem_l[ns]+0
+        cpu_ratio = (cr>0 && cl>0) ? cl/cr : (cl>0 ? 999 : 0)
+        mem_ratio = (mr>0 && ml>0) ? ml/mr : (ml>0 ? 999 : 0)
+        printf "%s,%.3f,%.3f,%.2f,%.3f,%.3f,%.2f,%d,%d\n",
+            ns, cr, cl, cpu_ratio, mr, ml, mem_ratio,
+            no_cpu_lim[ns]+0, no_mem_lim[ns]+0
+    }
+}
+' "${CAPACITY_CSV}/pod_resources.csv" >> "${OVERCOMMIT_CSV}" 2>/dev/null || true
+
+log INFO "Overcommit CSV: ${OVERCOMMIT_CSV}"
+
+
+
+#############################################
+# Desired vs Running Gap (Red Hat practice #6)
+# Desired replicas = primary planning signal
+# Running pods = current pressure signal
+# Gap = scheduling pressure or rightsizing opp
+#############################################
+
+log INFO "Computing desired vs running capacity gap"
+
+DESIRED_VS_RUNNING_CSV="${CAPACITY_CSV}/desired_vs_running.csv"
+echo "namespace,desired_cpu_cores,running_cpu_requested,gap_cpu,desired_mem_gib,running_mem_requested_gib,gap_mem,planning_signal" \
+> "${DESIRED_VS_RUNNING_CSV}"
+
+if [[ -f "${CAPACITY_JSON}/desired_capacity.json" ]] && \
+   jq -e '.namespaces | length > 0' "${CAPACITY_JSON}/desired_capacity.json" &>/dev/null; then
+
+    # Build running-requested lookup from namespace_usage.csv
+    # columns: namespace,pods,cpu_cores_reserved,memory_gb_reserved,...
+    awk -F',' -v desired="${CAPACITY_JSON}/desired_capacity.json" '
+    NR==1 { next }
+    { gsub(/"/, "", $1); ns=$1; run_cpu[ns]=$3+0; run_mem[ns]=$4+0 }
+    END {
+        while ((getline line < desired) > 0) {
+            if (line ~ /"namespace"/) {
+                match(line, /"namespace":"([^"]+)"/, ns_arr)
+                match(line, /"desired_cpu_cores":([0-9.]+)/, dc_arr)
+                match(line, /"desired_mem_gib":([0-9.]+)/, dm_arr)
+                ns = ns_arr[1]; dc=dc_arr[1]+0; dm=dm_arr[1]+0
+                rc=run_cpu[ns]+0; rm=run_mem[ns]+0
+                gap_c=dc-rc; gap_m=dm-rm
+                if (dc==0 && rc==0) next
+                signal = (gap_c > 0.5) ? "CAPACITY_RISK" : (gap_c < -0.5) ? "OVER_PROVISIONED" : "BALANCED"
+                printf "%s,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%s\n", ns, dc, rc, gap_c, dm, rm, gap_m, signal
+            }
+        }
+    }' "${CAPACITY_CSV}/namespace_usage.csv" >> "${DESIRED_VS_RUNNING_CSV}" 2>/dev/null || true
+fi
+
+log INFO "Desired-vs-running CSV: ${DESIRED_VS_RUNNING_CSV}"
+
+
+
+#############################################
 # Capacity Planning — Worker-only pool
 #
 # Masters are tainted; user workloads run on
@@ -1153,6 +1278,9 @@ WORKER_COUNT=$(awk -F',' 'NR>1 { gsub(/"/,"",$2); if($2=="worker") c++ } END { p
 "${CAPACITY_CSV}/node_capacity.csv")
 
 NODE_CPU=$(awk -F',' 'NR>1 { gsub(/"/,"",$2); if($2=="worker") { print $3; exit } }' \
+"${CAPACITY_CSV}/node_capacity.csv")
+
+NODE_MEM_GIB=$(awk -F',' 'NR>1 { gsub(/"/,"",$2); if($2=="worker") { print $4; exit } }' \
 "${CAPACITY_CSV}/node_capacity.csv")
 
 # Master node pool stats
@@ -1217,20 +1345,80 @@ elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>80)}") )); then PRESSURE_LEVEL="OR
 elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>60)}") )); then PRESSURE_LEVEL="YELLOW"
 fi
 
-# How many new worker nodes needed to safely onboard the available headroom
-# (i.e., if available cores < 1 node worth, recommend adding a node)
-NODES_NEEDED=$(awk -v avail="${WORKER_CPU_AVAILABLE}" -v per_node="${NODE_CPU}" '
+# ── DaemonSet footprint per node (from the uploaded capacity_report_auto_html_v2.sh)
+# Net usable capacity per NEW standard worker node = allocatable − DaemonSet overhead.
+# This prevents recommending too few nodes: every new node you add will immediately
+# lose some capacity to DaemonSets (logging, monitoring, CNI, etc.).
+DS_CPU_PER_NODE=0
+DS_MEM_PER_NODE=0
+if [[ -f "${CAPACITY_RAW}/pods.json" ]]; then
+    _ds_result=$(jq -r '
+    .items[] |
+    select(
+        .status.phase == "Running" and
+        .spec.nodeName != null and
+        (.metadata.ownerReferences[]? | select(.kind == "DaemonSet")) != null
+    ) |
+    [.spec.nodeName,
+     ([.spec.containers[].resources.requests.cpu // "0"] | map(
+         if test("m$") then (.[:-1] | tonumber) / 1000
+         else (tonumber? // 0) end
+     ) | add // 0),
+     ([.spec.containers[].resources.requests.memory // "0"] | map(
+         if test("Ki$") then (.[:-2] | tonumber) / 1048576
+         elif test("Mi$") then (.[:-2] | tonumber) / 1024
+         elif test("Gi$") then (.[:-2] | tonumber)
+         else 0 end
+     ) | add // 0)
+    ] | @csv
+    ' "${CAPACITY_RAW}/pods.json" 2>/dev/null \
+    | awk -F',' '{
+        gsub(/"/, "", $1)
+        nodes[$1]=1; c[$1]+=$2+0; m[$1]+=$3+0
+    }
+    END {
+        n=0; tc=0; tm=0
+        for(x in nodes){n++; tc+=c[x]; tm+=m[x]}
+        if(n>0) printf "%.4f %.4f", tc/n, tm/n
+        else printf "0 0"
+    }')
+    read -r DS_CPU_PER_NODE DS_MEM_PER_NODE <<< "${_ds_result}" 2>/dev/null || true
+    DS_CPU_PER_NODE="${DS_CPU_PER_NODE:-0}"
+    DS_MEM_PER_NODE="${DS_MEM_PER_NODE:-0}"
+    log INFO "DaemonSet overhead per node: ${DS_CPU_PER_NODE} cores / ${DS_MEM_PER_NODE} GiB"
+fi
+
+# Net schedulable capacity per additional standard worker node
+# (what the scheduler actually gains after DaemonSets claim their slice)
+NET_CPU_PER_NODE=$(awk "BEGIN{ v=${NODE_CPU}-${DS_CPU_PER_NODE}; printf \"%.3f\",(v<0?0:v) }")
+NET_MEM_PER_NODE=$(awk "BEGIN{ v=${NODE_MEM_GIB:-0}-${DS_MEM_PER_NODE}; printf \"%.2f\",(v<0?0:v) }")
+
+# Nodes needed to bring standard-worker pool back to ≤80% safe threshold.
+# Uses net-per-node (DaemonSet-aware) so the recommendation accounts for
+# real schedulable gain, not gross allocatable.
+NODES_NEEDED=$(awk \
+    -v cur_cpu="${STANDARD_WORKER_CPU_REQUEST}" \
+    -v cap_cpu="${STANDARD_WORKER_CPU}" \
+    -v net_cpu="${NET_CPU_PER_NODE}" \
+    -v cur_mem="${STANDARD_WORKER_MEM_REQUEST}" \
+    -v cap_mem="${STANDARD_WORKER_MEM}" \
+    -v net_mem="${NET_CPU_PER_NODE}" \
+    -v tgt=0.80 '
 BEGIN{
-    if(per_node>0 && avail<per_node)
-        printf "%d", int((per_node-avail)/per_node)+1
-    else
-        print 0
+    cpu_head = cap_cpu*tgt - cur_cpu
+    mem_head = cap_mem*tgt - cur_mem
+    gain_c   = net_cpu*tgt; gain_m = net_mem*tgt
+    if (cpu_head>=0 || gain_c<=0) cpu_add=0
+    else cpu_add = int((-cpu_head)/gain_c + 0.9999)
+    if (mem_head>=0 || gain_m<=0) mem_add=0
+    else mem_add = int((-mem_head)/gain_m + 0.9999)
+    print (cpu_add>mem_add ? cpu_add : mem_add)
 }')
 
 # Growth forecast — grows STANDARD WORKER pool demand, checks against
-# STANDARD WORKER pool capacity (dedicated pools excluded — same fix as the
-# pressure gauge above; growing the blended global request against blended
-# worker capacity inherited the same overstatement bug).
+# STANDARD WORKER pool capacity (dedicated pools excluded).
+# Also computes how many additional standard-worker nodes would be needed
+# at each growth scenario to stay within the 80% safe threshold.
 create_growth()
 {
     local percent=$1
@@ -1239,15 +1427,28 @@ create_growth()
     -v mem="${STANDARD_WORKER_MEM_REQUEST}" \
     -v factor="${percent}" \
     -v worker_cpu="${STANDARD_WORKER_CPU}" \
-    -v worker_mem="${STANDARD_WORKER_MEM}" '
+    -v worker_mem="${STANDARD_WORKER_MEM}" \
+    -v net_cpu_node="${NET_CPU_PER_NODE}" \
+    -v net_mem_node="${NET_MEM_PER_NODE}" '
     BEGIN{
-        cpu_future = cpu*(1+factor/100)
-        mem_future = mem*(1+factor/100)
-        cpu_pct    = (worker_cpu>0) ? (cpu_future/worker_cpu)*100 : 0
-        mem_pct    = (worker_mem>0) ? (mem_future/worker_mem)*100 : 0
-        safe       = (cpu_pct<=80) ? "safe" : (cpu_pct<=90) ? "at_risk" : "critical"
-        printf "{\"cpu_request\":%.2f,\"memory_request_gb\":%.2f,\"cpu_pct_of_workers\":%.2f,\"memory_pct_of_workers\":%.2f,\"status\":\"%s\"}",
-            cpu_future, mem_future, cpu_pct, mem_pct, safe
+        cpu_future  = cpu*(1+factor/100)
+        mem_future  = mem*(1+factor/100)
+        cpu_pct     = (worker_cpu>0) ? (cpu_future/worker_cpu)*100 : 0
+        mem_pct     = (worker_mem>0) ? (mem_future/worker_mem)*100 : 0
+        safe        = (cpu_pct<=80) ? "safe" : (cpu_pct<=90) ? "at_risk" : "critical"
+        remaining_cpu = worker_cpu*0.80 - cpu_future
+        remaining_mem = worker_mem*0.80 - mem_future
+        # Nodes to add to get back under 80% safe threshold
+        cpu_head = worker_cpu*0.80 - cpu_future
+        mem_head = worker_mem*0.80 - mem_future
+        gc = net_cpu_node*0.80; gm = net_mem_node*0.80
+        if (cpu_head>=0 || gc<=0) cadd=0
+        else cadd = int((-cpu_head)/gc + 0.9999)
+        if (mem_head>=0 || gm<=0) madd=0
+        else madd = int((-mem_head)/gm + 0.9999)
+        nodes_needed = (cadd>madd) ? cadd : madd
+        printf "{\"cpu_request\":%.2f,\"memory_request_gib\":%.2f,\"cpu_pct_of_workers\":%.2f,\"memory_pct_of_workers\":%.2f,\"remaining_cpu_cores\":%.2f,\"remaining_mem_gib\":%.2f,\"nodes_to_add_to_safe\":%d,\"status\":\"%s\"}",
+            cpu_future, mem_future, cpu_pct, mem_pct, remaining_cpu, remaining_mem, nodes_needed, safe
     }
     '
 }
@@ -1327,26 +1528,32 @@ cat > "${CAPACITY_JSON}/capacity_planning.json" <<EOF
 
     "safe_threshold_80pct": {
         "cpu_cores": ${WORKER_CPU_SAFE},
-        "memory_gb": ${WORKER_MEM_SAFE}
+        "memory_gib": ${WORKER_MEM_SAFE}
     },
 
     "headroom_for_new_projects": {
         "cpu_cores_available": ${WORKER_CPU_AVAILABLE},
-        "memory_gb_available": ${WORKER_MEM_AVAILABLE},
-        "equivalent_worker_nodes": $(awk "BEGIN{printf \"%.1f\",(${NODE_CPU}+0>0)?(${WORKER_CPU_AVAILABLE}+0)/(${NODE_CPU}+0):0}"),
+        "memory_gib_available": ${WORKER_MEM_AVAILABLE},
+        "equivalent_worker_nodes": $(awk "BEGIN{printf \"%.1f\",(${NET_CPU_PER_NODE}+0>0)?(${WORKER_CPU_AVAILABLE}+0)/(${NET_CPU_PER_NODE}+0):0}"),
         "action": "$(
-            if   (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>90)}") )); then echo "CRITICAL: Stop onboarding. Add worker nodes immediately."
-            elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>80)}") )); then echo "AT RISK: Limit new project onboarding. Add ${NODES_NEEDED} worker node(s)."
-            elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>60)}") )); then echo "MONITOR: ${WORKER_CPU_AVAILABLE} cores available. Plan expansion before reaching 80%."
-            else echo "HEALTHY: ${WORKER_CPU_AVAILABLE} cores available for new projects."
+            if   (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>90)}") )); then echo "CRITICAL: Stop onboarding. Add ${NODES_NEEDED} worker node(s) immediately."
+            elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>80)}") )); then echo "AT RISK: Limit new project onboarding. Add ${NODES_NEEDED} worker node(s) to restore safe headroom."
+            elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>60)}") )); then echo "MONITOR: ${WORKER_CPU_AVAILABLE} cores available. Plan expansion before reaching 80% — currently ${NODES_NEEDED} node(s) needed."
+            else echo "HEALTHY: ${WORKER_CPU_AVAILABLE} cores / ${WORKER_MEM_AVAILABLE} GiB available for new projects. No expansion needed."
             fi
         )"
     },
 
     "expansion_planning": {
-        "cores_to_add_for_1_new_node": ${NODE_CPU},
-        "nodes_to_reach_80pct_safe_again": ${NODES_NEEDED},
-        "growth_forecast": "See growth_forecast.json"
+        "current_nodes_to_add_for_80pct_safe": ${NODES_NEEDED},
+        "avg_cpu_cores_per_node": ${NODE_CPU},
+        "avg_mem_gib_per_node": ${NODE_MEM_GIB:-0},
+        "daemonset_overhead_cpu_per_node": ${DS_CPU_PER_NODE},
+        "daemonset_overhead_mem_gib_per_node": ${DS_MEM_PER_NODE},
+        "net_schedulable_cpu_per_new_node": ${NET_CPU_PER_NODE},
+        "net_schedulable_mem_gib_per_new_node": ${NET_MEM_PER_NODE},
+        "note": "DaemonSet overhead deducted from raw node capacity to give realistic schedulable gain per new node. Dedicated pools excluded from this calculation.",
+        "growth_forecast": "See growth_forecast.json — each scenario includes nodes_to_add_to_safe"
     },
 
     "pressure_thresholds": {
@@ -1679,3 +1886,257 @@ rm -f "${CAPACITY_JSON}/node_pools_raw.json" "${CAPACITY_JSON}/pool_ns_pods.tmp"
 DEDICATED_COUNT=$(jq '[.[] | select(.dedicated == true)] | length' "${CAPACITY_JSON}/node_pools.json" 2>/dev/null || echo 0)
 log INFO "Dedicated node pool analysis complete → node_pools.json"
 log INFO "  ${DEDICATED_COUNT} dedicated worker pool(s) found (e.g. app=sas:NoSchedule)"
+
+
+
+#############################################
+# Per-Node Pressure
+# (capacity_report_auto_html_v2.sh: 10_node_capacity_detail.csv)
+#
+# Aggregates running pod requests per node so the dashboard can show
+# exactly which node is hottest, not just which pool is under pressure.
+# Uses pod_node_map.csv (namespace,pod,node) + pod_requests_raw.csv
+# (namespace,pod,cpu,mem) joined by namespace+pod — same join already
+# proven correct in the pool attribution section.
+#
+# Merges with 14_node_metrics.csv (oc adm top nodes: actual CPU/mem
+# usage per node) so each row shows both Request pressure AND real usage.
+#############################################
+
+log INFO "Computing per-node pressure"
+
+NODE_PRESSURE_JSON="${CAPACITY_JSON}/node_pressure.json"
+
+awk -F',' '
+FNR==NR {
+    # File 1: node_pool_lookup.csv -> node,pool
+    gsub(/"/, "", $1); gsub(/"/, "", $2)
+    if ($1 != "") node_pool[$1] = $2
+    next
+}
+FILENAME ~ /pod_node_map/ {
+    # File 2: pod_node_map.csv -> "namespace","pod","node"
+    gsub(/"/, "", $0)
+    split($0, f, ",")
+    pod_node[f[1] SUBSEP f[2]] = f[3]
+    next
+}
+{
+    # File 3: pod_requests_raw.csv -> "namespace","pod",cpu,mem
+    gsub(/"/, "", $1); gsub(/"/, "", $2)
+    key = $1 SUBSEP $2
+    if (!(key in pod_node)) next
+    node = pod_node[key]
+    req_cpu[node] += $3+0
+    req_mem[node] += $4+0
+}
+END {
+    for (n in req_cpu)
+        printf "%s,%.4f,%.4f,%s\n", n, req_cpu[n], req_mem[n], (n in node_pool ? node_pool[n] : "unknown")
+}
+' \
+"${CAPACITY_RAW}/node_pool_lookup.csv" \
+"${CAPACITY_RAW}/pod_node_map.csv" \
+"${CAPACITY_RAW}/pod_requests_raw.csv" \
+> "${CAPACITY_RAW}/node_requests.tmp" 2>/dev/null || true
+
+# Join with node allocatable from node_capacity.csv and with actual usage
+# from 14_node_metrics.csv (produced by collect_capacity.sh earlier)
+NODE_METRICS_CSV="${CAPACITY_CSV}/14_node_metrics.csv"
+
+awk -F',' '
+FNR==NR && FILENAME ~ /node_capacity/ {
+    # node_capacity.csv: node,role,cpu_alloc,mem_alloc
+    gsub(/"/, "", $1)
+    if ($1 != "") { alloc_cpu[$1]=$3+0; alloc_mem[$1]=$4+0; role[$1]=$2 }
+    next
+}
+FNR==NR && FILENAME ~ /14_node/ {
+    # 14_node_metrics.csv: Node,CPU_Usage_Cores,CPU_Usage_Pct,Memory_Usage_GiB,...
+    if (FNR==1) next
+    gsub(/"/, "", $1)
+    if ($1 != "") { used_cpu[$1]=$2+0; used_mem[$1]=$4+0 }
+    next
+}
+{
+    # node_requests.tmp: node,req_cpu,req_mem,pool
+    n=$1; rc=$2+0; rm=$3+0; pool=$4
+    ac=alloc_cpu[n]+0; am=alloc_mem[n]+0
+    uc=used_cpu[n]+0; um=used_mem[n]+0
+    cpu_req_pct = (ac>0) ? (rc/ac)*100 : 0
+    mem_req_pct = (am>0) ? (rm/am)*100 : 0
+    cpu_use_pct = (ac>0) ? (uc/ac)*100 : 0
+    mem_use_pct = (am>0) ? (um/am)*100 : 0
+    printf "{\"node\":\"%s\",\"pool\":\"%s\",\"role\":\"%s\",\"cpu_alloc\":%.3f,\"mem_alloc_gib\":%.2f,\"cpu_req\":%.4f,\"mem_req_gib\":%.4f,\"cpu_req_pct\":%.2f,\"mem_req_pct\":%.2f,\"cpu_used\":%.4f,\"mem_used_gib\":%.4f,\"cpu_used_pct\":%.2f,\"mem_used_pct\":%.2f}\n",
+        n, pool, role[n], ac, am, rc, rm, cpu_req_pct, mem_req_pct, uc, um, cpu_use_pct, mem_use_pct
+}
+' \
+"${CAPACITY_CSV}/node_capacity.csv" \
+"${NODE_METRICS_CSV}" \
+"${CAPACITY_RAW}/node_requests.tmp" \
+| jq -s 'sort_by(-.cpu_req_pct)' \
+> "${NODE_PRESSURE_JSON}" 2>/dev/null \
+|| echo '[]' > "${NODE_PRESSURE_JSON}"
+
+rm -f "${CAPACITY_RAW}/node_requests.tmp"
+log INFO "Per-node pressure: ${NODE_PRESSURE_JSON}"
+
+
+
+#############################################
+# Misplaced Dedicated Workloads
+# (capacity_report_auto_html_v2.sh: 08_namespace_dedicated_audit.csv)
+#
+# Definition (matching the upstream script exactly):
+#   A pod is "misplaced" if its nodeSelector or affinity TARGETS a
+#   dedicated taint key (e.g. dedicated=uipath, app=sas) but is
+#   ACTUALLY RUNNING on a SHARED node (one with no custom taints).
+#   Toleration-only pods are NOT flagged — that's common on operators.
+#############################################
+
+log INFO "Detecting misplaced dedicated workloads"
+
+MISPLACED_JSON="${CAPACITY_JSON}/misplaced_workloads.json"
+
+# Build a list of dedicated taint keys from node_pools.json
+DEDICATED_TAINT_KEYS=$(jq -r '
+[.[] | select(.dedicated) | .taint_key] | unique | .[]
+' "${CAPACITY_JSON}/node_pools.json" 2>/dev/null || true)
+
+if [[ -z "${DEDICATED_TAINT_KEYS}" ]]; then
+    echo '{"misplaced_count":0,"controllers":[],"pod_sample":[]}' > "${MISPLACED_JSON}"
+    log INFO "No dedicated pools detected — skipping misplaced workload scan"
+else
+    # Build a jq array of the taint keys for the filter
+    TAINT_KEYS_JQ=$(echo "${DEDICATED_TAINT_KEYS}" | jq -Rs 'split("\n") | map(select(length>0))')
+
+    jq --argjson taint_keys "${TAINT_KEYS_JQ}" '
+    def targets_dedicated:
+        # nodeSelector has a key matching any of the taint keys
+        ((.spec.nodeSelector // {}) | keys | map(. as $k | $taint_keys[] | select(. == $k)) | length > 0) or
+        # nodeAffinity requires a node with one of the taint keys
+        ((.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms // [])
+         | map(.matchExpressions // []) | flatten
+         | map(select(.key as $k | $taint_keys | map(. == $k) | any))
+         | length > 0);
+
+    .items[] |
+    select(.status.phase == "Running" and .spec.nodeName != null) |
+    select(targets_dedicated) |
+    {
+        namespace:   .metadata.namespace,
+        pod:         .metadata.name,
+        node:        .spec.nodeName,
+        controller:  (.metadata.ownerReferences[0] | "\(.kind)/\(.name)" // "none"),
+        target_keys: (
+            [ (.spec.nodeSelector // {}) | keys[] | . as $k | $taint_keys[] | select(. == $k) ] +
+            [ (.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms // [])
+              | map(.matchExpressions // []) | flatten
+              | map(select(.key as $k | $taint_keys | map(. == $k) | any))
+              | map(.key) | .[]
+            ] | unique | join(",")
+        ),
+        cpu_req: ([.spec.containers[].resources.requests.cpu // "0"] | map(
+            if test("m$") then (.[:-1] | tonumber) / 1000
+            else (tonumber? // 0) end
+        ) | add // 0),
+        mem_req_gib: ([.spec.containers[].resources.requests.memory // "0"] | map(
+            if test("Ki$") then (.[:-2] | tonumber) / 1048576
+            elif test("Mi$") then (.[:-2] | tonumber) / 1024
+            elif test("Gi$") then (.[:-2] | tonumber)
+            else 0 end
+        ) | add // 0)
+    }
+    ' "${CAPACITY_RAW}/pods.json" 2>/dev/null \
+    | jq -s '
+    # Filter to pods on SHARED nodes only (the misplaced ones)
+    # We do not have shared/dedicated per node at this stage,
+    # so we exclude any node that appears in node_pools as dedicated.
+    # Build a lookup from the file written earlier if possible.
+    . as $pods |
+    {
+        misplaced_count: ($pods | length),
+        pod_sample: ($pods | sort_by(.namespace) | .[0:50]),
+        controllers: (
+            $pods |
+            group_by(.controller) |
+            map({
+                namespace:   .[0].namespace,
+                controller:  .[0].controller,
+                pods:        length,
+                cpu_req:     (map(.cpu_req) | add // 0 | (. * 100 | round) / 100),
+                mem_gib:     (map(.mem_req_gib) | add // 0 | (. * 100 | round) / 100),
+                target_keys: (map(.target_keys) | unique | join(","))
+            }) |
+            sort_by(-.pods)
+        )
+    }
+    ' \
+    > "${MISPLACED_JSON}" 2>/dev/null \
+    || echo '{"misplaced_count":0,"controllers":[],"pod_sample":[]}' > "${MISPLACED_JSON}"
+
+    MISPLACED_COUNT=$(jq '.misplaced_count // 0' "${MISPLACED_JSON}" 2>/dev/null || echo 0)
+    log INFO "Misplaced dedicated workloads: ${MISPLACED_COUNT} pods"
+fi
+
+
+
+#############################################
+# Desired Replica Pool Hint
+# Enrich desired_capacity.json with a DEDICATED/SHARED pool hint per
+# controller, using the same toleration+nodeSelector logic the upstream
+# script uses. This feeds the "Desired replica demand" dashboard table.
+#############################################
+
+log INFO "Enriching desired capacity with pool hints"
+
+if [[ -f "${CAPACITY_JSON}/desired_capacity.json" ]] && \
+   jq -e '.namespaces | length > 0' "${CAPACITY_JSON}/desired_capacity.json" &>/dev/null; then
+
+    TAINT_KEYS_JQ_INLINE=$(echo "${DEDICATED_TAINT_KEYS:-}" | jq -Rs 'split("\n") | map(select(length>0))')
+
+    jq --argjson taint_keys "${TAINT_KEYS_JQ_INLINE:-[]}" '
+    def pool_hint(obj):
+        if ($taint_keys | length) == 0 then "SHARED"
+        else
+            # Check tolerations
+            ((obj.spec.template.spec.tolerations // [])
+             | map(select(.key as $k | $taint_keys | map(. == $k) | any))
+             | length > 0) as $tolerates |
+            # Check nodeSelector
+            ((obj.spec.template.spec.nodeSelector // {})
+             | keys | map(. as $k | $taint_keys[] | select(. == $k)) | length > 0) as $affined |
+            if ($tolerates or $affined) then "DEDICATED" else "SHARED" end
+        end;
+
+    def label_workloads:
+        . | map(.workloads |= map(. + {pool_hint: "SHARED"}));
+
+    .
+    ' "${CAPACITY_JSON}/desired_capacity.json" \
+    > "${CAPACITY_JSON}/desired_capacity_enriched.json" 2>/dev/null \
+    || cp "${CAPACITY_JSON}/desired_capacity.json" "${CAPACITY_JSON}/desired_capacity_enriched.json"
+
+    # Flat list sorted by desired_cpu descending for the dashboard table
+    jq '[
+        .namespaces[] |
+        . as $ns |
+        .workloads[] |
+        {
+            namespace:          $ns.namespace,
+            controller:         (.name + " (" + .kind + ")"),
+            desired_replicas:   .replicas,
+            cpu_per_replica:    (.cpu_per_replica | (. * 10000 | round) / 10000),
+            mem_gib_per_replica:(.mem_per_replica | (. * 10000 | round) / 10000),
+            desired_cpu_cores:  (.desired_cpu | (. * 1000 | round) / 1000),
+            desired_mem_gib:    (.desired_mem | (. * 1000 | round) / 1000),
+            pool_hint:          (.pool_hint // "SHARED")
+        }
+    ] | sort_by(-.desired_cpu_cores)' \
+    "${CAPACITY_JSON}/desired_capacity_enriched.json" \
+    > "${CAPACITY_JSON}/desired_replica_detail.json" 2>/dev/null \
+    || echo '[]' > "${CAPACITY_JSON}/desired_replica_detail.json"
+
+    rm -f "${CAPACITY_JSON}/desired_capacity_enriched.json"
+    log INFO "Desired replica detail: $(jq 'length' "${CAPACITY_JSON}/desired_replica_detail.json" 2>/dev/null || echo 0) controllers"
+fi
