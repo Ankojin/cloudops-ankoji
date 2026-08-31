@@ -205,7 +205,7 @@ then
     OC_LOGIN_OUT=$(oc login \
         --token="${LOGIN_TOKEN}" \
         --server="${API_SERVER}" \
-        --insecure-skip-tls-verify="${OCP_INSECURE_SKIP_TLS_VERIFY:-false}" \
+        --insecure-skip-tls-verify="${OCP_INSECURE_SKIP_TLS_VERIFY:-true}" \
         2>&1) \
     || {
         log ERROR "oc login failed — server=${API_SERVER} env=${CLUSTER_ENV}"

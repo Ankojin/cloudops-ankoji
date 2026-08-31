@@ -14,8 +14,11 @@ DB_INSERT_SCRIPT="/collector/insert_to_db.sh"
 
 echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) — Starting capacity collection ==="
 
-RUN_MARKER=$(mktemp)
-trap 'rm -f "${RUN_MARKER}"' EXIT
+OUTPUT_BASE="${PLANNER_DIR}/output"
+DEV_SOURCE_LABEL="${DEV_ENV_LABEL:-DEV}"
+SIT_SOURCE_LABEL="${SIT_ENV_LABEL:-SIT}"
+DEV_PREVIOUS_DIR=$(find "${OUTPUT_BASE}" -maxdepth 1 -type d -name "${DEV_SOURCE_LABEL}_*" 2>/dev/null | sort | tail -1)
+SIT_PREVIOUS_DIR=$(find "${OUTPUT_BASE}" -maxdepth 1 -type d -name "${SIT_SOURCE_LABEL}_*" 2>/dev/null | sort | tail -1)
 
 # ── Static /etc/hosts injection (DNS workaround) ─────────────
 # Set DEV_IP / SIT_IP env vars on the ACA Job to bypass DNS when
@@ -53,54 +56,81 @@ echo "DEBUG: DB_HOST=${DB_HOST:-<not set>}, DB_NAME=${DB_NAME:-<not set>}, DB_US
 
 # ── Step 1: Run collection + report generation ────────────────
 ARGS=()
+EXPECTED_INSERTS=0
 
-if [[ -n "${DEV_API:-}" && -n "${DEV_TOKEN:-}" ]]; then
+if [[ "${COLLECT_DEV:-true}" == "true" && -n "${DEV_API:-}" && -n "${DEV_TOKEN:-}" ]]; then
   ARGS+=(--dev-api "${DEV_API}" --dev-token "${DEV_TOKEN}")
+  ((EXPECTED_INSERTS+=1))
 else
   ARGS+=(--skip-dev)
-  echo "INFO: Skipping DEV (no credentials)"
+  echo "INFO: Skipping DEV (disabled or no credentials)"
 fi
 
-if [[ -n "${SIT_API:-}" && -n "${SIT_TOKEN:-}" ]]; then
+if [[ "${COLLECT_SIT:-true}" == "true" && -n "${SIT_API:-}" && -n "${SIT_TOKEN:-}" ]]; then
   ARGS+=(--sit-api "${SIT_API}" --sit-token "${SIT_TOKEN}")
+  ((EXPECTED_INSERTS+=1))
 else
   ARGS+=(--skip-sit)
-  echo "INFO: Skipping SIT (no credentials)"
+  echo "INFO: Skipping SIT (disabled or no credentials)"
+fi
+
+if [[ ${EXPECTED_INSERTS} -eq 0 ]]; then
+  echo "ERROR: No environments enabled with complete API/token configuration"
+  exit 1
 fi
 
 if [[ -n "${DEV_ENV_LABEL:-}" ]]; then ARGS+=(--dev-env "${DEV_ENV_LABEL}"); fi
 if [[ -n "${SIT_ENV_LABEL:-}" ]]; then ARGS+=(--sit-env "${SIT_ENV_LABEL}"); fi
 
 # Run collection — allow partial failure (one env down shouldn't kill the job)
+COLLECTION_OK=true
 if bash "${PLANNER_DIR}/run-multi-env.sh" "${ARGS[@]}"; then
     echo "INFO: Collection completed successfully"
 else
-    echo "WARN: run-multi-env.sh exited non-zero — partial data may exist; continuing to DB insert"
+  COLLECTION_OK=false
+  echo "ERROR: run-multi-env.sh exited non-zero — checking for any fresh partial output"
 fi
 
 # ── Step 2: Find latest output dirs and insert to DB ─────────
-OUTPUT_BASE="${PLANNER_DIR}/output"
+SUCCESSFUL_INSERTS=0
 
 # run-multi-env.sh creates timestamped dirs using the configured labels.
-# Only consider directories touched after this run started so a failed
-# collection cannot reinsert an older snapshot with a fresh DB timestamp.
+# Compare directory identity instead of mtimes because Azure Files can expose
+# timestamp precision/caching behavior that makes `find -newer` unreliable.
 for ENV in DEV SIT; do
   if [[ "${ENV}" == "DEV" ]]; then
-    SOURCE_LABEL="${DEV_ENV_LABEL:-DEV}"
+    if [[ "${COLLECT_DEV:-true}" != "true" ]]; then
+      echo "INFO: DEV collection disabled — no insert expected"
+      continue
+    fi
+    SOURCE_LABEL="${DEV_SOURCE_LABEL}"
+    PREVIOUS_DIR="${DEV_PREVIOUS_DIR}"
   else
-    SOURCE_LABEL="${SIT_ENV_LABEL:-SIT}"
+    if [[ "${COLLECT_SIT:-true}" != "true" ]]; then
+      echo "INFO: SIT collection disabled — no insert expected"
+      continue
+    fi
+    SOURCE_LABEL="${SIT_SOURCE_LABEL}"
+    PREVIOUS_DIR="${SIT_PREVIOUS_DIR}"
   fi
 
-  LATEST_DIR=$(find "${OUTPUT_BASE}" -maxdepth 1 -type d -name "${SOURCE_LABEL}_*" -newer "${RUN_MARKER}" \
-    | sort | tail -1)
+  LATEST_DIR=$(find "${OUTPUT_BASE}" -maxdepth 1 -type d -name "${SOURCE_LABEL}_*" 2>/dev/null | sort | tail -1)
 
-  if [[ -n "${LATEST_DIR}" ]]; then
+  if [[ -n "${LATEST_DIR}" && "${LATEST_DIR}" != "${PREVIOUS_DIR}" ]]; then
     echo "INFO: Inserting ${ENV} from ${LATEST_DIR}"
-    bash "${DB_INSERT_SCRIPT}" --env "${ENV}" --output-dir "${LATEST_DIR}" || \
-      echo "WARN: DB insert failed for ${ENV} — collection data preserved"
+    if bash "${DB_INSERT_SCRIPT}" --env "${ENV}" --output-dir "${LATEST_DIR}"; then
+      ((SUCCESSFUL_INSERTS+=1))
+    else
+      echo "ERROR: DB insert failed for ${ENV} — collection data preserved"
+    fi
   else
-    echo "INFO: No output directory found for ${ENV} — skipping DB insert"
+    echo "ERROR: No fresh output directory found for ${ENV} — skipping DB insert"
   fi
 done
+
+if [[ "${COLLECTION_OK}" != "true" || ${SUCCESSFUL_INSERTS} -ne ${EXPECTED_INSERTS} ]]; then
+  echo "ERROR: Collection run incomplete — expected ${EXPECTED_INSERTS} fresh insert(s), completed ${SUCCESSFUL_INSERTS}"
+  exit 1
+fi
 
 echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) — Collection complete ==="

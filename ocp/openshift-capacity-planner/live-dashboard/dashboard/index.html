@@ -8,6 +8,7 @@
 <style>
 /* ═══ Base — matches generate_report.sh / dashboard.css ══════ */
 *,*::before,*::after{box-sizing:border-box}
+:root{--navy:#173a5e;--blue:#2e75b6;--teal:#159a82;--amber:#d97706;--red:#c0392b;--green:#1a7f37;--surface:#fff;--canvas:#f4f6f9;--line:#dce3ea;--text:#1f2937;--muted:#64748b}
 body{font-family:"Segoe UI",Arial,sans-serif;background:#f4f6f9;margin:0;padding:0}
 
 .header{background:linear-gradient(135deg,#1f4e79,#2e75b6);color:#fff;padding:20px 28px;margin-bottom:0}
@@ -17,18 +18,21 @@ body{font-family:"Segoe UI",Arial,sans-serif;background:#f4f6f9;margin:0;padding
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
 /* Tab bar */
-.tab-bar{background:#1a3f63;display:flex;align-items:center;padding:0 20px;gap:2px;
-  border-bottom:3px solid #16334f;position:sticky;top:0;z-index:100}
+.tab-bar{background:#1a3f63;display:flex;align-items:stretch;padding:0 20px;gap:12px;
+  border-bottom:3px solid #16334f;position:sticky;top:0;z-index:100;overflow-x:auto;max-width:100%}
+.nav-group{display:flex;align-items:stretch;position:relative;padding-top:15px;flex:0 0 auto}
+.nav-group-label{position:absolute;top:2px;left:10px;font-size:9px;line-height:12px;color:#7fa7cc;text-transform:uppercase;font-weight:700;white-space:nowrap}
 .tab-bar button{background:none;border:none;color:#adc6e0;padding:11px 20px;cursor:pointer;
   font-size:.9rem;border-bottom:3px solid transparent;margin-bottom:-3px;
-  transition:color .15s,border-color .15s;font-weight:500}
+  transition:color .15s,border-color .15s;font-weight:500;flex:0 0 auto}
 .tab-bar button.active{color:#fff;border-bottom-color:#f78166}
 .tab-bar button:hover:not(.active){color:#fff}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #79c0ff;outline-offset:2px}
 .tab-panel{display:none}
 .tab-panel.active{display:block}
 .tab-content{display:none}
 .tab-content.active{display:block}
-.header-right{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:.82rem;color:#adc6e0}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:.82rem;color:#adc6e0;flex:0 0 auto}
 #countdown{font-weight:700;color:#79c0ff;font-size:.95rem;min-width:2.5ch}
 .btn-refresh{background:#2e6fad;border:1px solid #3b84c7;color:#fff;
   border-radius:5px;padding:4px 12px;cursor:pointer;font-size:.82rem}
@@ -36,7 +40,7 @@ body{font-family:"Segoe UI",Arial,sans-serif;background:#f4f6f9;margin:0;padding
 
 /* Cards & Grid */
 .wrap{padding:20px 24px;max-width:1600px;margin:0 auto}
-.card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.10);margin-bottom:20px}
+.card{background:#fff;padding:20px;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,.09);margin-bottom:20px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-bottom:20px}
 .grid>.card{margin-bottom:0}
 
@@ -78,6 +82,7 @@ th{background:#f8f9fa;color:#1f4e79;padding:10px 12px;text-align:left;border-bot
 td{padding:9px 12px;border-bottom:1px solid #eee;vertical-align:top}
 tr:hover td{background:#f0f7ff}
 tr:last-child td{border-bottom:none}
+div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
 
 /* NS type badges */
 .type-tenant{background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600}
@@ -99,6 +104,38 @@ tr:last-child td{border-bottom:none}
 /* Calc legend */
 .calc-legend{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 14px;font-size:12px}
 .calc-item{padding:8px 14px;border-radius:0 4px 4px 0;line-height:1.7}
+.scope-note{padding:14px 16px;border-left:4px solid #2e75b6;background:#eef6ff;color:#26384a;font-size:13px;line-height:1.6;margin-bottom:20px}
+.management-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}
+.management-metric{background:#fff;border:1px solid #e1e7ee;border-top:3px solid #2e75b6;padding:16px;min-height:118px}
+.management-metric .label{font-size:12px;text-transform:uppercase;color:#667085;font-weight:700}
+.management-metric .value{font-size:30px;font-weight:750;margin:8px 0 4px;color:#1f4e79}
+.management-metric .detail{font-size:12px;color:#667085;line-height:1.45}
+.comparison-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.comparison-panel{border:1px solid #e1e7ee;padding:16px;background:#fbfcfe}
+.comparison-row{margin:12px 0}
+.comparison-label{display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-bottom:5px}
+.comparison-track{height:10px;background:#e8edf2;overflow:hidden}
+.comparison-fill{height:100%;min-width:0;transition:width .4s}
+.methodology{background:#eef5ff;border-left:4px solid #2e6fad;padding:16px 18px;font-size:13px;line-height:1.65}
+.dashboard-footer{padding:18px 24px;text-align:center;color:#64748b;font-size:12px;border-top:1px solid #dce3ea;background:#eef2f6}
+.history-chart-wrap{position:relative;height:300px;min-height:260px}
+.history-empty{display:none;padding:18px;background:#f8fafc;color:#64748b;text-align:center;font-size:13px}
+.whatif-form{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:14px;align-items:end;margin:16px 0 20px}
+.whatif-field label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:6px}
+.whatif-field input,.whatif-field select{width:100%;height:38px;padding:7px 9px;border:1px solid #b8c4d1;background:#fff;font-size:13px}
+.whatif-result{padding:16px;border-left:4px solid #2e75b6;background:#f8fafc;margin-bottom:16px;line-height:1.55}
+.whatif-status{font-size:24px;font-weight:750;margin-bottom:4px}
+.command-button{border:0;background:#2e75b6;color:#fff;padding:7px 12px;font-size:12px;font-weight:650;cursor:pointer;border-radius:5px}
+.command-button.secondary{background:#475569}
+.executive-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
+.executive-item{border-left:4px solid #2e75b6;background:#fff;padding:14px 16px;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+.executive-title{display:flex;justify-content:space-between;gap:12px;align-items:center;font-weight:700;margin-bottom:7px}
+.executive-copy{font-size:13px;line-height:1.55;color:#475569}
+@media(max-width:1000px){.management-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison-grid{grid-template-columns:1fr}}
+@media(max-width:1000px){.whatif-form{grid-template-columns:repeat(2,minmax(130px,1fr))}}
+@media(max-width:700px){.executive-summary{grid-template-columns:1fr}.tab-bar{padding:0 10px;gap:8px}.header-right{padding-left:10px}}
+@media(max-width:560px){.management-grid,.whatif-form{grid-template-columns:1fr}.wrap{padding:14px 10px}.card{padding:14px}.history-chart-wrap{height:240px}}
+@media print{body.print-whatif .header,body.print-whatif .tab-bar,body.print-whatif #data-freshness-warning,body.print-whatif .tab-panel,body.print-whatif .tab-content:not(#tab-whatif){display:none!important}body.print-whatif #tab-whatif{display:block!important}body.print-whatif .command-button,body.print-whatif .whatif-form{display:none!important}body.print-whatif .card{box-shadow:none;border:1px solid #ccc}body.print-whatif .dashboard-footer{display:block}}
 </style>
 </head>
 <body>
@@ -114,29 +151,40 @@ tr:last-child td{border-bottom:none}
   <h1><span class="live-dot"></span>ARO Ops Dashboard
     <span style="padding:3px 12px;background:#1a3f63;border-radius:8px;font-size:14px;font-weight:600;letter-spacing:1px">LIVE</span>
   </h1>
-  <p>Capacity &nbsp;·&nbsp; Resources &nbsp;·&nbsp; Tenant Chargeback &nbsp;·&nbsp; PVC Inventory</p>
+  <p>Capacity &nbsp;·&nbsp; Resources &nbsp;·&nbsp; Tenant Chargeback &nbsp;·&nbsp; PVC Inventory &nbsp;·&nbsp; All times AST (UTC+3)</p>
 </div>
 
 <!-- Tab bar -->
 <div class="tab-bar">
-  <button class="active" onclick="switchTab('overview',this)">&#9783; Overview</button>
-  <button onclick="switchTab('dev',this)">DEV Details</button>
-  <button onclick="switchTab('sit',this)">SIT Details</button>
-  <button onclick="switchTab('pools',this)">Dedicated Node Pools</button>
-  <button onclick="switchTab('nodeinventory',this)">Node Inventory</button>
-  <button onclick="switchTab('namespaces',this)">Namespaces</button>
-  <button onclick="switchTab('nodepressure',this)">&#128202; Node Pressure</button>
-  <button onclick="switchTab('podmetrics',this)">&#128202; Pod Metrics</button>
-  <button onclick="switchTab('desiredreplicas',this)">&#128295; Desired Replicas</button>
-  <button onclick="switchTab('misplaced',this)">&#9888; Misplaced</button>
-  <button onclick="switchTab('pvcs',this)">&#128190; PVC Inventory</button>
-  <button onclick="switchTab('analytics',this)">&#128202; Analytics</button>
+  <div class="nav-group"><span class="nav-group-label">Summary</span>
+    <button data-tab="overview" class="active" onclick="switchTab('overview',this)">Overview</button>
+    <button data-tab="dev" onclick="switchTab('dev',this)">DEV</button>
+    <button data-tab="sit" onclick="switchTab('sit',this)">SIT</button>
+  </div>
+  <div class="nav-group"><span class="nav-group-label">Capacity</span>
+    <button data-tab="whatif" onclick="switchTab('whatif',this)">What-If</button>
+    <button data-tab="pools" onclick="switchTab('pools',this)">Dedicated Pools</button>
+    <button data-tab="analytics" onclick="switchTab('analytics',this)">Analytics</button>
+  </div>
+  <div class="nav-group"><span class="nav-group-label">Resources</span>
+    <button data-tab="nodeinventory" onclick="switchTab('nodeinventory',this)">Nodes</button>
+    <button data-tab="pvcs" onclick="switchTab('pvcs',this)">Storage</button>
+    <button data-tab="namespaces" onclick="switchTab('namespaces',this)">Namespaces</button>
+  </div>
+  <div class="nav-group"><span class="nav-group-label">Optimization</span>
+    <button data-tab="nodepressure" onclick="switchTab('nodepressure',this)">Node Pressure</button>
+    <button data-tab="podmetrics" onclick="switchTab('podmetrics',this)">Pod Metrics</button>
+    <button data-tab="desiredreplicas" onclick="switchTab('desiredreplicas',this)">Desired Replicas</button>
+    <button data-tab="misplaced" onclick="switchTab('misplaced',this)">Placement</button>
+  </div>
   <div class="header-right">
-    <span>Refresh in <span id="countdown">5:00</span></span>
+    <span title="The collector runs hourly. This countdown only reloads the latest saved API data.">Data refresh in <span id="countdown">5:00</span></span>
     <span id="last-updated" style="color:#adc6e0">—</span>
-    <button class="btn-refresh" onclick="fetchAll()">↻ Refresh</button>
+    <button class="btn-refresh" onclick="fetchAll()" title="Reload saved dashboard data. This does not start the collector job.">Refresh data</button>
   </div>
 </div>
+
+<div id="data-freshness-warning" role="status" aria-live="polite" style="display:none;margin:12px auto 0;max-width:1400px;padding:10px 16px;background:#fff3cd;border-left:4px solid #d97706;color:#7c5200;font-size:13px"></div>
 
 <!-- ══ Overview tab ══ -->
 <div class="tab-panel active" id="tab-overview">
@@ -187,6 +235,11 @@ tr:last-child td{border-bottom:none}
         <div style="margin-top:12px;height:65px"><canvas id="spark-ov-sit"></canvas></div>
       </div>
     </div>
+    <div class="card">
+      <h2 style="margin-top:0">Executive Capacity Posture</h2>
+      <p style="font-size:13px;color:#64748b">Current shared-pool scheduling pressure, operational status, and immediate capacity action by environment.</p>
+      <div id="executive-summary" class="executive-summary"><div class="executive-item">Loading current posture…</div></div>
+    </div>
   </div>
 </div>
 
@@ -195,6 +248,42 @@ tr:last-child td{border-bottom:none}
 
 <!-- ══ SIT Details tab ══ -->
 <div class="tab-panel" id="tab-sit"></div>
+
+<!-- Capacity What-If tab -->
+<div id="tab-whatif" class="tab-content" style="display:none">
+  <div class="wrap">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px"><h2 style="margin:0">Capacity What-If Calculator</h2><div style="margin-left:auto;display:flex;gap:8px"><button class="command-button" onclick="exportWhatIfCsv()">Export CSV</button><button class="command-button secondary" onclick="printWhatIf()">Print / PDF</button></div></div>
+      <div class="scope-note">
+        Estimate whether a proposed workload fits using the latest live <b>Requests</b> and pool <b>Allocatable</b> capacity.
+        Results target 80% to retain node-failure, upgrade, rollout, and demand headroom. This is a planning estimate, not a scheduler simulation.
+        A new dedicated project is always calculated as a new isolated pool; spare capacity in another project's dedicated pool is never reused.
+      </div>
+      <div class="whatif-form">
+        <div class="whatif-field"><label for="wi-env">Environment</label><select id="wi-env" onchange="refreshWhatIfPools()"><option value="DEV">DEV</option><option value="SIT" selected>SIT</option></select></div>
+        <div class="whatif-field"><label for="wi-pool">Target node pool</label><select id="wi-pool" onchange="calculateWhatIf()"></select></div>
+        <div class="whatif-field"><label for="wi-project">Project / namespace</label><input id="wi-project" type="text" placeholder="e.g. new-payment-app" oninput="calculateWhatIf()"></div>
+        <div class="whatif-field"><label for="wi-input-mode">Request input mode</label><select id="wi-input-mode" onchange="updateWhatIfInputMode()"><option value="total" selected>Total project request</option><option value="per-replica">Per-replica request</option></select></div>
+        <div class="whatif-field" id="wi-replicas-field"><label for="wi-replicas">Planned pod replicas (optional)</label><input id="wi-replicas" type="number" min="1" step="1" value="1" oninput="calculateWhatIf()"></div>
+        <div class="whatif-field"><label id="wi-cpu-label" for="wi-cpu">Total project CPU Request (cores)</label><input id="wi-cpu" type="number" min="0" step="0.001" value="30" oninput="calculateWhatIf()"></div>
+        <div class="whatif-field"><label id="wi-mem-label" for="wi-mem">Total project Memory Request (GiB)</label><input id="wi-mem" type="number" min="0" step="0.1" value="0" oninput="calculateWhatIf()"></div>
+      </div>
+      <div id="wi-input-help" class="scope-note" style="margin-top:-8px">Enter the total CPU and memory requested for the whole project. Replica count is recorded as context and does not multiply the totals.</div>
+      <div id="wi-data-note" style="font-size:12px;color:#64748b;margin-bottom:12px"></div>
+      <div id="wi-result" class="whatif-result">Loading live capacity…</div>
+      <div class="management-grid">
+        <div class="management-metric"><div class="label">Current pool pressure</div><div id="wi-current" class="value">—</div><div id="wi-current-detail" class="detail">—</div></div>
+        <div class="management-metric"><div class="label">Proposed requests</div><div id="wi-added" class="value">—</div><div id="wi-added-detail" class="detail">—</div></div>
+        <div class="management-metric"><div class="label">Projected pressure</div><div id="wi-projected" class="value">—</div><div id="wi-projected-detail" class="detail">—</div></div>
+        <div class="management-metric"><div class="label">Nodes required</div><div id="wi-nodes" class="value">—</div><div id="wi-nodes-detail" class="detail">—</div></div>
+      </div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Resource</th><th>Current Requests</th><th>Additional</th><th>Projected Requests</th><th>Current Capacity</th><th>80% Target</th><th>Headroom to 80%</th><th>Projected %</th></tr></thead><tbody id="wi-table-body"></tbody></table></div>
+      <div class="methodology" style="margin-top:18px">
+        <b>Formula:</b> required capacity = projected Requests ÷ 80%. Added nodes = ceiling((required capacity − current capacity) ÷ DaemonSet-adjusted capacity per new node). CPU and memory are calculated independently; the larger node count wins.
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ══ Node Pools tab ══ -->
 <div class="tab-panel" id="tab-pools">
@@ -493,29 +582,39 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 
+<footer class="dashboard-footer">
+  <b>ARO Ops Capacity Dashboard</b> · Developed and maintained by Cloud Ops<br>
+  Capacity decisions use Kubernetes Requests, node Allocatable resources, observed usage, desired replicas, and DaemonSet-adjusted expansion capacity.
+</footer>
+
 <script>
 'use strict';
 
 const API  = '';
 const ENVS = ['DEV','SIT'];
 const REFRESH_SECS = 300;
+const DISPLAY_TIME_ZONE = 'Asia/Riyadh';
+const DISPLAY_TIME_ZONE_LABEL = 'AST (UTC+3)';
 
 let _status={}, _metrics={}, _history={}, _pools={}, _ns={};
 let _sparkCharts={}, _histCharts={};
 let _remaining = REFRESH_SECS;
 let _analyticsData = {};
+let _lastWhatIf = null;
 
 // ── Tab switching ────────────────────────────────────────────
 function switchTab(id,btn){
   document.querySelectorAll('.tab-panel,.tab-content').forEach(p=>{
     p.classList.remove('active');
+    p.setAttribute('aria-hidden','true');
     // Ensure inline display:none is applied when not active (for tab-content tabs set with style="display:none")
     if(!p.classList.contains('active')) p.style.display='none';
   });
-  document.querySelectorAll('.tab-bar button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-bar [data-tab]').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-selected','false');b.tabIndex=-1;});
   const tab = document.getElementById('tab-'+id);
-  if(tab){ tab.classList.add('active'); tab.style.display='block'; }
-  btn.classList.add('active');
+  if(tab){ tab.classList.add('active'); tab.style.display='block'; tab.setAttribute('aria-hidden','false'); }
+  btn.classList.add('active');btn.setAttribute('aria-selected','true');btn.tabIndex=0;
+  if(id==='whatif')        refreshWhatIfPools();
   if(id==='analytics')      renderAnalyticsTab();
   if(id==='pvcs')           renderPvcTab();
   if(id==='nodeinventory')  renderNodeInventoryTab();
@@ -524,6 +623,27 @@ function switchTab(id,btn){
   if(id==='desiredreplicas')renderDesiredReplicasTab();
   if(id==='misplaced')      renderMisplacedTab();
 }
+function initializeTabs(){
+  const tabs=[...document.querySelectorAll('.tab-bar [data-tab]')];
+  const navigation=document.querySelector('.tab-bar');navigation?.setAttribute('role','navigation');navigation?.setAttribute('aria-label','Dashboard views');
+  document.querySelectorAll('.nav-group').forEach(group=>{group.setAttribute('role','tablist');group.setAttribute('aria-label',group.querySelector('.nav-group-label')?.textContent.trim()||'Dashboard group');group.querySelector('.nav-group-label')?.setAttribute('aria-hidden','true');});
+  tabs.forEach((tab,index)=>{
+    const id=tab.dataset.tab;
+    tab.id='nav-'+id;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','tab-'+id);
+    tab.setAttribute('aria-selected',tab.classList.contains('active')?'true':'false');
+    tab.tabIndex=tab.classList.contains('active')?0:-1;
+    const panel=document.getElementById('tab-'+id);panel?.setAttribute('role','tabpanel');panel?.setAttribute('aria-labelledby','nav-'+id);panel?.setAttribute('aria-hidden',tab.classList.contains('active')?'false':'true');
+    tab.addEventListener('keydown',event=>{
+      let next=index;
+      if(event.key==='ArrowRight')next=(index+1)%tabs.length;
+      else if(event.key==='ArrowLeft')next=(index-1+tabs.length)%tabs.length;
+      else if(event.key==='Home')next=0;
+      else if(event.key==='End')next=tabs.length-1;
+      else return;
+      event.preventDefault();tabs[next].focus();tabs[next].click();
+    });
+  });
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 const $   = id => document.getElementById(id);
@@ -531,12 +651,20 @@ const pct = v  => (+(v||0)).toFixed(1)+'%';
 const f1  = v  => (+(v||0)).toFixed(1);
 const f3  = v  => (+(v||0)).toFixed(3);
 const cap = v  => Math.min(+(v||0),100);
+const escapeHtml = value => String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const formatSaudiDateTime = value => value ? new Intl.DateTimeFormat('en-GB',{timeZone:DISPLAY_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(value))+' '+DISPLAY_TIME_ZONE_LABEL : '—';
+const formatSaudiTime = value => new Intl.DateTimeFormat('en-GB',{timeZone:DISPLAY_TIME_ZONE,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(value))+' '+DISPLAY_TIME_ZONE_LABEL;
+const formatSaudiHistoryTime = (value,includeDate) => new Intl.DateTimeFormat('en-GB',{timeZone:DISPLAY_TIME_ZONE,...(includeDate?{month:'short',day:'2-digit'}:{}),hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value));
 
 function barClass(p){ return p>85?'bar-critical':p>60?'bar-at_risk':'bar-safe'; }
 function utilColor(u){ return u>90?'#c0392b':u>50?'#1a7f37':'#d35400'; }
 function pressureBadge(p){
   const m={GREEN:'badge-green',YELLOW:'badge-yellow',ORANGE:'badge-orange',RED:'badge-red'};
   return m[(p||'GREEN').toUpperCase()]||'badge-green';
+}
+function pressureMeaning(p){
+  const meanings={GREEN:'Comfortable (≤60%)',YELLOW:'Monitor (>60–80%)',ORANGE:'At risk (>80–90%)',RED:'Action needed (>90%)'};
+  return meanings[(p||'').toUpperCase()]||'Unknown';
 }
 function setBar(id,val){
   const el=$(id); if(!el) return;
@@ -579,6 +707,203 @@ function standardWorkerNodes(env,d){
   const allCpu=+(d.all_worker_cpu||0), workers=+(d.worker_nodes||0), standardCpu=+(d.worker_cpu||0);
   return allCpu>0&&workers>0?Math.round(standardCpu/(allCpu/workers)):workers;
 }
+function recommendation(demandCpu,demandMem,capacityCpu,capacityMem,netCpu,netMem){
+  const cpuAdd=netCpu>0?Math.max(0,Math.ceil((demandCpu/0.80-capacityCpu)/netCpu)):0;
+  const memAdd=netMem>0?Math.max(0,Math.ceil((demandMem/0.80-capacityMem)/netMem)):0;
+  return {nodes:Math.max(cpuAdd,memAdd),binding:cpuAdd>=memAdd?'CPU':'Memory'};
+}
+function capacityPoolModel(env,d){
+  const planning=planningData(d);
+  const pools=((_pools[env]||{}).pools||[]);
+  const sharedPool=pools.find(pool=>pool.pool_name==='standard-worker')||{};
+  const dedicatedPools=pools.filter(pool=>pool.dedicated);
+  const nodes=((planning.node_machine_inventory||{}).nodes||[]).filter(node=>node.role==='worker');
+  const desired=(planning.desired_replica_detail||[]).reduce((totals,row)=>{
+    const key=(row.pool_hint||'SHARED')==='DEDICATED'?'dedicated':'shared';
+    totals[key].cpu+=+(row.desired_cpu_cores||0); totals[key].mem+=+(row.desired_mem_gib||0);
+    return totals;
+  },{shared:{cpu:0,mem:0},dedicated:{cpu:0,mem:0}});
+  const actual=nodes.reduce((totals,node)=>{
+    const key=node.classification==='DEDICATED'?'dedicated':'shared';
+    totals[key].cpu+=+(node.actual_cpu_cores||0); totals[key].mem+=+(node.actual_memory_gib||0);
+    return totals;
+  },{shared:{cpu:0,mem:0},dedicated:{cpu:0,mem:0}});
+  const sharedNodes=Number.isFinite(+sharedPool.node_count)?+sharedPool.node_count:standardWorkerNodes(env,d);
+  const dedicatedNodes=dedicatedPools.reduce((sum,pool)=>sum+(+pool.node_count||0),0);
+  const dedicatedCpu=dedicatedPools.reduce((sum,pool)=>sum+(+pool.cpu_cores||0),0);
+  const dedicatedMem=dedicatedPools.reduce((sum,pool)=>sum+(+pool.memory_gib||0),0);
+  const expansion=planning.expansion_planning||{};
+  const fallbackCpu=sharedNodes>0?+(d.worker_cpu||0)/sharedNodes:0;
+  const fallbackMem=sharedNodes>0?+(d.worker_mem_gib||0)/sharedNodes:0;
+  const netCpu=+(expansion.net_schedulable_cpu_per_new_node||0)||fallbackCpu;
+  const netMem=+(expansion.net_schedulable_mem_gib_per_new_node||0)||fallbackMem;
+  return {
+    shared:{name:'SHARED',nodes:sharedNodes,capacityCpu:+(d.worker_cpu||0),capacityMem:+(d.worker_mem_gib||0),runningCpu:+(d.worker_cpu_requested||sharedPool.cpu_cores_requested||0),runningMem:+(d.worker_mem_gib_requested||sharedPool.memory_gib_requested||0),desiredCpu:desired.shared.cpu,desiredMem:desired.shared.mem,actualCpu:actual.shared.cpu,actualMem:actual.shared.mem,netCpu,netMem},
+    dedicated:{name:'DEDICATED',nodes:dedicatedNodes,capacityCpu:dedicatedCpu,capacityMem:dedicatedMem,runningCpu:dedicatedPools.reduce((sum,pool)=>sum+(+pool.cpu_cores_requested||0),0),runningMem:dedicatedPools.reduce((sum,pool)=>sum+(+pool.memory_gib_requested||0),0),desiredCpu:desired.dedicated.cpu,desiredMem:desired.dedicated.mem,actualCpu:actual.dedicated.cpu,actualMem:actual.dedicated.mem,netCpu,netMem},
+    misplaced:+((planning.misplaced_workloads||{}).misplaced_count||0)
+  };
+}
+function whatIfPoolModel(env,poolName){
+  const d=_metrics[env]; if(!d) return null;
+  const planning=planningData(d);
+  const expansion=planning.expansion_planning||{};
+  const dsCpu=+(expansion.daemonset_overhead_cpu_per_node||0);
+  const dsMem=+(expansion.daemonset_overhead_mem_gib_per_node||0);
+  if(poolName==='new-dedicated'){
+    const shared=capacityPoolModel(env,d).shared;
+    return {key:'new-dedicated',label:'New Dedicated Pool',name:'NEW_DEDICATED',nodes:0,capacityCpu:0,capacityMem:0,runningCpu:0,runningMem:0,netCpu:shared.netCpu,netMem:shared.netMem,isNewPool:true};
+  }
+  if(poolName==='standard-worker'){
+    const shared=capacityPoolModel(env,d).shared;
+    return {...shared,label:'Shared / General-Purpose',key:'standard-worker'};
+  }
+  const pool=((_pools[env]||{}).pools||[]).find(item=>item.pool_name===poolName);
+  if(!pool) return null;
+  const nodes=+pool.node_count||0;
+  const grossCpu=nodes>0?(+pool.cpu_cores||0)/nodes:0;
+  const grossMem=nodes>0?(+pool.memory_gib||0)/nodes:0;
+  return {
+    key:pool.pool_name,label:`Dedicated · ${pool.pool_name}`,name:'DEDICATED',nodes,
+    capacityCpu:+pool.cpu_cores||0,capacityMem:+pool.memory_gib||0,
+    runningCpu:+pool.cpu_cores_requested||0,runningMem:+pool.memory_gib_requested||0,
+    netCpu:Math.max(0,grossCpu-dsCpu),netMem:Math.max(0,grossMem-dsMem)
+  };
+}
+function refreshWhatIfPools(){
+  const env=($('wi-env')||{value:'SIT'}).value||'SIT';
+  const select=$('wi-pool'); if(!select) return;
+  const previous=select.value;
+  const dedicated=((_pools[env]||{}).pools||[]).filter(pool=>pool.dedicated);
+  select.innerHTML='<option value="standard-worker">Shared / General-Purpose</option><option value="new-dedicated">New Dedicated Pool · isolated</option>'+dedicated.map(pool=>`<option value="${String(pool.pool_name).replaceAll('&','&amp;').replaceAll('"','&quot;')}">Existing Dedicated · ${pool.pool_name} · owner only</option>`).join('');
+  if([...select.options].some(option=>option.value===previous)) select.value=previous;
+  calculateWhatIf();
+}
+function updateWhatIfInputMode(){
+  const perReplica=($('wi-input-mode')||{value:'total'}).value==='per-replica';
+  ($('wi-cpu-label')||{}).textContent=perReplica?'CPU Request / replica (cores)':'Total project CPU Request (cores)';
+  ($('wi-mem-label')||{}).textContent=perReplica?'Memory Request / replica (GiB)':'Total project Memory Request (GiB)';
+  const replicasLabel=$('wi-replicas-field')?.querySelector('label');
+  if(replicasLabel) replicasLabel.textContent=perReplica?'Planned pod replicas':'Planned pod replicas (optional)';
+  ($('wi-input-help')||{}).textContent=perReplica
+    ?'Per-replica mode multiplies CPU and memory by the planned replica count to calculate total project demand.'
+    :'Enter the total CPU and memory requested for the whole project. Replica count is recorded as context and does not multiply the totals.';
+  calculateWhatIf();
+}
+function calculateWhatIf(){
+  const env=($('wi-env')||{value:'SIT'}).value||'SIT';
+  const d=_metrics[env];
+  const result=$('wi-result');
+  if(!d){if(result)result.innerHTML='<b>Live capacity is not loaded for this environment.</b>';return;}
+  const pool=whatIfPoolModel(env,($('wi-pool')||{value:'standard-worker'}).value);
+  if(!pool||pool.netCpu<=0||pool.netMem<=0){if(result)result.innerHTML='<b>The selected pool has no usable per-node capacity data.</b>';return;}
+  const projectRaw=(($('wi-project')||{}).value||'new project').trim()||'new project';
+  const project=escapeHtml(projectRaw);
+  const inputMode=($('wi-input-mode')||{value:'total'}).value||'total';
+  const replicas=Math.max(1,Math.floor(+($('wi-replicas')||{value:1}).value||1));
+  const cpuInput=Math.max(0,+($('wi-cpu')||{value:0}).value||0);
+  const memInput=Math.max(0,+($('wi-mem')||{value:0}).value||0);
+  const addCpu=inputMode==='per-replica'?replicas*cpuInput:cpuInput;
+  const addMem=inputMode==='per-replica'?replicas*memInput:memInput;
+  const projectedCpu=pool.runningCpu+addCpu, projectedMem=pool.runningMem+addMem;
+  const currentCpuPct=pool.capacityCpu>0?pool.runningCpu/pool.capacityCpu*100:0, currentMemPct=pool.capacityMem>0?pool.runningMem/pool.capacityMem*100:0;
+  const projectedCpuPct=pool.capacityCpu>0?projectedCpu/pool.capacityCpu*100:null, projectedMemPct=pool.capacityMem>0?projectedMem/pool.capacityMem*100:null;
+  const currentMax=Math.max(currentCpuPct,currentMemPct), projectedMax=Math.max(projectedCpuPct,projectedMemPct);
+  const cpuNodes=pool.netCpu>0?Math.max(0,Math.ceil((projectedCpu/0.80-pool.capacityCpu)/pool.netCpu)):0;
+  const memNodes=pool.netMem>0?Math.max(0,Math.ceil((projectedMem/0.80-pool.capacityMem)/pool.netMem)):0;
+  const nodes=Math.max(cpuNodes,memNodes), binding=cpuNodes>=memNodes?'CPU':'Memory';
+  const physicallyFits=!pool.isNewPool&&projectedCpu<=pool.capacityCpu&&projectedMem<=pool.capacityMem;
+  const targetFits=!pool.isNewPool&&projectedCpu<=pool.capacityCpu*.80&&projectedMem<=pool.capacityMem*.80;
+  const state=pool.isNewPool?'NEW ISOLATED POOL REQUIRED':projectedMax>90?'ACTION NEEDED':projectedMax>80?'AT RISK':projectedMax>60?'MONITOR':'COMFORTABLE';
+  const color=pool.isNewPool?'#2e75b6':projectedMax>90?'#c0392b':projectedMax>80?'#b45309':projectedMax>60?'#d97706':'#1a7f37';
+  const targetCpuHead=pool.capacityCpu*.80-projectedCpu, targetMemHead=pool.capacityMem*.80-projectedMem;
+  const capacityAfterCpu=pool.capacityCpu+nodes*pool.netCpu, capacityAfterMem=pool.capacityMem+nodes*pool.netMem;
+  const afterCpuPct=capacityAfterCpu>0?projectedCpu/capacityAfterCpu*100:0;
+  const afterMemPct=capacityAfterMem>0?projectedMem/capacityAfterMem*100:0;
+  _lastWhatIf={calculated_at:new Date().toISOString(),snapshot_id:d.id,snapshot:d.collected_at,environment:env,project:projectRaw,pool:pool.label,pool_policy:pool.isNewPool?'NEW_ISOLATED_POOL':pool.name==='DEDICATED'?'EXISTING_OWNER_ONLY':'SHARED',input_mode:inputMode,current_nodes:pool.nodes,planned_replicas:replicas,cpu_input:cpuInput,memory_gib_input:memInput,current_cpu_requests:pool.runningCpu,current_memory_gib_requests:pool.runningMem,additional_cpu_requests:addCpu,additional_memory_gib_requests:addMem,projected_cpu_requests:projectedCpu,projected_memory_gib_requests:projectedMem,current_cpu_capacity:pool.capacityCpu,current_memory_gib_capacity:pool.capacityMem,projected_cpu_pct:projectedCpuPct,projected_memory_pct:projectedMemPct,target_pct:80,net_cpu_per_new_node:pool.netCpu,net_memory_gib_per_new_node:pool.netMem,cpu_nodes_required:cpuNodes,memory_nodes_required:memNodes,recommended_nodes:nodes,binding_constraint:binding,projected_cpu_pct_after_nodes:afterCpuPct,projected_memory_pct_after_nodes:afterMemPct,status:state};
+  if(result){
+    result.style.borderLeftColor=color;
+    if(pool.isNewPool){
+      result.innerHTML=`<div class="whatif-status" style="color:${color}">${state}</div><b>${project}</b> receives a new dedicated pool. Existing dedicated capacity is not considered or shared. <b>Provision ${nodes} new node(s)</b> (${binding} is binding). After provisioning: CPU ${afterCpuPct.toFixed(1)}%, memory ${afterMemPct.toFixed(1)}%.`;
+    }else{
+      const targetPhrase=targetFits?'and remains within':physicallyFits?'but exceeds':'and exceeds';
+      const ownershipNote=pool.name==='DEDICATED'?' This option is valid only for the existing pool owner.':'';
+      result.innerHTML=`<div class="whatif-status" style="color:${color}">${state}</div><b>${pool.label}</b>: ${physicallyFits?'The workload fits physical capacity':'The workload does not fit current physical capacity'}, ${targetPhrase} the 80% planning target. <b>${nodes?`Add ${nodes} node(s)`:'No nodes need to be added'}</b>${nodes?` (${binding} is binding). After adding capacity: CPU ${afterCpuPct.toFixed(1)}%, memory ${afterMemPct.toFixed(1)}%.`:'.'}${ownershipNote}`;
+    }
+  }
+  ($('wi-current')||{}).textContent=pool.isNewPool?'No pool':currentMax.toFixed(1)+'%';
+  ($('wi-current-detail')||{}).textContent=pool.isNewPool?'Zero reusable nodes or capacity':`CPU ${currentCpuPct.toFixed(1)}% · Memory ${currentMemPct.toFixed(1)}%`;
+  ($('wi-added')||{}).textContent=f1(addCpu)+' CPU';
+  ($('wi-added-detail')||{}).textContent=inputMode==='per-replica'
+    ?`${f1(addMem)} GiB memory · ${replicas} × per-replica input`
+    :`${f1(addMem)} GiB memory · total project request${replicas>1?` · ${replicas} planned replicas`:''}`;
+  ($('wi-projected')||{}).textContent=pool.isNewPool?'Needs capacity':projectedMax.toFixed(1)+'%';
+  ($('wi-projected')||{}).style.color=color;
+  ($('wi-projected-detail')||{}).textContent=pool.isNewPool?'Calculated against newly provisioned nodes':`CPU ${projectedCpuPct.toFixed(1)}% · Memory ${projectedMemPct.toFixed(1)}%`;
+  ($('wi-nodes')||{}).textContent='+'+nodes;
+  ($('wi-nodes')||{}).style.color=nodes?'#c0392b':'#1a7f37';
+  ($('wi-nodes-detail')||{}).textContent=nodes
+    ?`Add ${nodes} node(s) · driven by ${binding}${binding==='CPU'?' demand; memory needs no extra nodes':' demand; CPU needs no extra nodes'}`
+    :'No additional nodes required at the 80% target';
+  ($('wi-data-note')||{}).textContent=`Snapshot #${d.id}: ${formatSaudiDateTime(d.collected_at)}${d.data_stale?' · DATA OLDER THAN EXPECTED':''} · ${pool.isNewPool?'New isolated pool using the current standard worker node profile':`Current ${pool.label}: ${pool.nodes} node(s)`} · Net gain/new node: ${f3(pool.netCpu)} CPU, ${f1(pool.netMem)} GiB`;
+  const body=$('wi-table-body');
+  if(body) body.innerHTML=[['CPU',pool.runningCpu,addCpu,projectedCpu,pool.capacityCpu,pool.capacityCpu*.80,targetCpuHead,projectedCpuPct,' cores'],['Memory',pool.runningMem,addMem,projectedMem,pool.capacityMem,pool.capacityMem*.80,targetMemHead,projectedMemPct,' GiB']].map(([name,current,added,projected,capacity,target,headroom,percent,unit])=>`<tr><td><b>${name}</b></td><td>${f1(current)}${unit}</td><td>+${f1(added)}${unit}</td><td>${f1(projected)}${unit}</td><td>${f1(capacity)}${unit}</td><td>${f1(target)}${unit}</td><td style="color:${headroom<0?'#c0392b':'#1a7f37'}">${headroom>=0?'+':''}${f1(headroom)}${unit}</td><td><b>${percent==null?'New pool':percent.toFixed(1)+'%'}</b></td></tr>`).join('');
+}
+function exportWhatIfCsv(){
+  if(!_lastWhatIf){calculateWhatIf();if(!_lastWhatIf)return;}
+  const cell=value=>`"${String(value??'').replaceAll('"','""')}"`;
+  const rows=Object.entries(_lastWhatIf);
+  const csv=['field,value',...rows.map(([key,value])=>`${cell(key)},${cell(value)}`)].join('\n');
+  const link=document.createElement('a');link.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  link.download=`capacity_whatif_${_lastWhatIf.environment}_${new Date().toISOString().slice(0,10)}.csv`;link.click();
+}
+function printWhatIf(){
+  if(!_lastWhatIf)calculateWhatIf();
+  document.body.classList.add('print-whatif');
+  window.addEventListener('afterprint',()=>document.body.classList.remove('print-whatif'),{once:true});
+  window.print();
+}
+function comparisonBar(label,value,color){
+  const bounded=Math.min(Math.max(value,0),100);
+  return `<div class="comparison-row"><div class="comparison-label"><span>${label}</span><b>${value.toFixed(1)}%</b></div><div class="comparison-track"><div class="comparison-fill" style="width:${bounded.toFixed(1)}%;background:${color}"></div></div></div>`;
+}
+function renderManagementSections(env,d){
+  const p=env.toLowerCase(), model=capacityPoolModel(env,d);
+  const pools=[model.dedicated,model.shared];
+  const util=$(`${p}-pool-utilization`);
+  if(util) util.innerHTML=pools.map(pool=>{
+    const cpuReq=pool.capacityCpu>0?pool.runningCpu/pool.capacityCpu*100:0;
+    const memReq=pool.capacityMem>0?pool.runningMem/pool.capacityMem*100:0;
+    const cpuUse=pool.capacityCpu>0?pool.actualCpu/pool.capacityCpu*100:0;
+    const memUse=pool.capacityMem>0?pool.actualMem/pool.capacityMem*100:0;
+    return `<div class="comparison-panel"><h3>${pool.name==='SHARED'?'Shared / General-Purpose':'Dedicated / Tainted'} Pool</h3>
+      ${comparisonBar('CPU requests',cpuReq,cpuReq>80?'#c0392b':cpuReq>60?'#d97706':'#2e75b6')}
+      ${comparisonBar('CPU actual usage',cpuUse,'#5ba4cf')}
+      ${comparisonBar('Memory requests',memReq,memReq>80?'#c0392b':memReq>60?'#d97706':'#16a085')}
+      ${comparisonBar('Memory actual usage',memUse,'#4fb3a5')}
+      <div class="detail">${f1(pool.runningCpu)} / ${f1(pool.capacityCpu)} cores requested · ${f1(pool.runningMem)} / ${f1(pool.capacityMem)} GiB requested</div></div>`;
+  }).join('');
+
+  const recs={};
+  pools.forEach(pool=>{recs[pool.name]={running:recommendation(pool.runningCpu,pool.runningMem,pool.capacityCpu,pool.capacityMem,pool.netCpu,pool.netMem),desired:recommendation(pool.desiredCpu,pool.desiredMem,pool.capacityCpu,pool.capacityMem,pool.netCpu,pool.netMem)};});
+  const desiredTotal=recs.SHARED.desired.nodes+recs.DEDICATED.desired.nodes;
+  const runningTotal=recs.SHARED.running.nodes+recs.DEDICATED.running.nodes;
+  ($(`${p}-mg-workers`)||{}).textContent=model.shared.nodes+model.dedicated.nodes;
+  ($(`${p}-mg-worker-split`)||{}).textContent=`Dedicated ${model.dedicated.nodes} · Shared ${model.shared.nodes}`;
+  ($(`${p}-mg-desired-add`)||{}).textContent='+'+desiredTotal;
+  ($(`${p}-mg-desired-add`)||{}).style.color=desiredTotal?'#c0392b':'#1a7f37';
+  ($(`${p}-mg-desired-split`)||{}).textContent=`Dedicated +${recs.DEDICATED.desired.nodes} · Shared +${recs.SHARED.desired.nodes}`;
+  ($(`${p}-mg-running-add`)||{}).textContent='+'+runningTotal;
+  ($(`${p}-mg-running-add`)||{}).style.color=runningTotal?'#c0392b':'#1a7f37';
+  ($(`${p}-mg-running-split`)||{}).textContent=`Dedicated +${recs.DEDICATED.running.nodes} · Shared +${recs.SHARED.running.nodes}`;
+  ($(`${p}-mg-placement`)||{}).textContent=model.misplaced;
+  ($(`${p}-mg-placement`)||{}).style.color=model.misplaced?'#c0392b':'#1a7f37';
+
+  const recCards=$(`${p}-node-recommendation`);
+  if(recCards) recCards.innerHTML=pools.map(pool=>{const rec=recs[pool.name].desired;return `<div class="management-metric"><div class="label">${pool.name} · desired scale</div><div class="value" style="color:${rec.nodes?'#c0392b':'#1a7f37'}">+${rec.nodes}</div><div class="detail">Binding: ${rec.binding} · ${rec.nodes?`add ${rec.nodes} node(s) for desired-replica demand`:'desired replicas remain within the 80% target'}</div></div>`;}).join('');
+  const recBody=$(`${p}-node-rec-body`);
+  if(recBody) recBody.innerHTML=pools.flatMap(pool=>[['Running now','runningCpu','runningMem','running'],['Desired replicas','desiredCpu','desiredMem','desired']].map(([basis,cpuKey,memKey,recKey])=>{const rec=recs[pool.name][recKey];return `<tr><td><b>${pool.name}</b></td><td>${basis}</td><td>${pool.nodes}</td><td>${f3(pool[cpuKey])}</td><td>${f1(pool[memKey])}</td><td>${f3(pool.netCpu)}</td><td>${f1(pool.netMem)}</td><td><b style="color:${rec.nodes?'#c0392b':'#1a7f37'}">+${rec.nodes}</b></td><td>${rec.binding}</td><td>${rec.nodes?'Add capacity':'Within target'}</td></tr>`;})).join('');
+  return model;
+}
 
 // ── Build per-env tab HTML ───────────────────────────────────
 function buildEnvTab(env){
@@ -588,7 +913,7 @@ function buildEnvTab(env){
     <span style="font-size:1.4rem">&#9680;</span>
     <div>
       <div style="font-size:1rem;font-weight:700">${env} Cluster</div>
-      <div style="font-size:.78rem;opacity:.85;margin-top:2px">Last collected: <span id="${p}-collected-at">—</span></div>
+      <div style="font-size:.78rem;opacity:.85;margin-top:2px">Last collected: <span id="${p}-collected-at">—</span> · Snapshot <span id="${p}-snapshot-id">—</span></div>
     </div>
     <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
       <span id="${p}-status-badge" class="badge-safe">HEALTHY</span>
@@ -596,10 +921,10 @@ function buildEnvTab(env){
     </div>
   </div>
   <div class="grid">
-    <div class="card"><h3>Health Score</h3><div class="metric green" id="${p}-health-score">—/100</div></div>
-    <div class="card"><h3>CPU Requested</h3><div class="metric" id="${p}-cpu-pct" style="color:#2e75b6">—%</div>
+    <div class="card"><h3>Unrequested Shared Capacity</h3><div class="metric green" id="${p}-health-score">—%</div><small style="color:#667085">Remaining to 100%; node planning uses the stricter 80% target</small></div>
+    <div class="card"><h3>Shared CPU Requested</h3><div class="metric" id="${p}-cpu-pct" style="color:#2e75b6">—%</div>
       <div style="font-size:12px;color:#888;margin-top:4px"><span id="${p}-cpu-req">—</span> of <span id="${p}-cpu-total">—</span> cores</div></div>
-    <div class="card"><h3>Memory Requested</h3><div class="metric" id="${p}-mem-pct" style="color:#16a085">—%</div>
+    <div class="card"><h3>Shared Memory Requested</h3><div class="metric" id="${p}-mem-pct" style="color:#16a085">—%</div>
       <div style="font-size:12px;color:#888;margin-top:4px"><span id="${p}-mem-req">—</span> of <span id="${p}-mem-total">—</span> GiB</div></div>
     <div class="card"><h3>Cluster</h3><table style="font-size:12px">
       <tr><td style="color:#888">Nodes</td><td><b id="${p}-nodes">—</b></td></tr>
@@ -609,8 +934,25 @@ function buildEnvTab(env){
       <tr><td style="color:#888">Pods</td><td><b id="${p}-pods">—</b></td></tr>
     </table></div>
   </div>
+  <div class="scope-note">
+    <b>What these numbers mean:</b> Shared-pool planning excludes dedicated/tainted workers because those nodes cannot absorb general workloads.
+    Dedicated pools are assessed separately below. Masters are inventory only and are never counted as tenant scheduling capacity.
+    <b>Requests</b> answer “will workloads schedule?”; <b>actual usage</b> supports rightsizing.
+  </div>
+  <div class="management-grid">
+    <div class="management-metric"><div class="label">Worker inventory</div><div class="value" id="${p}-mg-workers">—</div><div class="detail" id="${p}-mg-worker-split">—</div></div>
+    <div class="management-metric"><div class="label">Add nodes · desired scale</div><div class="value" id="${p}-mg-desired-add">—</div><div class="detail" id="${p}-mg-desired-split">—</div></div>
+    <div class="management-metric"><div class="label">Add nodes · running now</div><div class="value" id="${p}-mg-running-add">—</div><div class="detail" id="${p}-mg-running-split">—</div></div>
+    <div class="management-metric"><div class="label">Placement issues</div><div class="value" id="${p}-mg-placement">—</div><div class="detail">Dedicated-targeted pods found on shared nodes</div></div>
+  </div>
   <div class="card">
-    <h2>Worker Pool Utilization &nbsp;<span id="${p}-util-source" style="padding:2px 10px;border-radius:8px;font-size:12px;background:#d4edda;color:#1a7f37"></span></h2>
+    <h2>Cluster Utilization — Requests vs Actual Usage</h2>
+    <p style="color:#555;font-size:13px"><b>Requests / Allocatable</b> drives scheduling and scale-out. <b>Usage / Allocatable</b> shows observed consumption for rightsizing. The 80% marker is planning headroom, not an outage threshold.</p>
+    <div id="${p}-pool-utilization" class="comparison-grid"></div>
+  </div>
+  <div class="card">
+    <h2>All-Worker Actual Utilization &nbsp;<span id="${p}-util-source" style="padding:2px 10px;border-radius:8px;font-size:12px;background:#d4edda;color:#1a7f37"></span></h2>
+    <p style="color:#555;font-size:13px">Observed usage across every worker node, including shared and dedicated pools. This is an operational utilization view, not the denominator used for shared-pool scale decisions.</p>
     <table><thead><tr>
       <th style="width:160px">Resource</th>
       <th style="width:170px">Used / Available</th>
@@ -646,23 +988,25 @@ function buildEnvTab(env){
     </tbody></table>
   </div>
   <div class="card">
-    <h2>Growth Forecast (vs Worker Pool)</h2>
-    <p style="color:#555;font-size:13px">Uses the greater of running requests and desired-replica demand. Safe threshold = 80% of standard-worker capacity. Green=safe · Yellow=monitor · Red=action needed.</p>
-    <table style="width:100%">
+    <h2>Growth Scenarios — From Current Running Requests</h2>
+    <p style="color:#555;font-size:13px">Projects shared and dedicated pools independently from current scheduled Requests. New-node capacity is reduced by average DaemonSet Requests, then evaluated against the 80% target.</p>
+    <div style="overflow-x:auto"><table style="width:100%">
       <thead><tr style="background:#f5f5f5;font-size:11px;color:#555;text-align:left">
-        <th style="font-weight:600;padding:6px 8px">Scenario</th>
-        <th style="padding:6px 8px">CPU % of Workers</th>
-        <th style="padding:6px 8px">Memory % of Workers</th>
-        <th style="padding:6px 8px">Remaining CPU</th>
-        <th style="padding:6px 8px">Remaining Mem</th>
+        <th style="font-weight:600;padding:6px 8px">Pool</th><th>Scenario</th>
+        <th style="padding:6px 8px">CPU Requests</th><th>CPU %</th>
+        <th style="padding:6px 8px">Memory Requests</th><th>Memory %</th>
         <th style="padding:6px 8px">Nodes to Add</th>
         <th style="padding:6px 8px">Status</th>
       </tr></thead>
-      <tbody id="${p}-growth-rows"><tr><td colspan="7" style="text-align:center;color:#aaa">Loading…</td></tr></tbody>
-    </table>
+      <tbody id="${p}-growth-rows"><tr><td colspan="8" style="text-align:center;color:#aaa">Loading…</td></tr></tbody>
+    </table></div>
   </div>
   <div class="card">
-    <h2>Capacity Planning — Worker Pool</h2>
+    <h2>Node Recommendation</h2>
+    <div class="scope-note"><b>Primary planning signal:</b> desired Deployment/StatefulSet replicas × pod-template Requests. <b>Current pressure:</b> Requests of Running pods. Recommendations restore each pool to no more than 80% after subtracting DaemonSet overhead from every added node.</div>
+    <div id="${p}-node-recommendation" class="management-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))"></div>
+    <div style="overflow-x:auto;margin-bottom:18px"><table><thead><tr><th>Pool</th><th>Basis</th><th>Current Nodes</th><th>CPU Requests</th><th>Memory Requests</th><th>Net CPU / New Node</th><th>Net Mem / New Node</th><th>Add Nodes</th><th>Binding Constraint</th><th>Recommendation</th></tr></thead><tbody id="${p}-node-rec-body"></tbody></table></div>
+    <h3>Shared Pool Capacity Detail</h3>
     <div id="${p}-pressure-box" class="pressure-box pressure-GREEN">&#9888; Pressure: GREEN</div>
     <table>
       <tr><th>Metric</th><th>Value</th></tr>
@@ -681,14 +1025,27 @@ function buildEnvTab(env){
     </table>
   </div>
   <div class="card">
-    <h2 style="display:flex;align-items:center;gap:10px">History
+    <h2>Red Hat OpenShift Capacity Practices Used Here</h2>
+    <div class="methodology">
+      1. Scheduling capacity compares pod <b>Requests</b> with node <b>Allocatable</b> resources.<br>
+      2. Overcommit means Limits exceed Requests; it does not permit Requests beyond Allocatable.<br>
+      3. Requests should be set consistently and reviewed against observed usage for rightsizing.<br>
+      4. Scale planning targets about <b>80%</b> Request/Allocatable to retain failure and rollout headroom.<br>
+      5. DaemonSet Requests are subtracted from the capacity gained by each new node.<br>
+      6. Desired replicas are the primary planning signal; Running pods describe current pressure.<br>
+      7. Actual usage comes from OpenShift metrics and is used for rightsizing, not scheduler admission.
+    </div>
+  </div>
+  <div class="card">
+    <h2 style="display:flex;align-items:center;gap:10px">Shared Pool Request History
       <select id="${p}-hist-hours" onchange="changeHistoryRange('${env}')" style="font-size:12px;padding:3px 8px;border:1px solid #ccc;border-radius:6px;cursor:pointer">
         <option value="1">1 h</option><option value="6">6 h</option>
-        <option value="12">12 h</option><option value="24" selected>24 h</option>
+        <option value="24">24 h</option><option value="72">3 days</option><option value="168" selected>7 days</option>
       </select>
     </h2>
-    <p style="color:#555;font-size:13px">Standard-worker CPU% and Memory% requested — collected every 5 minutes.</p>
-    <canvas id="${p}-history-chart" height="110"></canvas>
+    <p style="color:#555;font-size:13px">Successful collection samples only. Smooth lines connect real observations; no synthetic points are generated.</p>
+    <div id="${p}-history-empty" class="history-empty"></div>
+    <div class="history-chart-wrap"><canvas id="${p}-history-chart"></canvas></div>
   </div>
 </div>`;
 }
@@ -707,8 +1064,7 @@ function drawSparkline(canvasId, pctVal, color, histPts){
   ctx.fillStyle='#f8f9fa'; ctx.fillRect(0,0,W,H);
   let pts;
   if(histPts&&histPts.length>1){
-    const mx=Math.max(...histPts,1);
-    pts=histPts.map((v,i)=>({x:Math.round(i*(W-1)/(histPts.length-1)),y:Math.round(H-(v/mx)*(H-6)-3)}));
+    pts=histPts.map((v,i)=>({x:Math.round(i*(W-1)/(histPts.length-1)),y:Math.round(H-(Math.min(Math.max(v,0),100)/100)*(H-6)-3)}));
   } else {
     const n=[.85,.90,.88,.92,.87,.91,.89,.93,.90,1.0];
     pts=n.map((v,i)=>({x:Math.round(i*(W-1)/(n.length-1)),y:Math.round(H-(pctVal*v/100)*(H-6)-3)}));
@@ -732,55 +1088,60 @@ function buildHistoryChart(env,points){
   const p=env.toLowerCase();
   const canvas=$(p+'-history-chart'); if(!canvas) return;
   if(_histCharts[env]){_histCharts[env].destroy();}
-  const labels=points.map(r=>{const d=new Date(r.collected_at);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');});
+  const empty=$(`${p}-history-empty`);
+  const wrap=canvas.parentElement;
+  if(!points.length){
+    if(empty){empty.style.display='block';empty.textContent='No successful collection samples in this range.';}
+    if(wrap)wrap.style.display='none';
+    return;
+  }
+  if(empty){empty.style.display=points.length<2?'block':'none';empty.textContent=points.length<2?'One successful sample is available. A trend line will appear after the next collection.':'';}
+  if(wrap)wrap.style.display='block';
+  const spanHours=points.length>1?(new Date(points.at(-1).collected_at)-new Date(points[0].collected_at))/3600000:0;
+  const labels=points.map(row=>formatSaudiHistoryTime(row.collected_at,spanHours>24));
+  const pointRadius=points.length<3?5:points.length<20?3:1.5;
   _histCharts[env]=new Chart(canvas,{type:'line',data:{labels,datasets:[
-    {label:'CPU %',data:points.map(r=>+(r.cpu_pct||0)),borderColor:'#2e75b6',backgroundColor:'#2e75b633',fill:true,tension:.3,pointRadius:2,borderWidth:2},
-    {label:'Mem %',data:points.map(r=>+(r.mem_pct||0)),borderColor:'#16a085',backgroundColor:'#16a08533',fill:true,tension:.3,pointRadius:2,borderWidth:2},
-  ]},options:{responsive:true,maintainAspectRatio:true,
+    {label:'CPU Requests %',data:points.map(r=>+(r.cpu_pct||0)),borderColor:'#2e75b6',backgroundColor:'#2e75b61a',fill:true,tension:.35,cubicInterpolationMode:'monotone',pointRadius,borderWidth:2},
+    {label:'Memory Requests %',data:points.map(r=>+(r.mem_pct||0)),borderColor:'#16a085',backgroundColor:'#16a08512',fill:true,tension:.35,cubicInterpolationMode:'monotone',pointRadius,borderWidth:2},
+    {label:'CPU Actual % · all workers',data:points.map(r=>r.cpu_used_pct==null?null:+r.cpu_used_pct),borderColor:'#5ba4cf',borderDash:[3,3],fill:false,tension:.35,cubicInterpolationMode:'monotone',pointRadius,borderWidth:2,spanGaps:false},
+    {label:'Memory Actual % · all workers',data:points.map(r=>r.mem_used_pct==null?null:+r.mem_used_pct),borderColor:'#7a6bb7',borderDash:[3,3],fill:false,tension:.35,cubicInterpolationMode:'monotone',pointRadius,borderWidth:2,spanGaps:false},
+    {label:'60% monitor level',data:points.map(()=>60),borderColor:'#d97706',borderDash:[5,5],pointRadius:0,borderWidth:1,fill:false},
+    {label:'80% planning target',data:points.map(()=>80),borderColor:'#c0392b',borderDash:[7,4],pointRadius:0,borderWidth:1.5,fill:false}
+  ]},options:{responsive:true,maintainAspectRatio:false,
     plugins:{legend:{position:'top',labels:{font:{size:11}}},tooltip:{mode:'index',intersect:false}},
-    scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%',font:{size:10}},grid:{color:'#eee'}},x:{ticks:{font:{size:10},maxTicksLimit:12},grid:{display:false}}}}});
+    interaction:{mode:'index',intersect:false},
+    scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%',font:{size:10}},grid:{color:'#e8edf2'},title:{display:true,text:'Requests / Shared Allocatable'}},x:{ticks:{font:{size:10},maxTicksLimit:10,maxRotation:0},grid:{display:false}}}}});
 }
 
 // ── Growth forecast rows ─────────────────────────────────────
-function growthRows(d){
-  const wCpu=+(d.worker_cpu||0), wMem=+(d.worker_mem_gib||0);
-  const demand=forecastDemand(d), cReq=demand.cpu, mReq=demand.mem;
-  const net=netCapacityPerNode(d);
-
-  const rows = [{l:'Current (now)',f:0},{l:'+25% growth',f:.25},{l:'+50% growth',f:.5},{l:'+75% growth',f:.75},{l:'+100% growth',f:1}]
-    .map(s=>{
-      const fCpu=cReq*(1+s.f), fMem=mReq*(1+s.f);
-      const cP=wCpu>0?(fCpu/wCpu)*100:0, mP=wMem>0?(fMem/wMem)*100:0;
-      const remCpu=wCpu*0.80-fCpu, remMem=wMem*0.80-fMem;
-      const maxP=Math.max(cP,mP);
-      const st=maxP>90?'critical':maxP>80?'at_risk':'safe';
-      const stLabel=maxP>90?'critical':maxP>80?'at risk':'safe';
-      const cpuNodes=remCpu<0&&net.cpu>0?Math.ceil(-remCpu/(net.cpu*0.80)):0;
-      const memNodes=remMem<0&&net.mem>0?Math.ceil(-remMem/(net.mem*0.80)):0;
-      const nodesNeeded=Math.max(cpuNodes,memNodes);
-      const nodesColor=nodesNeeded===0?'#16a085':'#c0392b';
-      const remCpuColor=remCpu>=0?'#16a085':'#c0392b';
-      const remMemColor=remMem>=0?'#16a085':'#c0392b';
-      return `<tr class="row-${st}"><td><b>${s.l}</b></td>
-        <td><div style="display:flex;align-items:center;gap:8px"><div class="bar-wrap" style="flex:1;height:10px"><div class="bar-fill bar-${st}" style="width:${Math.min(cP,100).toFixed(1)}%;height:10px"></div></div><span>${cP.toFixed(1)}%</span></div><small style="color:#888">${fCpu.toFixed(1)} cores</small></td>
-        <td>${mP.toFixed(1)}% <small style="color:#888">(${fMem.toFixed(1)} GiB)</small></td>
-        <td style="color:${remCpuColor};font-weight:600">${remCpu>=0?'+':''}${remCpu.toFixed(1)} cores</td>
-        <td style="color:${remMemColor};font-weight:600">${remMem>=0?'+':''}${remMem.toFixed(1)} GiB</td>
-        <td style="color:${nodesColor};font-weight:700;text-align:center">${nodesNeeded===0?'—':'+'+nodesNeeded}</td>
-        <td><span class="badge-${st}">${stLabel}</span></td></tr>`;
-    }).join('');
-  return rows;
+function growthRows(model){
+  return [model.dedicated,model.shared].flatMap(pool=>[
+    {label:'Current',factor:0},{label:'+10%',factor:.10},{label:'+25%',factor:.25},{label:'+50%',factor:.50}
+  ].map(scenario=>{
+    const cpu=pool.runningCpu*(1+scenario.factor), mem=pool.runningMem*(1+scenario.factor);
+    const cpuPct=pool.capacityCpu>0?cpu/pool.capacityCpu*100:0;
+    const memPct=pool.capacityMem>0?mem/pool.capacityMem*100:0;
+    const maxPct=Math.max(cpuPct,memPct);
+    const state=maxPct>90?'critical':maxPct>80?'at_risk':'safe';
+    const rec=recommendation(cpu,mem,pool.capacityCpu,pool.capacityMem,pool.netCpu,pool.netMem);
+    return `<tr class="row-${state}"><td><b>${pool.name}</b></td><td>${scenario.label}</td><td>${f3(cpu)} cores</td><td>${cpuPct.toFixed(1)}%</td><td>${f1(mem)} GiB</td><td>${memPct.toFixed(1)}%</td><td><b style="color:${rec.nodes?'#c0392b':'#1a7f37'}">${rec.nodes?'+'+rec.nodes:'—'}</b></td><td><span class="badge-${state}">${rec.nodes?'add capacity':maxPct>80?'at risk':'within target'}</span></td></tr>`;
+  })).join('');
 }
 
 // ── Render overview cards ────────────────────────────────────
 function renderOverview(envs){
+  const staleEnvs=[];
+  let staleAfterMinutes=90;
   ENVS.forEach(env=>{
     const d=envs[env]; if(!d) return;
+    staleAfterMinutes=+(d.stale_after_minutes||staleAfterMinutes);
     const p=env.toLowerCase();
     // Overview percentages and pressure both describe the standard worker
     // pool. Inventory totals below intentionally remain all-worker figures.
     const pressure=standardPressure(d), cpuP=pressure.cpu, memP=pressure.mem;
-    ($('ov-'+p+'-time')||{}).textContent=d.collected_at?new Date(d.collected_at).toLocaleString():'—';
+    const collectedLabel=formatSaudiDateTime(d.collected_at);
+    ($('ov-'+p+'-time')||{}).textContent=collectedLabel+(d.data_stale?' · DATA OLDER THAN EXPECTED':'');
+    if(d.data_stale) staleEnvs.push(`${env}: ${collectedLabel} (${Math.floor(+(d.data_age_minutes||0)/60)}h old)`);
     ($('ov-'+p+'-workers')||{}).textContent=d.worker_nodes??'—';
     ($('ov-'+p+'-masters')||{}).textContent=d.master_nodes??'—';
     // Overview inventory combines every worker pool with the control plane.
@@ -795,13 +1156,40 @@ function renderOverview(envs){
     ($('ov-'+p+'-mempct')||{}).textContent=pct(memP);
     setBar('ov-'+p+'-cpubar',cpuP); setBar('ov-'+p+'-membar',memP);
     const pr=$('ov-'+p+'-pressure');
-    if(pr){pr.textContent=d.pressure||'—';pr.className=pressureBadge(d.pressure);}
+    if(pr){
+      const pressure=(d.pressure||'').toUpperCase();
+      pr.textContent=pressure?`${pressure} · ${pressureMeaning(pressure).split(' (')[0]}`:'—';
+      pr.title=`Standard-worker pressure uses the higher of CPU and memory requests. ${pressureMeaning(pressure)}`;
+      pr.className=pressureBadge(pressure);
+    }
   });
+  const warning=$('data-freshness-warning');
+  if(warning){
+    warning.style.display=staleEnvs.length?'block':'none';
+    warning.innerHTML=staleEnvs.length?`<b>Collection data is older than expected.</b> ${staleEnvs.join(' · ')}. Hourly collection is considered delayed after ${staleAfterMinutes} minutes; only the listed environment tabs may be incomplete.`:'';
+  }
+}
+function renderExecutiveSummary(){
+  const container=$('executive-summary');if(!container)return;
+  container.innerHTML=ENVS.map(env=>{
+    const d=_metrics[env];
+    if(!d)return `<div class="executive-item"><div class="executive-title">${env}<span class="badge-at_risk">Unavailable</span></div><div class="executive-copy">No capacity snapshot is available.</div></div>`;
+    const pressure=standardPressure(d), maxPressure=Math.max(pressure.cpu,pressure.mem);
+    const model=capacityPoolModel(env,d), runningRec=recommendation(model.shared.runningCpu,model.shared.runningMem,model.shared.capacityCpu,model.shared.capacityMem,model.shared.netCpu,model.shared.netMem);
+    const desiredRec=recommendation(model.shared.desiredCpu,model.shared.desiredMem,model.shared.capacityCpu,model.shared.capacityMem,model.shared.netCpu,model.shared.netMem);
+    const safeHeadroom=80-maxPressure;
+    const status=d.data_stale?'DATA OLD':maxPressure>90?'ACTION NEEDED':maxPressure>80?'AT RISK':maxPressure>60?'MONITOR':'COMFORTABLE';
+    const statusClass=d.data_stale?'badge-at_risk':maxPressure>90?'badge-critical':maxPressure>60?'badge-at_risk':'badge-safe';
+    const border=d.data_stale?'#d97706':maxPressure>90?'#c0392b':maxPressure>60?'#d97706':'#1a7f37';
+    const headroomText=safeHeadroom>=0?`${safeHeadroom.toFixed(1)} percentage points remain before the 80% target`:`${Math.abs(safeHeadroom).toFixed(1)} percentage points above the 80% target`;
+    return `<div class="executive-item" style="border-left-color:${border}"><div class="executive-title"><span>${env} · Shared Pool</span><span class="${statusClass}">${status}</span></div><div class="executive-copy"><b>CPU ${pressure.cpu.toFixed(1)}%</b> · Memory ${pressure.mem.toFixed(1)}% · ${headroomText}.<br>Current Running demand: <b>+${runningRec.nodes} node(s)</b> · Desired-replica demand: <b>+${desiredRec.nodes} node(s)</b>.<br><span style="color:#64748b">${model.shared.nodes} shared and ${model.dedicated.nodes} dedicated workers · Snapshot ${formatSaudiDateTime(d.collected_at)}</span></div></div>`;
+  }).join('');
 }
 
 // ── Render per-env tab ───────────────────────────────────────
 function renderEnvTab(env,d,hist){
   const p=env.toLowerCase();
+  const poolModel=renderManagementSections(env,d);
   const planPressure=standardPressure(d);
   const cpuP=planPressure.cpu, memP=planPressure.mem;
   // Worker Pool Utilization widget: ALL worker nodes, dedicated pools
@@ -817,15 +1205,16 @@ function renderEnvTab(env,d,hist){
   const cpuUsed=+(d.cpu_used||0), memUsed=+(d.mem_used_gib||0);
   const wCpuBar=allWCpu>0?Math.min((cpuUsed/allWCpu)*100,100):0;
   const wMemBar=allWMem>0?Math.min((memUsed/allWMem)*100,100):0;
-  const health=Math.max(0,100-Math.max(cpuP,memP)).toFixed(0);
-  const st=cpuP>85||memP>85?'CRITICAL':cpuP>70||memP>70?'WARNING':'HEALTHY';
-  const stCls={CRITICAL:'red',WARNING:'orange',HEALTHY:'green'}[st];
+  const health=Math.max(0,100-Math.max(cpuP,memP)).toFixed(1);
   const pressure=(d.pressure||'GREEN').toUpperCase();
+  const statusLabel={GREEN:'COMFORTABLE',YELLOW:'MONITOR',ORANGE:'AT RISK',RED:'ACTION NEEDED'}[pressure]||'UNKNOWN';
+  const stCls={GREEN:'green',YELLOW:'yellow',ORANGE:'orange',RED:'red'}[pressure]||'yellow';
 
-  ($(`${p}-collected-at`)||{}).textContent=d.collected_at?new Date(d.collected_at).toLocaleString():'—';
-  const sb=$(`${p}-status-badge`); if(sb){sb.textContent=st;sb.className='badge-'+(st==='HEALTHY'?'safe':st==='WARNING'?'at_risk':'critical');}
+  ($(`${p}-collected-at`)||{}).textContent=formatSaudiDateTime(d.collected_at);
+  ($(`${p}-snapshot-id`)||{}).textContent=d.id??'—';
+  const sb=$(`${p}-status-badge`); if(sb){sb.textContent=statusLabel;sb.className='badge-'+(pressure==='GREEN'?'safe':pressure==='YELLOW'||pressure==='ORANGE'?'at_risk':'critical');}
   const pb=$(`${p}-pressure-badge`); if(pb){pb.textContent=pressure;pb.className=pressureBadge(pressure);}
-  const hs=$(`${p}-health-score`); if(hs){hs.textContent=health+'/100';hs.className='metric '+stCls;}
+  const hs=$(`${p}-health-score`); if(hs){hs.textContent=health+'%';hs.className='metric '+stCls;}
   ($(`${p}-cpu-pct`)||{}).textContent=pct(cpuP);
   ($(`${p}-cpu-req`)||{}).textContent=f1(+(d.worker_cpu_requested||0))+' cores';
   ($(`${p}-cpu-total`)||{}).textContent=f1(stdWCpu);
@@ -837,7 +1226,7 @@ function renderEnvTab(env,d,hist){
   ($(`${p}-masters`)||{}).textContent=d.master_nodes??'—';
   ($(`${p}-ns-count`)||{}).textContent=d.ns_count??'—';
   ($(`${p}-pods`)||{}).textContent=d.pods_running??'—';
-  ($(`${p}-worker-label`)||{}).textContent=(d.worker_nodes??'—')+' worker nodes';
+  ($(`${p}-worker-label`)||{}).textContent=(d.worker_nodes??'—')+' workers · shared + dedicated';
   ($(`${p}-cpu-used-val`)||{}).textContent=f1(cpuUsed)+' cores';
   ($(`${p}-cpu-avail-txt`)||{}).textContent=f1(Math.max(0,allWCpu-cpuUsed))+' cores free of '+f1(allWCpu)+' total';
   ($(`${p}-cpu-bar-pct`)||{}).textContent=wCpuBar.toFixed(1)+'% utilized';
@@ -847,8 +1236,9 @@ function renderEnvTab(env,d,hist){
   ($(`${p}-mem-bar-pct`)||{}).textContent=wMemBar.toFixed(1)+'% utilized';
   const memBarEl=$(`${p}-mem-bar-el`); if(memBarEl){memBarEl.style.width=cap(wMemBar)+'%';memBarEl.style.background=wMemBar>85?'#c0392b':wMemBar>60?'#e67e22':'#16a085';}
   ($(`${p}-pods-running`)||{}).textContent=d.pods_running??'—';
-  const us=$(`${p}-util-source`); if(us){us.textContent=cpuUsed>0?'✓ Metrics Server':'Metrics unavailable';us.style.background=cpuUsed>0?'#d4edda':'#fff3cd';us.style.color=cpuUsed>0?'#1a7f37':'#856404';}
-  const gr=$(`${p}-growth-rows`); if(gr) gr.innerHTML=growthRows(d);
+  const rawUtil=d.raw_util&&typeof d.raw_util==='string'?JSON.parse(d.raw_util):d.raw_util;
+  const us=$(`${p}-util-source`); if(us){us.textContent=cpuUsed>0?`OpenShift metrics · ${(rawUtil&&rawUtil.source)||'available'}`:'Metrics unavailable';us.style.background=cpuUsed>0?'#d4edda':'#fff3cd';us.style.color=cpuUsed>0?'#1a7f37':'#856404';}
+  const gr=$(`${p}-growth-rows`); if(gr) gr.innerHTML=growthRows(poolModel);
   ($(`${p}-plan-workers-total`)||{}).textContent=d.worker_nodes||'—';
   const stdNodesPlan=standardWorkerNodes(env,d);
   ($(`${p}-plan-workers`)||{}).textContent=stdNodesPlan;
@@ -886,7 +1276,7 @@ function renderEnvTab(env,d,hist){
     drawSparkline(p+'-spark-pods',+(d.pods_running||0)/10,'#5ba4cf',[]);
     drawSparkline('spark-ov-'+p, cpuP, env==='DEV'?'#2e75b6':'#d29922',cpuH);
   },60);
-  if(hist&&hist.points.length>1) buildHistoryChart(env,hist.points);
+  buildHistoryChart(env,hist&&hist.points?hist.points:[]);
 }
 
 // ── Render node pools ────────────────────────────────────────
@@ -985,7 +1375,7 @@ async function fetchAll(){
     await Promise.all(ENVS.map(async env=>{
       const [mR,hR,pR,nR]=await Promise.all([
         fetch(API+'/api/v1/metrics/'+env),
-        fetch(API+'/api/v1/history/'+env+'?hours=24'),
+        fetch(API+'/api/v1/history/'+env+'?hours=168'),
         fetch(API+'/api/v1/pools/'+env),
         fetch(API+'/api/v1/namespaces/'+env+'?top=1000'),
       ]);
@@ -998,7 +1388,8 @@ async function fetchAll(){
     }));
 
     renderNamespacesTab();
-    $('last-updated').textContent='Updated '+new Date().toLocaleTimeString();
+    renderExecutiveSummary();
+    $('last-updated').textContent='Data loaded '+formatSaudiTime(new Date());
     _remaining=REFRESH_SECS;
   }catch(err){
     $('overlay-msg').textContent='⚠ '+err.message+' — retrying in 30s';
@@ -1018,7 +1409,7 @@ setInterval(()=>{
 // ── History range change ─────────────────────────────────────
 async function changeHistoryRange(env){
   const p=env.toLowerCase();
-  const hours=+($(`${p}-hist-hours`)||{value:24}).value||24;
+  const hours=+($(`${p}-hist-hours`)||{value:168}).value||168;
   try{
     const r=await fetch(API+'/api/v1/history/'+env+'?hours='+hours);
     if(r.ok){_history[env]=await r.json();if(_history[env]&&_history[env].points) buildHistoryChart(env,_history[env].points);}
@@ -1026,6 +1417,7 @@ async function changeHistoryRange(env){
 }
 
 // ── Boot ──────────────────────────────────────────────────────
+initializeTabs();
 fetchAll();
 
 // Node and Machine Inventory tab
@@ -1227,7 +1619,7 @@ async function renderDesiredReplicasTab(){
   const wrap = $('dr-table-wrap'); if(!wrap) return;
   wrap.innerHTML='<p style="color:#aaa">Loading…</p>';
   try {
-    const r = await fetch(`/api/v1/desired-replicas/${env}?limit=500`);
+    const r = await fetch(`/api/v1/desired-replicas/${env}?limit=5000`);
     if(!r.ok) throw new Error(await r.text());
     _drData[env] = await r.json();
     filterDesiredTable();
@@ -1529,8 +1921,10 @@ function exportPvcCsv(){
 
 // ── Analytics tab ─────────────────────────────────────────────
 let _analyticsChart = null;
+let _analyticsRequestId = 0;
 
 async function renderAnalyticsTab(){
+  const requestId = ++_analyticsRequestId;
   const env    = ($('an-env-select')    ||{value:'DEV'}).value;
   const period = ($('an-period-select') ||{value:'monthly'}).value;
   const key    = env+':'+period;
@@ -1542,6 +1936,7 @@ async function renderAnalyticsTab(){
   if(!_analyticsData[key]){
     try{
       const r = await fetch(API+'/api/v1/aggregate/'+env+'?period='+period);
+      if(requestId!==_analyticsRequestId) return;
       if(r.ok){
         _analyticsData[key] = await r.json();
       } else {
@@ -1556,6 +1951,7 @@ async function renderAnalyticsTab(){
   }
 
   const d = _analyticsData[key];
+  if(requestId!==_analyticsRequestId) return;
   if(!d||!d.data||!d.data.length){
     if(tbody) tbody.innerHTML='<tr><td colspan="14" style="text-align:center;color:#aaa;padding:24px">No historical data yet — data accumulates across collection runs over time.<br><small>Monthly view needs data across at least one calendar month.</small></td></tr>';
     if(notice) notice.textContent='No data for this period/env combination yet.';
@@ -1564,7 +1960,8 @@ async function renderAnalyticsTab(){
 
   // Period label formatter
   const pFmt = p => {
-    const dt = new Date(p);
+    const timestamp = /(?:Z|[+-]\d\d:\d\d)$/.test(p) ? p : p+'Z';
+    const dt = new Date(timestamp);
     if(period==='yearly')    return dt.getUTCFullYear();
     if(period==='quarterly'){
       const q=Math.floor(dt.getUTCMonth()/3)+1;
@@ -1614,10 +2011,16 @@ async function renderAnalyticsTab(){
   const avgWCpu  = d.data.map(r=>parseFloat(r.avg_worker_cpu_pct)||0);
   const maxWCpu  = d.data.map(r=>parseFloat(r.max_worker_cpu_pct)||0);
   const avgWMem  = d.data.map(r=>parseFloat(r.avg_worker_mem_pct)||0);
+  const maxWMem  = d.data.map(r=>parseFloat(r.max_worker_mem_pct)||0);
   const avgCpuUsedPct = d.data.map(r=>{
     const cpu=parseFloat(r.avg_all_worker_cpu)||0;
-    const used=parseFloat(r.avg_cpu_used)||0;
-    return cpu>0?parseFloat(((used/cpu)*100).toFixed(2)):0;
+    const used=r.avg_cpu_used==null?null:parseFloat(r.avg_cpu_used);
+    return cpu>0&&used!=null?parseFloat(((used/cpu)*100).toFixed(2)):null;
+  });
+  const avgMemUsedPct = d.data.map(r=>{
+    const mem=parseFloat(r.avg_all_worker_mem_gib)||0;
+    const used=r.avg_mem_used_gib==null?null:parseFloat(r.avg_mem_used_gib);
+    return mem>0&&used!=null?parseFloat(((used/mem)*100).toFixed(2)):null;
   });
   const n = labels.length;
   const threshold80 = Array(n).fill(80);
@@ -1651,8 +2054,20 @@ async function renderAnalyticsTab(){
           pointRadius:3, tension:0.3, yAxisID:'y', order:2
         },
         {
+          type:'line', label:'Max Mem Request % (workers)',
+          data:maxWMem, borderColor:'rgba(22,160,133,1)',
+          backgroundColor:'transparent', borderWidth:2,
+          pointRadius:3, tension:0.3, yAxisID:'y', order:2
+        },
+        {
           type:'line', label:'Avg CPU Actual Used % (all workers)',
           data:avgCpuUsedPct, borderColor:'rgba(230,126,34,0.9)',
+          backgroundColor:'transparent', borderWidth:2,
+          borderDash:[4,3], pointRadius:3, tension:0.3, yAxisID:'y', order:2
+        },
+        {
+          type:'line', label:'Avg Mem Actual Used % (all workers)',
+          data:avgMemUsedPct, borderColor:'rgba(192,57,43,0.9)',
           backgroundColor:'transparent', borderWidth:2,
           borderDash:[4,3], pointRadius:3, tension:0.3, yAxisID:'y', order:2
         },
@@ -1675,7 +2090,7 @@ async function renderAnalyticsTab(){
       },
       scales:{
         y:{
-          min:0, max:Math.min(Math.max(...[...avgWCpu,...maxWCpu,...avgWMem])+20,130),
+          min:0, max:Math.min(Math.max(...[...avgWCpu,...maxWCpu,...avgWMem,...maxWMem])+20,130),
           ticks:{callback:v=>v+'%'},
           title:{display:true, text:'% of Standard Worker Pool Capacity'}
         }

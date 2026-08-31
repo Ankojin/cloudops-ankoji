@@ -312,7 +312,7 @@ prom_query()
     local TOKEN="$3"
     local CURL_TLS_ARGS=()
 
-    if [[ "${OCP_INSECURE_SKIP_TLS_VERIFY:-false}" == "true" ]]; then
+    if [[ "${OCP_INSECURE_SKIP_TLS_VERIFY:-true}" == "true" ]]; then
         CURL_TLS_ARGS+=(--insecure)
     elif [[ -n "${OCP_CA_FILE:-}" ]]; then
         CURL_TLS_ARGS+=(--cacert "${OCP_CA_FILE}")
@@ -394,7 +394,7 @@ then
         {
             local QUERY="$1"
             local CURL_TLS_ARGS=()
-            if [[ "${OCP_INSECURE_SKIP_TLS_VERIFY:-false}" == "true" ]]; then
+            if [[ "${OCP_INSECURE_SKIP_TLS_VERIFY:-true}" == "true" ]]; then
                 CURL_TLS_ARGS+=(--insecure)
             elif [[ -n "${OCP_CA_FILE:-}" ]]; then
                 CURL_TLS_ARGS+=(--cacert "${OCP_CA_FILE}")

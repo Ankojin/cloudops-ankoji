@@ -4,6 +4,14 @@ metadata:
   name: capacity-collector-role
   annotations:
     description: Read-only access for the ARO Ops capacity collector
+# Verify while logged in with the collector token (do not use --as):
+#   oc whoami
+#   oc auth can-i list nodes
+#   oc auth can-i list persistentvolumeclaims --all-namespaces
+#   oc auth can-i list persistentvolumes
+#   oc auth can-i list machinesets.machine.openshift.io -n openshift-machine-api
+# To test with --as, first log in as cluster-admin or another identity that
+# has serviceaccount impersonation permission.
 rules:
 - apiGroups: [""]
   resources: ["namespaces", "nodes", "persistentvolumeclaims", "persistentvolumes", "pods", "resourcequotas"]
@@ -41,17 +49,15 @@ rules:
 #   - If collection uses `run.sh --token $DEV_TOKEN/$SIT_TOKEN`, the subject
 #     must be the ServiceAccount in the DEV/SIT cluster that token belongs to
 #     (created by generate-aro-tokens.sh).
-#   - If running self-monitoring in-cluster via collector.yaml with no
-#     --token, the subject is the CronJob's pod ServiceAccount instead
-#     (see the serviceAccountName note for collector.yaml).
+#   - generate-aro-tokens.sh creates this identity in kube-system.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: capacity-collector-binding
 subjects:
 - kind: ServiceAccount
-  name: capacity-collector       # e.g. capacity-collector
-  namespace: capacity-monitor  # e.g. capacity-monitor, or a dedicated ns in DEV/SIT
+  name: capacity-collector
+  namespace: kube-system
 roleRef:
   kind: ClusterRole
   name: capacity-collector-role
@@ -68,7 +74,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: capacity-collector
-  namespace: capacity-monitor
+  namespace: kube-system
 roleRef:
   kind: ClusterRole
   name: cluster-monitoring-view

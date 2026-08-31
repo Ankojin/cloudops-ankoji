@@ -45,6 +45,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql://planner:${DB_PASSWORD:-planner}@postgres:5432/capacity"
+      STALE_AFTER_MINUTES: "${STALE_AFTER_MINUTES:-90}"
     depends_on:
       postgres:
         condition: service_healthy

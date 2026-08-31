@@ -141,8 +141,14 @@ fi
 
 banner "All environments completed"
 
-LATEST_DEV=$(ls -1dt "${SCRIPT_DIR}/output/${DEV_ENV}_"* 2>/dev/null | head -1 || echo "")
-LATEST_SIT=$(ls -1dt "${SCRIPT_DIR}/output/${SIT_ENV}_"* 2>/dev/null | head -1 || echo "")
+LATEST_DEV=""
+LATEST_SIT=""
+if [[ "${SKIP_DEV}" == "false" ]]; then
+  LATEST_DEV=$(ls -1dt "${SCRIPT_DIR}/output/${DEV_ENV}_"* 2>/dev/null | head -1 || echo "")
+fi
+if [[ "${SKIP_SIT}" == "false" ]]; then
+  LATEST_SIT=$(ls -1dt "${SCRIPT_DIR}/output/${SIT_ENV}_"* 2>/dev/null | head -1 || echo "")
+fi
 
 echo "Individual reports:"
 echo ""

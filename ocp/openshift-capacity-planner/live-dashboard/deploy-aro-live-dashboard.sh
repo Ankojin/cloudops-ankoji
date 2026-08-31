@@ -40,10 +40,10 @@
 #   # Minimal — secrets prompted interactively
 #   ./deploy-aro-live-dashboard.sh
 #    --rebuild-images     rebuild all 4 + update all Container Apps
-#   --rebuild-planner    rebuild capacity-planner base image only
+#   --rebuild-planner    rebuild planner and dependent collector, then update the job
 #   --rebuild-api        rebuild API image + update bab-aro-ops-api-01
 #   --rebuild-dashboard  rebuild dashboard image + update bab-aro-ops-dashboard-01
-#   --rebuild-collector  rebuild collector image + update bab-aro-ops-collector-01
+#   --rebuild-collector  rebuild planner + collector and update bab-aro-ops-collector-01
 #   # Non-interactive (CI / pipeline)
 #   export ARO_DB_PASSWORD="..." ARO_DEV_TOKEN="..." ARO_SIT_TOKEN="..."
 #   ./deploy-aro-live-dashboard.sh --no-prompt
@@ -85,6 +85,10 @@ readonly DEV_API="${DEV_API:-https://api.babdevaro.albtests.com:6443}"
 readonly SIT_API="${SIT_API:-https://api.babsitaro.albtests.com:6443}"
 readonly DEV_ENV_LABEL="${DEV_ENV_LABEL:-DEV}"
 readonly SIT_ENV_LABEL="${SIT_ENV_LABEL:-SIT}"
+readonly OCP_INSECURE_SKIP_TLS_VERIFY="${OCP_INSECURE_SKIP_TLS_VERIFY:-true}"
+readonly COLLECT_DEV="${COLLECT_DEV:-true}"
+readonly COLLECT_SIT="${COLLECT_SIT:-true}"
+readonly STALE_AFTER_MINUTES="${STALE_AFTER_MINUTES:-90}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLANNER_ROOT="${SCRIPT_DIR}/.."          # live-dashboard/ → planner root
@@ -183,10 +187,10 @@ for arg in "$@"; do
         # Rebuild all 4 images + update all Container Apps
         --rebuild-images)     REBUILD_PLANNER=true; REBUILD_API=true; REBUILD_DASHBOARD=true; REBUILD_COLLECTOR=true ;;
         # Rebuild individual components only
-        --rebuild-planner)    REBUILD_PLANNER=true ;;    # base image only, no CA update
+        --rebuild-planner)    REBUILD_PLANNER=true; REBUILD_COLLECTOR=true ;;
         --rebuild-api)        REBUILD_API=true ;;
         --rebuild-dashboard)  REBUILD_DASHBOARD=true ;;
-        --rebuild-collector)  REBUILD_COLLECTOR=true ;;  # uses existing :latest planner
+        --rebuild-collector)  REBUILD_PLANNER=true; REBUILD_COLLECTOR=true ;;
         --help|-h)
             grep '^#' "$0" | sed 's/^# \?//' | head -40
             exit 0
@@ -200,10 +204,10 @@ done
 # Container Apps without touching infra (PG, KV, networking).
 #
 #   --rebuild-images     rebuild all 4 + update all Container Apps
-#   --rebuild-planner    rebuild capacity-planner base image only
+#   --rebuild-planner    rebuild planner + collector and update the collector job
 #   --rebuild-api        rebuild API image + update bab-aro-ops-api-01
 #   --rebuild-dashboard  rebuild dashboard image + update bab-aro-ops-dashboard-01
-#   --rebuild-collector  rebuild collector image + update bab-aro-ops-collector-01
+#   --rebuild-collector  rebuild planner + collector and update bab-aro-ops-collector-01
 # ─────────────────────────────────────────────────────────────
 if [[ "${REBUILD_PLANNER}" == "true" || "${REBUILD_API}" == "true" || \
       "${REBUILD_DASHBOARD}" == "true" || "${REBUILD_COLLECTOR}" == "true" ]]; then
@@ -232,7 +236,9 @@ if [[ "${REBUILD_PLANNER}" == "true" || "${REBUILD_API}" == "true" || \
         info "Updating Container App: ${APP_API}"
         az containerapp update \
             --name "${APP_API}" --resource-group "${RESOURCE_GROUP}" \
-            --image "${ACR_ENDPOINT}/${IMAGE_PREFIX}/api:${IMAGE_TAG}" --output table
+            --image "${ACR_ENDPOINT}/${IMAGE_PREFIX}/api:${IMAGE_TAG}" \
+            --set-env-vars "STALE_AFTER_MINUTES=${STALE_AFTER_MINUTES}" \
+            --output table
         ok "API rebuilt and updated (${IMAGE_TAG})"
     fi
 
@@ -268,7 +274,12 @@ if [[ "${REBUILD_PLANNER}" == "true" || "${REBUILD_API}" == "true" || \
         info "Updating Container App Job: ${APP_COLLECTOR}"
         az containerapp job update \
             --name "${APP_COLLECTOR}" --resource-group "${RESOURCE_GROUP}" \
-            --image "${ACR_ENDPOINT}/${IMAGE_PREFIX}/collector:${IMAGE_TAG}" --output table
+            --image "${ACR_ENDPOINT}/${IMAGE_PREFIX}/collector:${IMAGE_TAG}" \
+            --set-env-vars \
+                "OCP_INSECURE_SKIP_TLS_VERIFY=${OCP_INSECURE_SKIP_TLS_VERIFY}" \
+                "COLLECT_DEV=${COLLECT_DEV}" \
+                "COLLECT_SIT=${COLLECT_SIT}" \
+            --output table
         ok "Collector rebuilt and updated (${IMAGE_TAG})"
     fi
 
@@ -692,6 +703,7 @@ upsert_app "${APP_API}" \
         "DB_USER=${PG_ADMIN_USER}" \
         "DB_PASSWORD=secretref:db-password" \
         "DB_NAME=${PG_DB}" \
+        "STALE_AFTER_MINUTES=${STALE_AFTER_MINUTES}" \
     --tags \
         "app=aro-ops-dashboard" \
         "component=api" \
@@ -751,7 +763,9 @@ upsert_job "${APP_COLLECTOR}" \
     --secrets "sit-token=keyvaultref:https://${KV_NAME}.vault.azure.net/secrets/aro-sit-token,identityref:${MI_RESOURCE_ID}" \
     --env-vars "DB_HOST=${PG_FQDN}" "DB_PORT=5432" "DB_USER=${PG_ADMIN_USER}" "DB_PASSWORD=secretref:db-password" "DB_NAME=${PG_DB}" \
     --env-vars "DEV_API=${DEV_API}" "DEV_TOKEN=secretref:dev-token" "DEV_ENV_LABEL=${DEV_ENV_LABEL}" \
-    --env-vars "SIT_API=${SIT_API}" "SIT_TOKEN=secretref:sit-token" "SIT_ENV_LABEL=${SIT_ENV_LABEL}"
+    --env-vars "SIT_API=${SIT_API}" "SIT_TOKEN=secretref:sit-token" "SIT_ENV_LABEL=${SIT_ENV_LABEL}" \
+    --env-vars "OCP_INSECURE_SKIP_TLS_VERIFY=${OCP_INSECURE_SKIP_TLS_VERIFY}" \
+    --env-vars "COLLECT_DEV=${COLLECT_DEV}" "COLLECT_SIT=${COLLECT_SIT}"
 
 ok "Collector job deployed: ${APP_COLLECTOR}"
 

@@ -320,7 +320,7 @@ def node_role:
   else "other" end;
 ($pools[0] // []) as $pools |
 ([ $pools[] | . as $pool | $pool.nodes[] | {key: ., value: $pool.pool_name} ] | from_entries) as $node_pool |
-["node","role","ready","schedulable","pool","classification","instance_type","zone","cpu_allocatable_cores","memory_allocatable_gib","taints"] | @csv,
+(["node","role","ready","schedulable","pool","classification","instance_type","zone","cpu_allocatable_cores","memory_allocatable_gib","taints"] | @csv),
 (.items[] |
   . as $n |
   (($n.status.conditions // [] | map(select(.type == "Ready")) | .[0].status) // "Unknown") as $ready |
@@ -339,7 +339,7 @@ def node_role:
 ' "${CAPACITY_RAW}/nodes.json" > "${CAPACITY_CSV}/node_inventory_detailed.csv"
 
 jq -r '
-["node","role","taint_key","taint_value","effect","time_added"] | @csv,
+(["node","role","taint_key","taint_value","effect","time_added"] | @csv),
 (.items[] |
   . as $n |
   (if (.metadata.labels["node-role.kubernetes.io/master"] != null or .metadata.labels["node-role.kubernetes.io/control-plane"] != null) then "master"
@@ -564,7 +564,7 @@ def controller:
    if length > 0 then (.[0].kind + "/" + .[0].name) else "standalone" end);
 ($pools[0] // []) as $pools |
 ([ $pools[] | . as $pool | $pool.nodes[] | {key: ., value: $pool.pool_name} ] | from_entries) as $node_pool |
-["namespace","pod","phase","node","pool","controller","app_cpu_request_cores","init_cpu_request_cores","effective_cpu_request_cores","app_memory_request_gib","init_memory_request_gib","effective_memory_request_gib"] | @csv,
+(["namespace","pod","phase","node","pool","controller","app_cpu_request_cores","init_cpu_request_cores","effective_cpu_request_cores","app_memory_request_gib","init_memory_request_gib","effective_memory_request_gib"] | @csv),
 (.items[] |
   select(.status.phase == "Running" or .status.phase == "Pending") |
   . as $pod |
@@ -582,7 +582,7 @@ def controller:
 jq -r --slurpfile pools "${CAPACITY_JSON}/node_pools_raw.json" '
 ($pools[0] // []) as $pools |
 ([ $pools[] | . as $pool | $pool.nodes[] | {key: ., value: $pool.pool_name} ] | from_entries) as $node_pool |
-["namespace","pod","phase","node","pool","controller","toleration_key","operator","value","effect","toleration_seconds"] | @csv,
+(["namespace","pod","phase","node","pool","controller","toleration_key","operator","value","effect","toleration_seconds"] | @csv),
 (.items[] |
   select(.status.phase == "Running" or .status.phase == "Pending") |
   . as $pod |
@@ -1064,6 +1064,55 @@ else
     : > "${NS_ACTUAL_USAGE}"
 fi
 
+# Chargeback consumes namespace overcommit values, so this inventory must be
+# generated before the chargeback awk pass below.
+log INFO "Computing overcommit ratios"
+
+OVERCOMMIT_CSV="${CAPACITY_CSV}/overcommit_by_namespace.csv"
+echo "namespace,cpu_requests,cpu_limits,cpu_overcommit_ratio,mem_requests_gib,mem_limits_gib,mem_overcommit_ratio,no_cpu_limit_count,no_mem_limit_count" \
+> "${OVERCOMMIT_CSV}"
+
+awk -F',' '
+NR==1 { next }
+{
+  gsub(/"/, "", $0)
+  ns=$1; cpu_r=$4; mem_r=$5; cpu_l=$6; mem_l=$7
+  if (cpu_r ~ /m$/) { sub(/m$/,"",cpu_r); cpu_r=cpu_r/1000 }
+  else cpu_r=cpu_r+0
+  if (cpu_l == "0" || cpu_l == "") { no_cpu_lim[ns]++ } else {
+    if (cpu_l ~ /m$/) { sub(/m$/,"",cpu_l); cpu_l=cpu_l/1000 }
+    else cpu_l=cpu_l+0
+    sum_cpu_l[ns]+=cpu_l
+  }
+  div_r = 1; div_l = 1
+  if (mem_r ~ /Ki$/) { sub(/Ki$/,"",mem_r); div_r=1048576 }
+  else if (mem_r ~ /Mi$/) { sub(/Mi$/,"",mem_r); div_r=1024 }
+  else if (mem_r ~ /Gi$/) { sub(/Gi$/,"",mem_r); div_r=1 }
+  if (mem_l == "0" || mem_l == "") { no_mem_lim[ns]++ } else {
+    if (mem_l ~ /Ki$/) { sub(/Ki$/,"",mem_l); div_l=1048576 }
+    else if (mem_l ~ /Mi$/) { sub(/Mi$/,"",mem_l); div_l=1024 }
+    else if (mem_l ~ /Gi$/) { sub(/Gi$/,"",mem_l); div_l=1 }
+    else div_l=1073741824
+    mem_l=mem_l+0; sum_mem_l[ns]+=mem_l/div_l
+  }
+  sum_cpu_r[ns]+=cpu_r+0
+  sum_mem_r[ns]+=(mem_r+0)/div_r
+}
+END {
+  for (ns in sum_cpu_r) {
+    cr=sum_cpu_r[ns]+0; mr=sum_mem_r[ns]+0
+    cl=sum_cpu_l[ns]+0; ml=sum_mem_l[ns]+0
+    cpu_ratio = (cr>0 && cl>0) ? cl/cr : (cl>0 ? 999 : 0)
+    mem_ratio = (mr>0 && ml>0) ? ml/mr : (ml>0 ? 999 : 0)
+    printf "%s,%.3f,%.3f,%.2f,%.3f,%.3f,%.2f,%d,%d\n",
+      ns, cr, cl, cpu_ratio, mr, ml, mem_ratio,
+      no_cpu_lim[ns]+0, no_mem_lim[ns]+0
+  }
+}
+' "${CAPACITY_CSV}/pod_resources.csv" >> "${OVERCOMMIT_CSV}" 2>/dev/null || true
+
+log INFO "Overcommit CSV: ${OVERCOMMIT_CSV}"
+
 echo "namespace,type,running_pods,cpu_cores_reserved,memory_gb_reserved,cpu_pct_of_cluster,memory_pct_of_cluster,cpu_actual_cores,mem_actual_gb,cpu_util_pct,mem_util_pct,cpu_overcommit_ratio,no_cpu_limit,rightsizing_signal" \
 > "${CAPACITY_CSV}/chargeback_by_namespace.csv"
 
@@ -1245,70 +1294,6 @@ log INFO "Chargeback CSV   : ${CAPACITY_CSV}/chargeback_by_namespace.csv"
 
 
 #############################################
-# Overcommit Ratio (Red Hat practice #2)
-# Limits/Requests per namespace.
-# Overcommit means Limits > Requests — NOT
-# more Requests than Allocatable.
-# High overcommit = pods can burst above
-# their Request; low = tightly controlled.
-# Scheduler uses Requests only.
-#############################################
-
-log INFO "Computing overcommit ratios"
-
-OVERCOMMIT_CSV="${CAPACITY_CSV}/overcommit_by_namespace.csv"
-echo "namespace,cpu_requests,cpu_limits,cpu_overcommit_ratio,mem_requests_gib,mem_limits_gib,mem_overcommit_ratio,no_cpu_limit_count,no_mem_limit_count" \
-> "${OVERCOMMIT_CSV}"
-
-awk -F',' '
-NR==1 { next }
-{
-    gsub(/"/, "", $0)
-    ns=$1; cpu_r=$4; mem_r=$5; cpu_l=$6; mem_l=$7
-
-    # Convert CPU to millicores for summation
-    if (cpu_r ~ /m$/) { sub(/m$/,"",cpu_r); cpu_r=cpu_r/1000 }
-    else cpu_r=cpu_r+0
-    if (cpu_l == "0" || cpu_l == "") { no_cpu_lim[ns]++ } else {
-        if (cpu_l ~ /m$/) { sub(/m$/,"",cpu_l); cpu_l=cpu_l/1000 }
-        else cpu_l=cpu_l+0
-        sum_cpu_l[ns]+=cpu_l
-    }
-
-    # Memory to GiB
-    split("Ki Mi Gi Ti", units)
-    div_r = 1; div_l = 1
-    if (mem_r ~ /Ki$/) { sub(/Ki$/,"",mem_r); div_r=1048576 }
-    else if (mem_r ~ /Mi$/) { sub(/Mi$/,"",mem_r); div_r=1024 }
-    else if (mem_r ~ /Gi$/) { sub(/Gi$/,"",mem_r); div_r=1 }
-    if (mem_l == "0" || mem_l == "") { no_mem_lim[ns]++ } else {
-        if (mem_l ~ /Ki$/) { sub(/Ki$/,"",mem_l); div_l=1048576 }
-        else if (mem_l ~ /Mi$/) { sub(/Mi$/,"",mem_l); div_l=1024 }
-        else if (mem_l ~ /Gi$/) { sub(/Gi$/,"",mem_l); div_l=1 }
-        else div_l=1073741824
-        mem_l=mem_l+0; sum_mem_l[ns]+=mem_l/div_l
-    }
-    sum_cpu_r[ns]+=cpu_r+0
-    sum_mem_r[ns]+=(mem_r+0)/div_r
-}
-END {
-    for (ns in sum_cpu_r) {
-        cr=sum_cpu_r[ns]+0; mr=sum_mem_r[ns]+0
-        cl=sum_cpu_l[ns]+0; ml=sum_mem_l[ns]+0
-        cpu_ratio = (cr>0 && cl>0) ? cl/cr : (cl>0 ? 999 : 0)
-        mem_ratio = (mr>0 && ml>0) ? ml/mr : (ml>0 ? 999 : 0)
-        printf "%s,%.3f,%.3f,%.2f,%.3f,%.3f,%.2f,%d,%d\n",
-            ns, cr, cl, cpu_ratio, mr, ml, mem_ratio,
-            no_cpu_lim[ns]+0, no_mem_lim[ns]+0
-    }
-}
-' "${CAPACITY_CSV}/pod_resources.csv" >> "${OVERCOMMIT_CSV}" 2>/dev/null || true
-
-log INFO "Overcommit CSV: ${OVERCOMMIT_CSV}"
-
-
-
-#############################################
 # Desired vs Running Gap (Red Hat practice #6)
 # Desired replicas = primary planning signal
 # Running pods = current pressure signal
@@ -1459,9 +1444,10 @@ WORKER_MEM_PCT=$(awk "BEGIN{
 
 # Pressure level
 PRESSURE_LEVEL="GREEN"
-if   (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>90)}") )); then PRESSURE_LEVEL="RED"
-elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>80)}") )); then PRESSURE_LEVEL="ORANGE"
-elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>60)}") )); then PRESSURE_LEVEL="YELLOW"
+WORKER_MAX_PCT=$(awk "BEGIN{print (${WORKER_CPU_PCT}>${WORKER_MEM_PCT})?${WORKER_CPU_PCT}:${WORKER_MEM_PCT}}")
+if   (( $(awk "BEGIN{print (${WORKER_MAX_PCT}>90)}") )); then PRESSURE_LEVEL="RED"
+elif (( $(awk "BEGIN{print (${WORKER_MAX_PCT}>80)}") )); then PRESSURE_LEVEL="ORANGE"
+elif (( $(awk "BEGIN{print (${WORKER_MAX_PCT}>60)}") )); then PRESSURE_LEVEL="YELLOW"
 fi
 
 # ── DaemonSet footprint per node (from the uploaded capacity_report_auto_html_v2.sh)
@@ -1655,9 +1641,9 @@ cat > "${CAPACITY_JSON}/capacity_planning.json" <<EOF
         "memory_gib_available": ${WORKER_MEM_AVAILABLE},
         "equivalent_worker_nodes": $(awk "BEGIN{printf \"%.1f\",(${NET_CPU_PER_NODE}+0>0)?(${WORKER_CPU_AVAILABLE}+0)/(${NET_CPU_PER_NODE}+0):0}"),
         "action": "$(
-            if   (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>90)}") )); then echo "CRITICAL: Stop onboarding. Add ${NODES_NEEDED} worker node(s) immediately."
-            elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>80)}") )); then echo "AT RISK: Limit new project onboarding. Add ${NODES_NEEDED} worker node(s) to restore safe headroom."
-            elif (( $(awk "BEGIN{print (${WORKER_CPU_PCT}>60)}") )); then echo "MONITOR: ${WORKER_CPU_AVAILABLE} cores available. Plan expansion before reaching 80% — currently ${NODES_NEEDED} node(s) needed."
+          if   (( $(awk "BEGIN{print (${WORKER_MAX_PCT}>90)}") )); then echo "CRITICAL: Stop onboarding. Add ${NODES_NEEDED} worker node(s) immediately."
+          elif (( $(awk "BEGIN{print (${WORKER_MAX_PCT}>80)}") )); then echo "AT RISK: Limit new project onboarding. Add ${NODES_NEEDED} worker node(s) to restore safe headroom."
+          elif (( $(awk "BEGIN{print (${WORKER_MAX_PCT}>60)}") )); then echo "MONITOR: ${WORKER_CPU_AVAILABLE} cores / ${WORKER_MEM_AVAILABLE} GiB available before the 80% target."
             else echo "HEALTHY: ${WORKER_CPU_AVAILABLE} cores / ${WORKER_MEM_AVAILABLE} GiB available for new projects. No expansion needed."
             fi
         )"
@@ -2010,7 +1996,7 @@ log INFO "  ${DEDICATED_COUNT} dedicated worker pool(s) found (e.g. app=sas:NoSc
 # API/report source; this CSV makes the same pool inventory easy to filter,
 # sort, and reconcile with the node and pod extracts above.
 jq -r '
-["pool","classification","taint","nodes","cpu_allocatable_cores","memory_allocatable_gib","cpu_requested_cores","memory_requested_gib","cpu_request_pct","memory_request_pct","pressure","tenant_namespaces"] | @csv,
+(["pool","classification","taint","nodes","cpu_allocatable_cores","memory_allocatable_gib","cpu_requested_cores","memory_requested_gib","cpu_request_pct","memory_request_pct","pressure","tenant_namespaces"] | @csv),
 (.[] |
  [ .pool_name,
    (if .dedicated then "DEDICATED" else "SHARED" end),
@@ -2127,7 +2113,7 @@ log INFO "Building complete node and MachineSet inventory"
 
 jq -n \
   --slurpfile nodes "${CAPACITY_RAW}/nodes.json" \
-  --slurpfile pools "${CAPACITY_JSON}/node_pools_raw.json" \
+  --slurpfile pools "${CAPACITY_JSON}/node_pools.json" \
   --slurpfile pressure "${NODE_PRESSURE_JSON}" \
   --slurpfile pods "${CAPACITY_RAW}/pods.json" \
   --slurpfile machinesets "${CAPACITY_RAW}/machinesets.json" '

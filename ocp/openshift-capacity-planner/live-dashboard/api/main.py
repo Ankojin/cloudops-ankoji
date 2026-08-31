@@ -55,6 +55,7 @@ else:
     }
 
 pool: asyncpg.Pool = None  # type: ignore
+STALE_AFTER_MINUTES = int(os.getenv("STALE_AFTER_MINUTES", "90"))
 
 
 @asynccontextmanager
@@ -115,6 +116,44 @@ def _pressure_color(pressure: str) -> str:
     return colors.get((pressure or "").upper(), "#95a5a6")
 
 
+def _enrich_snapshot(snapshot: dict) -> dict:
+    """Fill fields added after early snapshots from the retained planning JSON."""
+    raw = snapshot.get("raw_planning") or {}
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            raw = {}
+
+    standard = raw.get("standard_worker_pool", {})
+    workers = raw.get("worker_pool", {})
+    utilization = raw.get("current_utilization", {})
+    fallbacks = {
+        "worker_cpu": standard.get("cpu_cores_total"),
+        "worker_mem_gib": standard.get("memory_gb_total"),
+        "worker_cpu_requested": utilization.get("cpu_cores_requested"),
+        "worker_mem_gib_requested": utilization.get("memory_gb_requested"),
+        "all_worker_cpu": workers.get("cpu_cores_total"),
+        "all_worker_mem_gib": workers.get("memory_gb_total"),
+    }
+    for field, value in fallbacks.items():
+        if not snapshot.get(field) and value is not None:
+            snapshot[field] = value
+
+    collected_at = snapshot.get("collected_at")
+    if isinstance(collected_at, str):
+        collected_at = datetime.fromisoformat(collected_at.replace("Z", "+00:00"))
+    if isinstance(collected_at, datetime):
+        if collected_at.tzinfo is None:
+            collected_at = collected_at.replace(tzinfo=timezone.utc)
+        age_minutes = max(0, (datetime.now(timezone.utc) - collected_at).total_seconds() / 60)
+        snapshot["data_age_minutes"] = round(age_minutes, 1)
+        snapshot["data_stale"] = age_minutes > STALE_AFTER_MINUTES
+        snapshot["stale_after_minutes"] = STALE_AFTER_MINUTES
+
+    return snapshot
+
+
 # ── Routes ────────────────────────────────────────────────────
 
 @app.get("/api/v1/health")
@@ -132,11 +171,15 @@ async def status():
     """Latest snapshot for both DEV and SIT — used by the dashboard overview."""
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT * FROM latest_snapshots ORDER BY env"
+            """
+            SELECT DISTINCT ON (env) *
+            FROM capacity_snapshots
+            ORDER BY env, collected_at DESC
+            """
         )
     result = {}
     for row in rows:
-        d = _row_to_dict(row)
+        d = _enrich_snapshot(_row_to_dict(row))
         env = d["env"]
         d["pressure_color"] = _pressure_color(d.get("pressure", ""))
         # Remove large JSON blobs from overview — fetch details separately
@@ -169,7 +212,7 @@ async def metrics(env: str):
     if row is None:
         raise HTTPException(status_code=404, detail=f"No data for env={env}")
 
-    d = _row_to_dict(row)
+    d = _enrich_snapshot(_row_to_dict(row))
     d["pressure_color"] = _pressure_color(d.get("pressure", ""))
     return d
 
@@ -194,7 +237,15 @@ async def history(
                    CASE WHEN worker_mem_gib > 0
                         THEN (worker_mem_gib_requested / worker_mem_gib) * 100
                         ELSE 0 END AS mem_pct,
-                   pods_running, pressure, worker_nodes, cpu_used, mem_used_gib
+                    CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
+                            AND all_worker_cpu > 0
+                        THEN (cpu_used / all_worker_cpu) * 100
+                        ELSE NULL END AS cpu_used_pct,
+                    CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
+                            AND all_worker_mem_gib > 0
+                        THEN (mem_used_gib / all_worker_mem_gib) * 100
+                        ELSE NULL END AS mem_used_pct,
+                    pods_running, pressure, worker_nodes, cpu_used, mem_used_gib
             FROM capacity_snapshots
             WHERE env = $1
               AND collected_at >= NOW() - ($2 || ' hours')::interval
@@ -470,11 +521,16 @@ async def aggregate(
                 ROUND(MAX(CASE WHEN worker_mem_gib > 0
                     THEN (worker_mem_gib_requested / worker_mem_gib) * 100 END)::numeric, 2)
                     AS max_worker_mem_pct,
-                -- Actual usage
-                ROUND(AVG(cpu_used)::numeric, 2)      AS avg_cpu_used,
-                ROUND(MAX(cpu_used)::numeric, 2)      AS max_cpu_used,
-                ROUND(AVG(mem_used_gib)::numeric, 2)  AS avg_mem_used_gib,
-                ROUND(MAX(mem_used_gib)::numeric, 2)  AS max_mem_used_gib,
+                -- Actual usage is only comparable after collection became
+                -- explicitly scoped to all worker nodes.
+                ROUND(AVG(CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
+                    THEN cpu_used END)::numeric, 2)     AS avg_cpu_used,
+                ROUND(MAX(CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
+                    THEN cpu_used END)::numeric, 2)     AS max_cpu_used,
+                ROUND(AVG(CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
+                    THEN mem_used_gib END)::numeric, 2) AS avg_mem_used_gib,
+                ROUND(MAX(CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
+                    THEN mem_used_gib END)::numeric, 2) AS max_mem_used_gib,
                 -- Inventory
                 ROUND(AVG(pods_running)::numeric, 0)  AS avg_pods,
                 ROUND(MAX(pods_running)::numeric, 0)  AS max_pods,
@@ -486,7 +542,12 @@ async def aggregate(
                 ROUND(AVG(all_worker_cpu)::numeric, 2) AS avg_all_worker_cpu,
                 ROUND(AVG(all_worker_mem_gib)::numeric, 2) AS avg_all_worker_mem_gib
             FROM capacity_snapshots
-            WHERE env = $1
+                        WHERE env = $1
+                            AND total_cpu > 0 AND total_mem_gib > 0
+                            AND worker_cpu > 0 AND worker_mem_gib > 0
+                            AND worker_cpu_requested IS NOT NULL
+                            AND worker_mem_gib_requested IS NOT NULL
+                            AND all_worker_cpu > 0 AND all_worker_mem_gib > 0
             GROUP BY period_start
             ORDER BY period_start ASC
             """,
@@ -559,15 +620,34 @@ async def export_csv(
                     ROUND(MAX(cpu_pct)::numeric, 2)   AS max_cpu_pct,
                     ROUND(AVG(mem_pct)::numeric, 2)   AS avg_mem_pct,
                     ROUND(MAX(mem_pct)::numeric, 2)   AS max_mem_pct,
+                    ROUND(AVG((worker_cpu_requested / worker_cpu) * 100)::numeric, 2)
+                        AS avg_worker_cpu_pct,
+                    ROUND(MAX((worker_cpu_requested / worker_cpu) * 100)::numeric, 2)
+                        AS max_worker_cpu_pct,
+                    ROUND(AVG((worker_mem_gib_requested / worker_mem_gib) * 100)::numeric, 2)
+                        AS avg_worker_mem_pct,
+                    ROUND(MAX((worker_mem_gib_requested / worker_mem_gib) * 100)::numeric, 2)
+                        AS max_worker_mem_pct,
                     ROUND(AVG(pods_running)::numeric, 0) AS avg_pods,
                     ROUND(MAX(pods_running)::numeric, 0) AS max_pods,
                     ROUND(AVG(worker_nodes)::numeric, 1) AS avg_worker_nodes,
-                    ROUND(AVG(cpu_used)::numeric, 2)     AS avg_cpu_used,
-                    ROUND(AVG(mem_used_gib)::numeric, 2) AS avg_mem_used_gib,
+                    ROUND(AVG(CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
+                        THEN cpu_used END)::numeric, 2) AS avg_cpu_used,
+                    ROUND(AVG(CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
+                        THEN mem_used_gib END)::numeric, 2) AS avg_mem_used_gib,
                     ROUND(AVG(total_cpu)::numeric, 2)    AS avg_total_cpu,
-                    ROUND(AVG(total_mem_gib)::numeric, 2) AS avg_total_mem_gib
+                    ROUND(AVG(total_mem_gib)::numeric, 2) AS avg_total_mem_gib,
+                    ROUND(AVG(worker_cpu)::numeric, 2) AS avg_worker_cpu,
+                    ROUND(AVG(worker_mem_gib)::numeric, 2) AS avg_worker_mem_gib,
+                    ROUND(AVG(all_worker_cpu)::numeric, 2) AS avg_all_worker_cpu,
+                    ROUND(AVG(all_worker_mem_gib)::numeric, 2) AS avg_all_worker_mem_gib
                 FROM capacity_snapshots
                 WHERE env = $1
+                  AND total_cpu > 0 AND total_mem_gib > 0
+                  AND worker_cpu > 0 AND worker_mem_gib > 0
+                  AND worker_cpu_requested IS NOT NULL
+                  AND worker_mem_gib_requested IS NOT NULL
+                  AND all_worker_cpu > 0 AND all_worker_mem_gib > 0
                 GROUP BY period_start
                 ORDER BY period_start ASC
                 """,
@@ -577,10 +657,14 @@ async def export_csv(
                 "period_start", "snapshot_count",
                 "avg_cpu_pct", "max_cpu_pct",
                 "avg_mem_pct", "max_mem_pct",
+                "avg_worker_cpu_pct", "max_worker_cpu_pct",
+                "avg_worker_mem_pct", "max_worker_mem_pct",
                 "avg_pods", "max_pods",
                 "avg_worker_nodes",
                 "avg_cpu_used", "avg_mem_used_gib",
                 "avg_total_cpu", "avg_total_mem_gib",
+                "avg_worker_cpu", "avg_worker_mem_gib",
+                "avg_all_worker_cpu", "avg_all_worker_mem_gib",
             ]
 
     output = io.StringIO()

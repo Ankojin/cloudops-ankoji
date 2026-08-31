@@ -205,8 +205,9 @@ RAW_PLANNING=$(jq -c \
 rm -f "${_rp_tmp}" 
 
 # ── INSERT main snapshot ──────────────────────────────────────
-# grep filters out any psql command tags (e.g. "INSERT 0 1") leaving only the integer id
-SNAP_ID=$(_psql -t -A -c "
+# Stream SQL over stdin: raw JSON snapshots can exceed the OS argument-size
+# limit when passed through `psql -c`.
+SNAP_ID=$(_psql -t -A <<SQL | grep -E '^[0-9]+$' | tail -1
 INSERT INTO capacity_snapshots (
   env,
   total_cpu, total_mem_gib, cpu_pct, mem_pct,
@@ -230,7 +231,8 @@ INSERT INTO capacity_snapshots (
   \$\$${RAW_PLANNING}\$\$::jsonb,
   \$\$${RAW_UTIL}\$\$::jsonb
 ) RETURNING id;
-" | grep -E '^[0-9]+$' | tail -1)
+SQL
+)
 
 if [[ -z "${SNAP_ID}" ]]; then
   echo "ERROR: Failed to insert capacity snapshot for ${ENV} — no id returned"
