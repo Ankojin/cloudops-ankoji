@@ -12,11 +12,10 @@
 
 set -Eeuo pipefail
 
-# Set COLLECT_DEBUG=true as an env var on the Container App Job to get full
-# command tracing in the log for the next run — helps pinpoint exactly which
-# oc/curl/jq call is failing rather than guessing from symptoms.
+# Full shell tracing would expose the bearer token expanded by Prometheus
+# calls, so debug mode emits additional status messages without `set -x`.
 if [[ "${COLLECT_DEBUG:-false}" == "true" ]]; then
-    set -x
+    echo "INFO: COLLECT_DEBUG enabled (sensitive command tracing remains disabled)"
 fi
 
 
@@ -311,10 +310,18 @@ prom_query()
     local QUERY="$1"
     local HOST="$2"
     local TOKEN="$3"
+    local CURL_TLS_ARGS=()
 
-    curl -sk \
+    if [[ "${OCP_INSECURE_SKIP_TLS_VERIFY:-false}" == "true" ]]; then
+        CURL_TLS_ARGS+=(--insecure)
+    elif [[ -n "${OCP_CA_FILE:-}" ]]; then
+        CURL_TLS_ARGS+=(--cacert "${OCP_CA_FILE}")
+    fi
+
+    curl -sS --connect-timeout 10 --max-time 30 "${CURL_TLS_ARGS[@]}" \
         -H "Authorization: Bearer ${TOKEN}" \
-        "https://${HOST}/api/v1/query?query=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "${QUERY}" 2>/dev/null || echo "${QUERY}" | sed 's/ /%20/g;s/{/%7B/g;s/}/%7D/g;s/"/%22/g;s/=/%3D/g;s/!/%21/g;s/,/%2C/g;s|/|%2F|g')" \
+        --get --data-urlencode "query=${QUERY}" \
+        "https://${HOST}/api/v1/query" \
         2>/dev/null \
     | jq -r '.data.result[0].value[1] // "0"' 2>/dev/null \
     || echo "0"
@@ -338,11 +345,11 @@ then
 
 
         CPU_USED=$(prom_query \
-            'sum(rate(container_cpu_usage_seconds_total{container!="",id=~"/kubepods.*"}[5m]))' \
+            'sum(rate(container_cpu_usage_seconds_total{container!="",id=~"/kubepods.*"}[5m]) * on(node) group_left() max by (node) (kube_node_role{role="worker"}))' \
             "${PROM_HOST}" "${PROM_TOKEN}")
 
         MEM_USED_BYTES=$(prom_query \
-            'sum(container_memory_working_set_bytes{container!="",id=~"/kubepods.*"})' \
+            'sum(container_memory_working_set_bytes{container!="",id=~"/kubepods.*"} * on(node) group_left() max by (node) (kube_node_role{role="worker"}))' \
             "${PROM_HOST}" "${PROM_TOKEN}")
 
         POD_COUNT_RUNNING=$(prom_query \
@@ -386,16 +393,41 @@ then
         prom_query_vector()
         {
             local QUERY="$1"
-            curl -sk \
+            local CURL_TLS_ARGS=()
+            if [[ "${OCP_INSECURE_SKIP_TLS_VERIFY:-false}" == "true" ]]; then
+                CURL_TLS_ARGS+=(--insecure)
+            elif [[ -n "${OCP_CA_FILE:-}" ]]; then
+                CURL_TLS_ARGS+=(--cacert "${OCP_CA_FILE}")
+            fi
+            curl -sS --connect-timeout 10 --max-time 30 "${CURL_TLS_ARGS[@]}" \
                 -H "Authorization: Bearer ${PROM_TOKEN}" \
-                "https://${PROM_HOST}/api/v1/query?query=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "${QUERY}" 2>/dev/null || echo "${QUERY}" | sed 's/ /%20/g;s/{/%7B/g;s/}/%7D/g;s/"/%22/g;s/=/%3D/g;s/!/%21/g;s/,/%2C/g;s|/|%2F|g')" \
+                --get --data-urlencode "query=${QUERY}" \
+                "https://${PROM_HOST}/api/v1/query" \
                 2>/dev/null \
-            | jq -c '[.data.result[]? | {namespace: (.metric.namespace // "unknown"), value: ((.value[1] // "0") | tonumber? // 0)}]' 2>/dev/null \
+                        | jq -c '[.data.result[]? | {
+                                namespace: (.metric.namespace // "unknown"),
+                                persistentvolumeclaim: (.metric.persistentvolumeclaim // null),
+                                value: ((.value[1] // "0") | tonumber? // 0)
+                            }]' 2>/dev/null \
             || echo '[]'
         }
 
         _ns_cpu_json=$(prom_query_vector 'sum by (namespace) (rate(container_cpu_usage_seconds_total{namespace!="",container!=""}[5m]))')
         _ns_mem_json=$(prom_query_vector 'sum by (namespace) (container_memory_working_set_bytes{namespace!="",container!=""})')
+
+        _pvc_used_json=$(prom_query_vector 'max by (namespace, persistentvolumeclaim) (kubelet_volume_stats_used_bytes{persistentvolumeclaim!=""})')
+        _pvc_capacity_json=$(prom_query_vector 'max by (namespace, persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes{persistentvolumeclaim!=""})')
+        jq -n \
+            --argjson used "${_pvc_used_json:-[]}" \
+            --argjson capacity "${_pvc_capacity_json:-[]}" '
+            reduce ($used[] | select(.persistentvolumeclaim != null) |
+                    {key: (.namespace + "/" + .persistentvolumeclaim), value: {used_bytes: .value}}) as $r
+                ({}; .[$r.key] = $r.value) as $step1 |
+            reduce ($capacity[] | select(.persistentvolumeclaim != null) |
+                    {key: (.namespace + "/" + .persistentvolumeclaim), value: .value}) as $r
+                ($step1; .[$r.key] = ((.[$r.key] // {}) + {capacity_bytes: $r.value}))
+        ' > "${CAPACITY_JSON}/pvc_volume_usage.json" 2>/dev/null \
+        || echo '{}' > "${CAPACITY_JSON}/pvc_volume_usage.json"
 
         jq -n \
             --argjson cpu "${_ns_cpu_json:-[]}" \
@@ -472,7 +504,7 @@ then
         cat > "${CAPACITY_JSON}/cluster_utilization.json" <<EOF
 {
     "collected_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-    "source": "prometheus",
+    "source": "prometheus-worker-nodes",
     "cpu": {
         "used_cores": ${CPU_USED_ROUNDED},
         "unit": "cores"
@@ -516,6 +548,7 @@ EOF
         echo "{\"source\":\"unavailable\",\"cpu\":{\"used_cores\":0},\"memory\":{\"used_gib\":0},\"filesystem\":{\"used_tib\":0,\"total_tib\":0,\"avail_tib\":0},\"ephemeral_pod_storage\":{\"used_gib\":0},\"network\":{\"rx_mbps\":0,\"tx_mbps\":0},\"pods\":{\"running\":${_fallback_pods}}}" \
         > "${CAPACITY_JSON}/cluster_utilization.json"
         echo '{}' > "${CAPACITY_JSON}/ns_actual_usage_prom.json"
+        echo '{}' > "${CAPACITY_JSON}/pvc_volume_usage.json"
 
     fi
 
@@ -528,6 +561,7 @@ else
     echo "{\"source\":\"unavailable\",\"cpu\":{\"used_cores\":0},\"memory\":{\"used_gib\":0},\"filesystem\":{\"used_tib\":0,\"total_tib\":0,\"avail_tib\":0},\"ephemeral_pod_storage\":{\"used_gib\":0},\"network\":{\"rx_mbps\":0,\"tx_mbps\":0},\"pods\":{\"running\":${_fallback_pods}}}" \
     > "${CAPACITY_JSON}/cluster_utilization.json"
     echo '{}' > "${CAPACITY_JSON}/ns_actual_usage_prom.json"
+    echo '{}' > "${CAPACITY_JSON}/pvc_volume_usage.json"
 
 fi
 
@@ -542,20 +576,19 @@ log INFO "Collecting pods"
 # --chunk-size keeps the oc process footprint small by paging the API server
 # response instead of buffering the full item list in memory at once.
 # The output is still a valid JSON list because oc merges chunks into a single object.
-# || true makes a possible OOM kill non-fatal — later stages handle a missing/partial file.
-oc get pods \
+if ! oc get pods \
 --all-namespaces \
 -o json \
 --chunk-size=250 \
 --request-timeout=120s \
 > "${CAPACITY_RAW}/pods.json" \
-2>"${CAPACITY_RAW}/pods_stderr.txt" || {
-    log INFO "WARN: oc get pods returned non-zero — writing empty list and continuing"
-    echo '{"items":[]}' > "${CAPACITY_RAW}/pods.json"
-}
-if ! jq -e '.items' "${CAPACITY_RAW}/pods.json" > /dev/null 2>&1; then
+2>"${CAPACITY_RAW}/pods_stderr.txt"; then
+    log ERROR "Pod collection failed: $(head -3 "${CAPACITY_RAW}/pods_stderr.txt" 2>/dev/null)"
+    exit 1
+fi
+if ! jq -e '.items | arrays' "${CAPACITY_RAW}/pods.json" > /dev/null 2>&1; then
     log ERROR "pods.json is not valid JSON — stderr: $(cat "${CAPACITY_RAW}/pods_stderr.txt" 2>/dev/null | head -3)"
-    echo '{"items":[]}' > "${CAPACITY_RAW}/pods.json"
+    exit 1
 fi
 
 POD_COUNT=$(jq '.items | length' \
@@ -810,6 +843,15 @@ jq -r '
 "${CAPACITY_RAW}/pvcs.json" \
 >> "${CAPACITY_CSV}/pvc_inventory.csv"
 
+# Cluster-scoped PV inventory is required to distinguish PVC state from the
+# underlying retained storage asset. Missing permission degrades to an empty
+# inventory without affecting the core capacity report.
+oc get persistentvolumes -o json --request-timeout=120s \
+> "${CAPACITY_RAW}/pvs.json" 2>"${CAPACITY_RAW}/pvs_stderr.txt" || {
+    log WARN "PersistentVolume inventory unavailable"
+    echo '{"items":[]}' > "${CAPACITY_RAW}/pvs.json"
+}
+
 
 
 
@@ -924,6 +966,12 @@ def mem_to_gib(v):
     name:      .metadata.name,
     kind:      .kind,
     replicas:  (.spec.replicas // 1),
+        toleration_keys: ([.spec.template.spec.tolerations[]?.key // empty] | unique),
+        node_selector_keys: ((.spec.template.spec.nodeSelector // {}) | keys),
+        affinity_keys: ([
+            .spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[]?.matchExpressions[]?.key
+            // empty
+        ] | unique),
     cpu_per_replica: ([
       .spec.template.spec.containers[]?.resources.requests.cpu? // "0"
     ] | map(cpu_to_cores(.)) | add // 0),
@@ -942,7 +990,7 @@ map({
   desired_cpu_cores:  (map(.desired_cpu) | add // 0 | (. * 1000 | round) / 1000),
   desired_mem_gib:    (map(.desired_mem) | add // 0 | (. * 100 | round) / 100),
   workload_count:     length,
-  workloads: map({name, kind, replicas, cpu_per_replica, mem_per_replica, desired_cpu, desired_mem})
+    workloads: map({name, kind, replicas, cpu_per_replica, mem_per_replica, desired_cpu, desired_mem, toleration_keys, node_selector_keys, affinity_keys})
 }) |
 {
   generated: now | todate,
@@ -962,6 +1010,137 @@ jq -r '.namespaces[] | [.namespace, .desired_cpu_cores, .desired_mem_gib, .workl
 
 DESIRED_NS_COUNT=$(jq '.namespaces | length' "${CAPACITY_JSON}/desired_capacity.json" 2>/dev/null || echo 0)
 log INFO "Desired capacity: ${DESIRED_NS_COUNT} namespaces with workloads"
+
+#############################################
+# Storage Planning and Stale Inventory
+#############################################
+
+log INFO "Building storage planning and stale-resource inventory"
+
+jq -n \
+    --slurpfile pvcs "${CAPACITY_RAW}/pvcs.json" \
+    --slurpfile pvs "${CAPACITY_RAW}/pvs.json" \
+    --slurpfile pods "${CAPACITY_RAW}/pods.json" \
+    --slurpfile deployments "${CAPACITY_RAW}/deployments.json" \
+    --slurpfile statefulsets "${CAPACITY_RAW}/statefulsets.json" \
+    --slurpfile volume_usage "${CAPACITY_JSON}/pvc_volume_usage.json" '
+    def age_days($timestamp):
+        if ($timestamp // "") == "" then 0
+        else (((now - ($timestamp | fromdateiso8601)) / 86400) | floor) end;
+    def capacity_gib:
+        if . == null or . == "" then 0
+        elif test("Ki$") then (sub("Ki$"; "") | tonumber) / 1048576
+        elif test("Mi$") then (sub("Mi$"; "") | tonumber) / 1024
+        elif test("Gi$") then (sub("Gi$"; "") | tonumber)
+        elif test("Ti$") then (sub("Ti$"; "") | tonumber) * 1024
+        else (tonumber? // 0) / 1073741824 end;
+
+    [($pods[0].items // [])[] |
+        select(.status.phase == "Running" or .status.phase == "Pending") |
+        .metadata.namespace as $namespace |
+        (.spec.volumes // [])[]? |
+        select(.persistentVolumeClaim.claimName != null) |
+        {key: ($namespace + "/" + .persistentVolumeClaim.claimName), pod: .metadata.name}
+    ] | group_by(.key) | map({key: .[0].key, value: map(.pod) | unique}) | from_entries as $pvc_refs |
+
+    [($pvcs[0].items // [])[] |
+        (.metadata.namespace + "/" + .metadata.name) as $key |
+        (.status.capacity.storage // .spec.resources.requests.storage // "0") as $capacity |
+        ($volume_usage[0][$key] // {}) as $usage |
+        {
+            namespace: .metadata.namespace,
+            name: .metadata.name,
+            status: (.status.phase // "Unknown"),
+            storageclass: (.spec.storageClassName // "default"),
+            volume_name: (.spec.volumeName // ""),
+            capacity_gib: ($capacity | capacity_gib),
+            used_gib: (($usage.used_bytes // 0) / 1073741824),
+            actual_capacity_gib: (($usage.capacity_bytes // 0) / 1073741824),
+            used_percent: (if ($usage.capacity_bytes // 0) > 0
+                       then (($usage.used_bytes // 0) / $usage.capacity_bytes * 100)
+                       else null end),
+            age_days: age_days(.metadata.creationTimestamp),
+            pod_reference_count: (($pvc_refs[$key] // []) | length),
+            referencing_pods: ($pvc_refs[$key] // []),
+            candidate_reason: (
+                if (.status.phase // "Unknown") != "Bound" then "PVC_" + (.status.phase // "UNKNOWN" | ascii_upcase)
+                elif (($pvc_refs[$key] // []) | length) == 0 then "NO_LIVE_POD_REFERENCE"
+                elif ($usage.capacity_bytes // 0) > 0 and (($usage.used_bytes // 0) / $usage.capacity_bytes * 100) >= 85 then "UTILIZATION_85_PERCENT"
+                else "IN_USE" end
+            )
+        }
+    ] as $pvc_inventory |
+
+    [($pvs[0].items // [])[] |
+        (.spec.capacity.storage // "0") as $capacity |
+        {
+            name: .metadata.name,
+            status: (.status.phase // "Unknown"),
+            storageclass: (.spec.storageClassName // "default"),
+            reclaim_policy: (.spec.persistentVolumeReclaimPolicy // "Unknown"),
+            capacity_gib: ($capacity | capacity_gib),
+            claim_namespace: (.spec.claimRef.namespace // ""),
+            claim_name: (.spec.claimRef.name // ""),
+            age_days: age_days(.metadata.creationTimestamp),
+            candidate_reason: (
+                if (.status.phase // "Unknown") == "Released" then "RELEASED_PV"
+                elif (.status.phase // "Unknown") == "Failed" then "FAILED_PV"
+                elif (.status.phase // "Unknown") == "Available" and age_days(.metadata.creationTimestamp) >= 30 then "AVAILABLE_30_DAYS"
+                else "ACTIVE" end
+            )
+        }
+    ] as $pv_inventory |
+
+    [($deployments[0].items // [])[], ($statefulsets[0].items // [])[] |
+        select((.spec.replicas // 1) == 0) |
+        {
+            namespace: .metadata.namespace,
+            kind: .kind,
+            name: .metadata.name,
+            replicas: 0,
+            age_days: age_days(.metadata.creationTimestamp),
+            candidate_reason: "ZERO_REPLICAS"
+        }
+    ] as $zero_replicas |
+
+    [($pods[0].items // [])[] |
+        select((.status.phase == "Succeeded" or .status.phase == "Failed") and age_days(.metadata.creationTimestamp) >= 7) |
+        {
+            namespace: .metadata.namespace,
+            name: .metadata.name,
+            phase: .status.phase,
+            age_days: age_days(.metadata.creationTimestamp),
+            owner: ((.metadata.ownerReferences // []) | map(select(.controller == true)) | first // {} |
+                      if .kind then (.kind + "/" + .name) else "standalone" end),
+            candidate_reason: "TERMINAL_POD_7_DAYS"
+        }
+    ] as $terminal_pods |
+
+    {
+        generated: (now | todate),
+        thresholds: {available_pv_days: 30, terminal_pod_days: 7},
+        note: "Candidates require owner and retention-policy review before deletion.",
+        summary: {
+            total_pvcs: ($pvc_inventory | length),
+            provisioned_gib: ($pvc_inventory | map(.capacity_gib) | add // 0),
+            used_gib: ($pvc_inventory | map(.used_gib) | add // 0),
+            pvc_usage_metrics_count: ($pvc_inventory | map(select(.used_percent != null)) | length),
+            high_utilization_pvcs: ($pvc_inventory | map(select(.candidate_reason == "UTILIZATION_85_PERCENT")) | length),
+            unused_pvcs: ($pvc_inventory | map(select(.candidate_reason == "NO_LIVE_POD_REFERENCE")) | length),
+            unused_pvc_gib: ($pvc_inventory | map(select(.candidate_reason == "NO_LIVE_POD_REFERENCE") | .capacity_gib) | add // 0),
+            non_bound_pvcs: ($pvc_inventory | map(select(.status != "Bound")) | length),
+            pv_candidates: ($pv_inventory | map(select(.candidate_reason != "ACTIVE")) | length),
+            zero_replica_controllers: ($zero_replicas | length),
+            old_terminal_pods: ($terminal_pods | length)
+        },
+        pvc_inventory: $pvc_inventory,
+        pv_inventory: $pv_inventory,
+        zero_replica_controllers: $zero_replicas,
+        old_terminal_pods: $terminal_pods
+    }
+' > "${CAPACITY_JSON}/storage_planning.json"
+
+log INFO "Storage planning inventory: ${CAPACITY_JSON}/storage_planning.json"
 
 log INFO "Collecting pod metrics"
 
@@ -1050,6 +1229,52 @@ else
 fi
 
 log INFO "Node metrics CSV: ${NODE_METRICS_CSV}"
+
+
+#############################################
+# Top Pod Metrics — normalized actual usage
+# Adapted from capacity_report_auto_html_v2.sh.
+#############################################
+
+log INFO "Collecting normalized top pod metrics"
+
+POD_METRICS_TOP_CSV="${CAPACITY_CSV}/15_pod_metrics_top.csv"
+POD_METRICS_TOP_JSON="${CAPACITY_JSON}/pod_metrics_top.json"
+echo "namespace,pod,cpu_used_cores,memory_used_gib" > "${POD_METRICS_TOP_CSV}"
+
+if oc adm top pods --all-namespaces --no-headers \
+     > "${CAPACITY_RAW}/adm_top_pods.txt" 2>/dev/null; then
+        awk '
+        {
+                namespace=$1; pod=$2; cpu=$3; memory=$4
+                if (cpu ~ /n$/)      cpu_cores=(substr(cpu,1,length(cpu)-1)+0)/1000000000
+                else if (cpu ~ /u$/) cpu_cores=(substr(cpu,1,length(cpu)-1)+0)/1000000
+                else if (cpu ~ /m$/) cpu_cores=(substr(cpu,1,length(cpu)-1)+0)/1000
+                else                 cpu_cores=cpu+0
+
+                if (memory ~ /Ki$/)      memory_gib=(substr(memory,1,length(memory)-2)+0)/1048576
+                else if (memory ~ /Mi$/) memory_gib=(substr(memory,1,length(memory)-2)+0)/1024
+                else if (memory ~ /Gi$/) memory_gib=substr(memory,1,length(memory)-2)+0
+                else if (memory ~ /Ti$/) memory_gib=(substr(memory,1,length(memory)-2)+0)*1024
+                else                     memory_gib=(memory+0)/1073741824
+
+                printf "%s,%s,%.6f,%.6f\n", namespace, pod, cpu_cores, memory_gib
+        }
+        ' "${CAPACITY_RAW}/adm_top_pods.txt" \
+        | sort -t',' -k3,3nr -k4,4nr \
+        | head -5000 >> "${POD_METRICS_TOP_CSV}"
+fi
+
+tail -n +2 "${POD_METRICS_TOP_CSV}" \
+| jq -Rn '[inputs | split(",") | {
+        namespace: .[0],
+        pod: .[1],
+        cpu_used_cores: (.[2] | tonumber? // 0),
+        memory_used_gib: (.[3] | tonumber? // 0)
+    }]' > "${POD_METRICS_TOP_JSON}" \
+|| echo '[]' > "${POD_METRICS_TOP_JSON}"
+
+log INFO "Top pod metrics: $(jq 'length' "${POD_METRICS_TOP_JSON}" 2>/dev/null || echo 0) pods"
 
 
 

@@ -200,12 +200,12 @@ then
     fi
 
     log INFO "Logging in to ${API_SERVER} as env=${CLUSTER_ENV}"
-    log INFO "Token length: ${#LOGIN_TOKEN} chars, prefix: ${LOGIN_TOKEN:0:12}..."
+    log INFO "Token configured (${#LOGIN_TOKEN} chars)"
 
     OC_LOGIN_OUT=$(oc login \
         --token="${LOGIN_TOKEN}" \
         --server="${API_SERVER}" \
-        --insecure-skip-tls-verify=true \
+        --insecure-skip-tls-verify="${OCP_INSECURE_SKIP_TLS_VERIFY:-false}" \
         2>&1) \
     || {
         log ERROR "oc login failed — server=${API_SERVER} env=${CLUSTER_ENV}"

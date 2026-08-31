@@ -2058,13 +2058,13 @@ FILENAME ~ /pod_node_map/ {
     next
 }
 {
-    # File 3: pod_requests_raw.csv -> "namespace","pod",cpu,mem
+  # File 3: pod_requests_raw.csv -> "namespace","pod","node",cpu,mem,"controller"
     gsub(/"/, "", $1); gsub(/"/, "", $2)
     key = $1 SUBSEP $2
     if (!(key in pod_node)) next
     node = pod_node[key]
-    req_cpu[node] += $3+0
-    req_mem[node] += $4+0
+  req_cpu[node] += $4+0
+  req_mem[node] += $5+0
 }
 END {
     for (n in req_cpu)
@@ -2081,13 +2081,14 @@ END {
 NODE_METRICS_CSV="${CAPACITY_CSV}/14_node_metrics.csv"
 
 awk -F',' '
-FNR==NR && FILENAME ~ /node_capacity/ {
+FILENAME ~ /node_capacity/ {
     # node_capacity.csv: node,role,cpu_alloc,mem_alloc
+  if (FNR==1) next
     gsub(/"/, "", $1)
     if ($1 != "") { alloc_cpu[$1]=$3+0; alloc_mem[$1]=$4+0; role[$1]=$2 }
     next
 }
-FNR==NR && FILENAME ~ /14_node/ {
+FILENAME ~ /14_node/ {
     # 14_node_metrics.csv: Node,CPU_Usage_Cores,CPU_Usage_Pct,Memory_Usage_GiB,...
     if (FNR==1) next
     gsub(/"/, "", $1)
@@ -2118,6 +2119,140 @@ rm -f "${CAPACITY_RAW}/node_requests.tmp"
 log INFO "Per-node pressure: ${NODE_PRESSURE_JSON}"
 
 
+#############################################
+# Complete Node and MachineSet Inventory
+#############################################
+
+log INFO "Building complete node and MachineSet inventory"
+
+jq -n \
+  --slurpfile nodes "${CAPACITY_RAW}/nodes.json" \
+  --slurpfile pools "${CAPACITY_JSON}/node_pools_raw.json" \
+  --slurpfile pressure "${NODE_PRESSURE_JSON}" \
+  --slurpfile pods "${CAPACITY_RAW}/pods.json" \
+  --slurpfile machinesets "${CAPACITY_RAW}/machinesets.json" '
+  def age_days($timestamp):
+    if ($timestamp // "") == "" then 0
+    else (((now - ($timestamp | fromdateiso8601)) / 86400) | floor) end;
+  def cpu_cores:
+    if . == null or . == "" then 0
+    elif test("m$") then (sub("m$"; "") | tonumber) / 1000
+    else (tonumber? // 0) end;
+  def mem_gib:
+    if . == null or . == "" then 0
+    elif test("Ki$") then (sub("Ki$"; "") | tonumber) / 1048576
+    elif test("Mi$") then (sub("Mi$"; "") | tonumber) / 1024
+    elif test("Gi$") then (sub("Gi$"; "") | tonumber)
+    elif test("Ti$") then (sub("Ti$"; "") | tonumber) * 1024
+    else (tonumber? // 0) / 1073741824 end;
+  def node_role:
+    if (.metadata.labels["node-role.kubernetes.io/master"] != null or
+        .metadata.labels["node-role.kubernetes.io/control-plane"] != null) then "master"
+    elif .metadata.labels["node-role.kubernetes.io/infra"] != null then "infra"
+    elif (.metadata.labels["node-role.kubernetes.io/worker"] != null or
+          .metadata.labels["node-role.kubernetes.io/compute"] != null) then "worker"
+    else "other" end;
+
+  [($pools[0] // [])[] as $pool | $pool.nodes[] | {key: ., value: $pool}] | from_entries as $pool_by_node |
+  [($pressure[0] // [])[] | {key: .node, value: .}] | from_entries as $pressure_by_node |
+  [($pods[0].items // [])[] | select(.status.phase == "Running" and .spec.nodeName != null) |
+    {node: .spec.nodeName}] | group_by(.node) |
+    map({key: .[0].node, value: length}) | from_entries as $pod_count_by_node |
+
+  [($nodes[0].items // [])[] |
+    . as $node |
+    ($node.metadata.name) as $name |
+    (node_role) as $role |
+    ($pool_by_node[$name] // {}) as $pool |
+    ($pressure_by_node[$name] // {}) as $metrics |
+    (($node.status.conditions // []) | map({key: .type, value: .status}) | from_entries) as $conditions |
+    (($node.metadata.labels["machine.openshift.io/cluster-api-machineset"] //
+      $node.metadata.annotations["machine.openshift.io/machine"] // "") | split("/") | last) as $machineset |
+    (($node.spec.taints // []) | map({key: (.key // ""), value: (.value // ""), effect: (.effect // "NoSchedule")})) as $taints |
+    (($pod_count_by_node[$name] // 0)) as $pod_count |
+    {
+      node: $name,
+      role: $role,
+      pool: ($pool.pool_name // $role),
+      classification: (if $pool.dedicated == true then "DEDICATED" elif $role == "worker" then "SHARED" else "N/A" end),
+      machineset: $machineset,
+      zone: ($node.metadata.labels["topology.kubernetes.io/zone"] // $node.metadata.labels["failure-domain.beta.kubernetes.io/zone"] // ""),
+      instance_type: ($node.metadata.labels["node.kubernetes.io/instance-type"] // $node.metadata.labels["beta.kubernetes.io/instance-type"] // ""),
+      kubelet_version: ($node.status.nodeInfo.kubeletVersion // ""),
+      os_image: ($node.status.nodeInfo.osImage // ""),
+      age_days: age_days($node.metadata.creationTimestamp),
+      ready: (($conditions.Ready // "Unknown") == "True"),
+      schedulable: (($node.spec.unschedulable // false) | not),
+      memory_pressure: (($conditions.MemoryPressure // "False") == "True"),
+      disk_pressure: (($conditions.DiskPressure // "False") == "True"),
+      pid_pressure: (($conditions.PIDPressure // "False") == "True"),
+      network_unavailable: (($conditions.NetworkUnavailable // "False") == "True"),
+      allocatable_cpu_cores: (($node.status.allocatable.cpu // "0") | cpu_cores),
+      allocatable_memory_gib: (($node.status.allocatable.memory // "0") | mem_gib),
+      allocatable_pods: (($node.status.allocatable.pods // "0") | tonumber? // 0),
+      requested_cpu_cores: ($metrics.cpu_req // 0),
+      requested_memory_gib: ($metrics.mem_req_gib // 0),
+      requested_cpu_pct: ($metrics.cpu_req_pct // 0),
+      requested_memory_pct: ($metrics.mem_req_pct // 0),
+      actual_cpu_cores: ($metrics.cpu_used // 0),
+      actual_memory_gib: ($metrics.mem_used_gib // 0),
+      actual_cpu_pct: ($metrics.cpu_used_pct // 0),
+      actual_memory_pct: ($metrics.mem_used_pct // 0),
+      running_pods: $pod_count,
+      taints: $taints,
+      candidate_reason: (
+        if ($conditions.Ready // "Unknown") != "True" then "NOT_READY"
+        elif (($conditions.MemoryPressure // "False") == "True" or
+              ($conditions.DiskPressure // "False") == "True" or
+              ($conditions.PIDPressure // "False") == "True") then "NODE_PRESSURE"
+        elif ($node.spec.unschedulable // false) then "UNSCHEDULABLE"
+        elif $role == "worker" and $pod_count == 0 then "EMPTY_WORKER"
+        else "HEALTHY" end
+      )
+    }
+  ] as $node_inventory |
+
+  [($machinesets[0].items // [])[] |
+    {
+      name: .metadata.name,
+      namespace: .metadata.namespace,
+      desired_replicas: (.spec.replicas // 0),
+      current_replicas: (.status.replicas // 0),
+      ready_replicas: (.status.readyReplicas // 0),
+      available_replicas: (.status.availableReplicas // 0),
+      instance_type: (.spec.template.spec.providerSpec.value.vmSize // .spec.template.spec.providerSpec.value.instanceType // ""),
+      zone: (.spec.template.spec.providerSpec.value.zone // ""),
+      candidate_reason: (
+        if (.spec.replicas // 0) == 0 then "ZERO_REPLICAS"
+        elif (.status.readyReplicas // 0) < (.spec.replicas // 0) then "NOT_FULLY_READY"
+        else "HEALTHY" end
+      )
+    }
+  ] as $machineset_inventory |
+
+  {
+    generated: (now | todate),
+    note: "Candidate reasons are inventory review signals, not automatic decommission recommendations.",
+    summary: {
+      total_nodes: ($node_inventory | length),
+      ready_nodes: ($node_inventory | map(select(.ready)) | length),
+      worker_nodes: ($node_inventory | map(select(.role == "worker")) | length),
+      dedicated_nodes: ($node_inventory | map(select(.classification == "DEDICATED")) | length),
+      unschedulable_nodes: ($node_inventory | map(select(.schedulable == false)) | length),
+      pressure_nodes: ($node_inventory | map(select(.candidate_reason == "NODE_PRESSURE")) | length),
+      empty_workers: ($node_inventory | map(select(.candidate_reason == "EMPTY_WORKER")) | length),
+      review_candidates: ($node_inventory | map(select(.candidate_reason != "HEALTHY")) | length),
+      machinesets: ($machineset_inventory | length),
+      machineset_candidates: ($machineset_inventory | map(select(.candidate_reason != "HEALTHY")) | length)
+    },
+    nodes: $node_inventory,
+    machinesets: $machineset_inventory
+  }
+' > "${CAPACITY_JSON}/node_machine_inventory.json"
+
+log INFO "Node and MachineSet inventory: ${CAPACITY_JSON}/node_machine_inventory.json"
+
+
 
 #############################################
 # Misplaced Dedicated Workloads
@@ -2146,7 +2281,9 @@ else
     # Build a jq array of the taint keys for the filter
     TAINT_KEYS_JQ=$(echo "${DEDICATED_TAINT_KEYS}" | jq -Rs 'split("\n") | map(select(length>0))')
 
-    jq --argjson taint_keys "${TAINT_KEYS_JQ}" '
+     jq --argjson taint_keys "${TAINT_KEYS_JQ}" \
+       --slurpfile pools "${CAPACITY_JSON}/node_pools.json" '
+     ($pools[0] | map(select(.dedicated)) | map(.nodes[]) | unique) as $dedicated_nodes |
     def targets_dedicated:
         # nodeSelector has a key matching any of the taint keys
         ((.spec.nodeSelector // {}) | keys | map(. as $k | $taint_keys[] | select(. == $k)) | length > 0) or
@@ -2159,6 +2296,8 @@ else
     .items[] |
     select(.status.phase == "Running" and .spec.nodeName != null) |
     select(targets_dedicated) |
+    . as $pod |
+    select(($dedicated_nodes | index($pod.spec.nodeName)) == null) |
     {
         namespace:   .metadata.namespace,
         pod:         .metadata.name,
@@ -2232,23 +2371,15 @@ if [[ -f "${CAPACITY_JSON}/desired_capacity.json" ]] && \
     TAINT_KEYS_JQ_INLINE=$(echo "${DEDICATED_TAINT_KEYS:-}" | jq -Rs 'split("\n") | map(select(length>0))')
 
     jq --argjson taint_keys "${TAINT_KEYS_JQ_INLINE:-[]}" '
-    def pool_hint(obj):
+    def pool_hint:
         if ($taint_keys | length) == 0 then "SHARED"
         else
-            # Check tolerations
-            ((obj.spec.template.spec.tolerations // [])
-             | map(select(.key as $k | $taint_keys | map(. == $k) | any))
-             | length > 0) as $tolerates |
-            # Check nodeSelector
-            ((obj.spec.template.spec.nodeSelector // {})
-             | keys | map(. as $k | $taint_keys[] | select(. == $k)) | length > 0) as $affined |
-            if ($tolerates or $affined) then "DEDICATED" else "SHARED" end
+        ([((.toleration_keys // []) + (.node_selector_keys // []) + (.affinity_keys // []))[] as $key |
+          $taint_keys[] | select(. == $key)] | length > 0) as $targets_dedicated |
+        if $targets_dedicated then "DEDICATED" else "SHARED" end
         end;
 
-    def label_workloads:
-        . | map(.workloads |= map(. + {pool_hint: "SHARED"}));
-
-    .
+    .namespaces |= map(.workloads |= map(. + {pool_hint: pool_hint}))
     ' "${CAPACITY_JSON}/desired_capacity.json" \
     > "${CAPACITY_JSON}/desired_capacity_enriched.json" 2>/dev/null \
     || cp "${CAPACITY_JSON}/desired_capacity.json" "${CAPACITY_JSON}/desired_capacity_enriched.json"

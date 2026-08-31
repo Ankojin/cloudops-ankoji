@@ -14,6 +14,9 @@ DB_INSERT_SCRIPT="/collector/insert_to_db.sh"
 
 echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) — Starting capacity collection ==="
 
+RUN_MARKER=$(mktemp)
+trap 'rm -f "${RUN_MARKER}"' EXIT
+
 # ── Static /etc/hosts injection (DNS workaround) ─────────────
 # Set DEV_IP / SIT_IP env vars on the ACA Job to bypass DNS when
 # the Container Apps VNet cannot resolve *.albtests.com hostnames.
@@ -44,8 +47,8 @@ fi
 # ── Debug: show what env vars the container received ─────────
 echo "DEBUG: DEV_API=${DEV_API:-<not set>}"
 echo "DEBUG: SIT_API=${SIT_API:-<not set>}"
-_dev_tok_len=${#DEV_TOKEN}; echo "DEBUG: DEV_TOKEN length=${_dev_tok_len}, prefix=${DEV_TOKEN:0:12}..."
-_sit_tok_len=${#SIT_TOKEN}; echo "DEBUG: SIT_TOKEN length=${_sit_tok_len}, prefix=${SIT_TOKEN:0:12}..."
+_dev_tok_len=${#DEV_TOKEN}; echo "DEBUG: DEV_TOKEN configured=$([[ ${_dev_tok_len} -gt 0 ]] && echo yes || echo no)"
+_sit_tok_len=${#SIT_TOKEN}; echo "DEBUG: SIT_TOKEN configured=$([[ ${_sit_tok_len} -gt 0 ]] && echo yes || echo no)"
 echo "DEBUG: DB_HOST=${DB_HOST:-<not set>}, DB_NAME=${DB_NAME:-<not set>}, DB_USER=${DB_USER:-<not set>}"
 
 # ── Step 1: Run collection + report generation ────────────────
@@ -78,9 +81,17 @@ fi
 # ── Step 2: Find latest output dirs and insert to DB ─────────
 OUTPUT_BASE="${PLANNER_DIR}/output"
 
-# run-multi-env.sh creates timestamped dirs: DEV_YYYYMMDD_HHMMSS
+# run-multi-env.sh creates timestamped dirs using the configured labels.
+# Only consider directories touched after this run started so a failed
+# collection cannot reinsert an older snapshot with a fresh DB timestamp.
 for ENV in DEV SIT; do
-  LATEST_DIR=$(find "${OUTPUT_BASE}" -maxdepth 1 -type d -name "${ENV}_*" \
+  if [[ "${ENV}" == "DEV" ]]; then
+    SOURCE_LABEL="${DEV_ENV_LABEL:-DEV}"
+  else
+    SOURCE_LABEL="${SIT_ENV_LABEL:-SIT}"
+  fi
+
+  LATEST_DIR=$(find "${OUTPUT_BASE}" -maxdepth 1 -type d -name "${SOURCE_LABEL}_*" -newer "${RUN_MARKER}" \
     | sort | tail -1)
 
   if [[ -n "${LATEST_DIR}" ]]; then

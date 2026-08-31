@@ -21,6 +21,14 @@ Additional CSV exports provide an auditable scheduling inventory:
 - `pod_tolerations.csv`
 - `pool_capacity_detail.csv`
 
+The live dashboard also provides a complete Node and Machine Inventory with:
+
+- Node role, pool, MachineSet, zone, instance type, age, and kubelet version
+- Ready/schedulable state, node pressure conditions, allocatable resources, and pod capacity
+- Requested and actual CPU/memory per node
+- Taints and conservative review candidates for unhealthy, unschedulable, or empty workers
+- MachineSet desired, current, ready, and available replica inventory
+
 
 ---
 
@@ -41,6 +49,10 @@ Collects:
 - Pod placement, effective requests, init-container reservations, and tolerations
 - PVCs
 - StorageClasses
+- PersistentVolumes and reclaim policies
+- Provisioned versus actual PVC usage when kubelet volume metrics are available
+- Storage and stale-resource review candidates: unused/non-Bound PVCs,
+  Released/Failed PVs, zero-replica controllers, and old terminal pods
 
 
 ## Capacity Analysis

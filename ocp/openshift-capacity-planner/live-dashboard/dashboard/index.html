@@ -123,8 +123,10 @@ tr:last-child td{border-bottom:none}
   <button onclick="switchTab('dev',this)">DEV Details</button>
   <button onclick="switchTab('sit',this)">SIT Details</button>
   <button onclick="switchTab('pools',this)">Dedicated Node Pools</button>
+  <button onclick="switchTab('nodeinventory',this)">Node Inventory</button>
   <button onclick="switchTab('namespaces',this)">Namespaces</button>
   <button onclick="switchTab('nodepressure',this)">&#128202; Node Pressure</button>
+  <button onclick="switchTab('podmetrics',this)">&#128202; Pod Metrics</button>
   <button onclick="switchTab('desiredreplicas',this)">&#128295; Desired Replicas</button>
   <button onclick="switchTab('misplaced',this)">&#9888; Misplaced</button>
   <button onclick="switchTab('pvcs',this)">&#128190; PVC Inventory</button>
@@ -147,16 +149,16 @@ tr:last-child td{border-bottom:none}
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
           <div><div style="font-size:11px;color:#888">Workers</div><div class="metric" style="font-size:22px" id="ov-dev-workers">—</div></div>
           <div><div style="font-size:11px;color:#888">Masters</div><div class="metric" style="font-size:22px" id="ov-dev-masters">—</div></div>
-          <div><div style="font-size:11px;color:#888">CPU Cores</div><div class="metric" style="font-size:22px" id="ov-dev-cpu">—</div></div>
-          <div><div style="font-size:11px;color:#888">Memory GiB</div><div class="metric" style="font-size:22px" id="ov-dev-mem">—</div></div>
+          <div><div style="font-size:11px;color:#888">CPU: Workers + Masters</div><div class="metric" style="font-size:22px" id="ov-dev-cpu">—</div></div>
+          <div><div style="font-size:11px;color:#888">Memory: Workers + Masters</div><div class="metric" style="font-size:22px" id="ov-dev-mem">—</div></div>
           <div><div style="font-size:11px;color:#888">Pods</div><div class="metric" style="font-size:22px" id="ov-dev-pods">—</div></div>
         </div>
         <div style="margin-bottom:7px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>CPU Requested</span><span id="ov-dev-cpupct">—</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Worker CPU Requested</span><span id="ov-dev-cpupct">—</span></div>
           <div class="bar-wrap"><div class="bar-fill bar-safe" id="ov-dev-cpubar" style="width:0%;height:10px"></div></div>
         </div>
         <div style="margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Memory Requested</span><span id="ov-dev-mempct">—</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Worker Memory Requested</span><span id="ov-dev-mempct">—</span></div>
           <div class="bar-wrap"><div class="bar-fill bar-safe" id="ov-dev-membar" style="width:0%;height:10px"></div></div>
         </div>
         <span id="ov-dev-pressure" class="badge-green">—</span>
@@ -169,16 +171,16 @@ tr:last-child td{border-bottom:none}
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
           <div><div style="font-size:11px;color:#888">Workers</div><div class="metric" style="font-size:22px" id="ov-sit-workers">—</div></div>
           <div><div style="font-size:11px;color:#888">Masters</div><div class="metric" style="font-size:22px" id="ov-sit-masters">—</div></div>
-          <div><div style="font-size:11px;color:#888">CPU Cores</div><div class="metric" style="font-size:22px" id="ov-sit-cpu">—</div></div>
-          <div><div style="font-size:11px;color:#888">Memory GiB</div><div class="metric" style="font-size:22px" id="ov-sit-mem">—</div></div>
+          <div><div style="font-size:11px;color:#888">CPU: Workers + Masters</div><div class="metric" style="font-size:22px" id="ov-sit-cpu">—</div></div>
+          <div><div style="font-size:11px;color:#888">Memory: Workers + Masters</div><div class="metric" style="font-size:22px" id="ov-sit-mem">—</div></div>
           <div><div style="font-size:11px;color:#888">Pods</div><div class="metric" style="font-size:22px" id="ov-sit-pods">—</div></div>
         </div>
         <div style="margin-bottom:7px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>CPU Requested</span><span id="ov-sit-cpupct">—</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Worker CPU Requested</span><span id="ov-sit-cpupct">—</span></div>
           <div class="bar-wrap"><div class="bar-fill bar-safe" id="ov-sit-cpubar" style="width:0%;height:10px"></div></div>
         </div>
         <div style="margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Memory Requested</span><span id="ov-sit-mempct">—</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Worker Memory Requested</span><span id="ov-sit-mempct">—</span></div>
           <div class="bar-wrap"><div class="bar-fill bar-safe" id="ov-sit-membar" style="width:0%;height:10px"></div></div>
         </div>
         <span id="ov-sit-pressure" class="badge-green">—</span>
@@ -201,6 +203,42 @@ tr:last-child td{border-bottom:none}
       <div class="card"><h2 style="color:#2e75b6">DEV — Dedicated Node Pools</h2><div id="pools-dev-content"><p style="color:#aaa">Loading…</p></div></div>
       <div class="card"><h2 style="color:#856404">SIT — Dedicated Node Pools</h2><div id="pools-sit-content"><p style="color:#aaa">Loading…</p></div></div>
     </div>
+  </div>
+</div>
+
+<!-- Node and Machine Inventory tab -->
+<div id="tab-nodeinventory" class="tab-content" style="display:none">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <h2 style="margin:0">Node &amp; Machine Inventory</h2>
+      <select id="ni-env-select" onchange="renderNodeInventoryTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px">
+        <option value="DEV">DEV</option><option value="SIT">SIT</option>
+      </select>
+      <select id="ni-role-filter" onchange="renderNodeInventoryTables()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px">
+        <option value="all">All roles</option><option value="worker">Workers</option>
+        <option value="master">Masters</option><option value="infra">Infrastructure</option><option value="other">Other</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input id="ni-candidates-only" type="checkbox" onchange="renderNodeInventoryTables()"/> Review candidates only
+      </label>
+      <button onclick="exportNodeInventoryCsv()" style="margin-left:auto;background:#2e75b6;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px">&#8681; Export CSV</button>
+    </div>
+    <div class="info" style="margin-bottom:14px">
+      Complete node inventory joined with allocatable capacity, scheduled requests, actual usage, health conditions,
+      placement, taints, and MachineSet status. Candidate flags require operator review and are not automatic removal recommendations.
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
+      <div style="padding:10px;border-left:4px solid #2e75b6;background:#f7fafc"><small>Total Nodes</small><div id="ni-total" class="metric" style="font-size:21px">—</div></div>
+      <div style="padding:10px;border-left:4px solid #16a085;background:#f7fafc"><small>Ready</small><div id="ni-ready" class="metric" style="font-size:21px">—</div></div>
+      <div style="padding:10px;border-left:4px solid #5ba4cf;background:#f7fafc"><small>Workers</small><div id="ni-workers" class="metric" style="font-size:21px">—</div></div>
+      <div style="padding:10px;border-left:4px solid #d29922;background:#f7fafc"><small>Dedicated</small><div id="ni-dedicated" class="metric" style="font-size:21px">—</div></div>
+      <div style="padding:10px;border-left:4px solid #e67e22;background:#f7fafc"><small>Unschedulable</small><div id="ni-unschedulable" class="metric" style="font-size:21px">—</div></div>
+      <div style="padding:10px;border-left:4px solid #c0392b;background:#f7fafc"><small>Review Candidates</small><div id="ni-candidates" class="metric" style="font-size:21px">—</div></div>
+    </div>
+    <h3 style="margin:0 0 8px">Nodes</h3>
+    <div id="ni-node-table-wrap" style="overflow-x:auto"><p style="color:#aaa">Loading…</p></div>
+    <h3 style="margin:18px 0 8px">MachineSets</h3>
+    <div id="ni-machineset-table-wrap" style="overflow-x:auto"><p style="color:#aaa">Loading…</p></div>
   </div>
 </div>
 
@@ -273,6 +311,23 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 
+<!-- ══ Pod Metrics tab ══ -->
+<div id="tab-podmetrics" class="tab-content" style="display:none">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <h2 style="margin:0">Pod Metrics</h2>
+      <select id="pm-env-select" onchange="renderPodMetricsTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px">
+        <option value="DEV">DEV</option><option value="SIT">SIT</option>
+      </select>
+      <input id="pm-filter" type="text" placeholder="Filter namespace or pod" oninput="renderPodMetricsTable()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;width:240px"/>
+    </div>
+    <div class="info" style="margin-bottom:12px">
+      Actual pod consumption collected from <code>oc adm top pods</code>, normalized to CPU cores and GiB and ordered by CPU usage.
+    </div>
+    <div id="pm-table-wrap"><p style="color:#aaa">Loading…</p></div>
+  </div>
+</div>
+
 <!-- ══ Desired Replicas tab ══ -->
 <div id="tab-desiredreplicas" class="tab-content" style="display:none">
   <div class="card">
@@ -314,7 +369,7 @@ tr:last-child td{border-bottom:none}
 <div id="tab-pvcs" class="tab-content" style="display:none">
   <div class="card">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-      <h2 style="margin:0">&#128190; PVC Inventory</h2>
+      <h2 style="margin:0">&#128190; Storage Planning &amp; Stale Inventory</h2>
       <select id="pvc-env-select" onchange="renderPvcTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer">
         <option value="DEV">DEV</option>
         <option value="SIT">SIT</option>
@@ -328,6 +383,11 @@ tr:last-child td{border-bottom:none}
       <button onclick="exportPvcCsv()" style="margin-left:auto;background:#2e75b6;color:#fff;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px">&#8681; Export CSV</button>
     </div>
 
+    <div class="info" style="margin-bottom:14px">
+      Inventory candidates are based on current pod references and resource state. Review workload ownership,
+      retention policy, backup requirements, and application schedules before deleting any resource.
+    </div>
+
     <!-- Summary cards -->
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
       <div class="card" style="flex:1;min-width:140px;padding:12px 16px">
@@ -337,6 +397,21 @@ tr:last-child td{border-bottom:none}
       <div class="card" style="flex:1;min-width:140px;padding:12px 16px">
         <div style="font-size:12px;color:#888">Total Capacity</div>
         <div id="pvc-total-gib" style="font-size:22px;font-weight:700;color:#16a085">—</div>
+      </div>
+      <div class="card" style="flex:1;min-width:140px;padding:12px 16px">
+        <div style="font-size:12px;color:#888">Actual Used</div>
+        <div id="storage-used-gib" style="font-size:22px;font-weight:700;color:#2e75b6">—</div>
+        <div id="storage-metrics-coverage" style="font-size:11px;color:#888">—</div>
+      </div>
+      <div class="card" style="flex:1;min-width:160px;padding:12px 16px">
+        <div style="font-size:12px;color:#888">Unused PVC Candidates</div>
+        <div id="storage-unused-pvcs" style="font-size:22px;font-weight:700;color:#d97706">—</div>
+        <div id="storage-unused-gib" style="font-size:11px;color:#888">—</div>
+      </div>
+      <div class="card" style="flex:1;min-width:160px;padding:12px 16px">
+        <div style="font-size:12px;color:#888">Other Stale Candidates</div>
+        <div id="storage-stale-count" style="font-size:22px;font-weight:700;color:#c0392b">—</div>
+        <div style="font-size:11px;color:#888">PVs, controllers, terminal pods</div>
       </div>
       <div class="card" style="flex:2;min-width:240px;padding:12px 16px">
         <div style="font-size:12px;color:#888;margin-bottom:6px">By Storage Class</div>
@@ -348,7 +423,13 @@ tr:last-child td{border-bottom:none}
       </div>
     </div>
 
+    <div style="margin-bottom:18px">
+      <h3 style="margin:0 0 8px">Review Candidates</h3>
+      <div id="storage-candidates-wrap" style="overflow-x:auto"><p style="color:#aaa">Loading…</p></div>
+    </div>
+
     <!-- PVC table -->
+    <h3 style="margin:0 0 8px">Complete PVC Inventory</h3>
     <div id="pvc-table-wrap" style="overflow-x:auto">
       <p style="color:#aaa">Loading…</p>
     </div>
@@ -422,6 +503,7 @@ const REFRESH_SECS = 300;
 let _status={}, _metrics={}, _history={}, _pools={}, _ns={};
 let _sparkCharts={}, _histCharts={};
 let _remaining = REFRESH_SECS;
+let _analyticsData = {};
 
 // ── Tab switching ────────────────────────────────────────────
 function switchTab(id,btn){
@@ -436,7 +518,9 @@ function switchTab(id,btn){
   btn.classList.add('active');
   if(id==='analytics')      renderAnalyticsTab();
   if(id==='pvcs')           renderPvcTab();
+  if(id==='nodeinventory')  renderNodeInventoryTab();
   if(id==='nodepressure')   renderNodePressureTab();
+  if(id==='podmetrics')     renderPodMetricsTab();
   if(id==='desiredreplicas')renderDesiredReplicasTab();
   if(id==='misplaced')      renderMisplacedTab();
 }
@@ -588,8 +672,8 @@ function buildEnvTab(env){
       <tr><td>Worker Memory Capacity (Standard)</td><td><b id="${p}-plan-mem">—</b> GiB</td></tr>
       <tr><td>CPU Requested (% of workers)</td><td><b id="${p}-plan-cpu-pct">—</b></td></tr>
       <tr><td>Memory Requested (% of workers)</td><td><b id="${p}-plan-mem-pct">—</b></td></tr>
-      <tr><td>CPU Actual Used</td><td><b id="${p}-plan-cpu-used">—</b> cores</td></tr>
-      <tr><td>Memory Actual Used</td><td><b id="${p}-plan-mem-used">—</b> GiB</td></tr>
+      <tr><td>CPU Actual Used (all workers)</td><td><b id="${p}-plan-cpu-used">—</b> cores</td></tr>
+      <tr><td>Memory Actual Used (all workers)</td><td><b id="${p}-plan-mem-used">—</b> GiB</td></tr>
       <tr style="background:#f0f9f4"><td>Remaining CPU (before 80% threshold)</td><td><b id="${p}-plan-cpu-rem" style="color:#16a085">—</b></td></tr>
       <tr style="background:#f0f9f4"><td>Remaining Memory (before 80% threshold)</td><td><b id="${p}-plan-mem-rem" style="color:#16a085">—</b></td></tr>
       <tr style="background:#fff8f0"><td>Nodes to Add (to restore safe headroom)</td><td><b id="${p}-plan-nodes-add" style="color:#c0392b">—</b></td></tr>
@@ -699,16 +783,13 @@ function renderOverview(envs){
     ($('ov-'+p+'-time')||{}).textContent=d.collected_at?new Date(d.collected_at).toLocaleString():'—';
     ($('ov-'+p+'-workers')||{}).textContent=d.worker_nodes??'—';
     ($('ov-'+p+'-masters')||{}).textContent=d.master_nodes??'—';
-    // all_worker_cpu/mem is populated from the first post-rebuild collection run.
-    // Fall back gracefully to total_cpu/total_mem_gib for any older snapshot
-    // (shows whole cluster rather than nothing, still useful).
-    // all_worker_cpu = blended all-worker (dedicated+standard, no masters/infra)
-    // Falls back to worker_cpu (standard-only) when all_worker_cpu not yet populated
-    // Only falls back to total_cpu as absolute last resort (includes masters)
-    const allCpu = +(d.all_worker_cpu||0) || +(d.worker_cpu||0)+(+(d.dedicated_cpu||0)) || +(d.total_cpu||0);
-    const allMem = +(d.all_worker_mem_gib||0) || +(d.worker_mem_gib||0) || +(d.total_mem_gib||0);
-    ($('ov-'+p+'-cpu')||{}).textContent=allCpu>0?f1(allCpu):'—';
-    ($('ov-'+p+'-mem')||{}).textContent=allMem>0?f1(allMem):'—';
+    // Overview inventory combines every worker pool with the control plane.
+    // Older snapshots fall back to cluster totals when all-worker fields do not exist.
+    const workerCpu=+(d.all_worker_cpu||0), workerMem=+(d.all_worker_mem_gib||0);
+    const overviewCpu=workerCpu>0?workerCpu+(+(d.master_cpu||0)):+(d.total_cpu||0);
+    const overviewMem=workerMem>0?workerMem+(+(d.master_mem_gib||0)):+(d.total_mem_gib||0);
+    ($('ov-'+p+'-cpu')||{}).textContent=overviewCpu>0?f1(overviewCpu)+' cores':'—';
+    ($('ov-'+p+'-mem')||{}).textContent=overviewMem>0?f1(overviewMem)+' GiB':'—';
     ($('ov-'+p+'-pods')||{}).textContent=d.pods_running??'—';
     ($('ov-'+p+'-cpupct')||{}).textContent=pct(cpuP);
     ($('ov-'+p+'-mempct')||{}).textContent=pct(memP);
@@ -889,6 +970,7 @@ function renderNamespacesTab(){
 async function fetchAll(){
   $('overlay').classList.remove('hidden');
   $('overlay-msg').textContent='Fetching live data…';
+  _analyticsData = {};
   try{
     const statusRes=await fetch(API+'/api/v1/status');
     if(!statusRes.ok) throw new Error('API /status '+statusRes.status);
@@ -905,7 +987,7 @@ async function fetchAll(){
         fetch(API+'/api/v1/metrics/'+env),
         fetch(API+'/api/v1/history/'+env+'?hours=24'),
         fetch(API+'/api/v1/pools/'+env),
-        fetch(API+'/api/v1/namespaces/'+env+'?top=100'),
+        fetch(API+'/api/v1/namespaces/'+env+'?top=1000'),
       ]);
       if(mR.ok) _metrics[env]=await mR.json();
       if(hR.ok) _history[env]=await hR.json();
@@ -945,6 +1027,103 @@ async function changeHistoryRange(env){
 
 // ── Boot ──────────────────────────────────────────────────────
 fetchAll();
+
+// Node and Machine Inventory tab
+let _nodeInventoryData = {};
+
+async function renderNodeInventoryTab(){
+  const env = ($('ni-env-select')||{value:'DEV'}).value||'DEV';
+  const nodeWrap = $('ni-node-table-wrap');
+  const machineWrap = $('ni-machineset-table-wrap');
+  if(nodeWrap) nodeWrap.innerHTML='<p style="color:#aaa">Loading…</p>';
+  if(machineWrap) machineWrap.innerHTML='<p style="color:#aaa">Loading…</p>';
+  try {
+    const response = await fetch(`/api/v1/node-inventory/${env}`);
+    if(!response.ok) throw new Error(await response.text());
+    _nodeInventoryData[env] = await response.json();
+    renderNodeInventoryTables();
+  } catch(error) {
+    if(nodeWrap) nodeWrap.innerHTML=`<p style="color:red">Failed to load node inventory: ${error.message}</p>`;
+    if(machineWrap) machineWrap.innerHTML='';
+  }
+}
+
+function renderNodeInventoryTables(){
+  const env = ($('ni-env-select')||{value:'DEV'}).value||'DEV';
+  const data = _nodeInventoryData[env]||{};
+  const summary = data.summary||{};
+  const role = ($('ni-role-filter')||{value:'all'}).value||'all';
+  const candidatesOnly = !!($('ni-candidates-only')||{}).checked;
+
+  ($('ni-total')||{}).textContent=summary.total_nodes??'—';
+  ($('ni-ready')||{}).textContent=summary.ready_nodes??'—';
+  ($('ni-workers')||{}).textContent=summary.worker_nodes??'—';
+  ($('ni-dedicated')||{}).textContent=summary.dedicated_nodes??'—';
+  ($('ni-unschedulable')||{}).textContent=summary.unschedulable_nodes??'—';
+  ($('ni-candidates')||{}).textContent=summary.review_candidates??'—';
+
+  const nodes=(data.nodes||[]).filter(node=>(role==='all'||node.role===role)&&(!candidatesOnly||node.candidate_reason!=='HEALTHY'));
+  const nodeWrap=$('ni-node-table-wrap');
+  if(nodeWrap){
+    if(!nodes.length){
+      nodeWrap.innerHTML='<div class="info">No nodes match the selected filters.</div>';
+    } else {
+      let html='<div style="max-height:560px;overflow:auto;border:1px solid #e4e7ec"><table><thead><tr><th>Node</th><th>Role / Pool</th><th>Health</th><th>MachineSet / Zone</th><th>Type / Version</th><th>Age</th><th>Pods</th><th>CPU Request</th><th>CPU Used</th><th>Memory Request</th><th>Memory Used</th><th>Taints</th><th>Review Signal</th></tr></thead><tbody>';
+      nodes.forEach((node,index)=>{
+        const reason=node.candidate_reason||'HEALTHY';
+        const reasonColor=reason==='HEALTHY'?'#1a7f37':reason==='EMPTY_WORKER'?'#d97706':'#c0392b';
+        const health=[node.ready?'Ready':'NotReady',node.schedulable?'Schedulable':'Unschedulable',node.memory_pressure?'MemoryPressure':'',node.disk_pressure?'DiskPressure':'',node.pid_pressure?'PIDPressure':''].filter(Boolean).join(', ');
+        const taints=(node.taints||[]).map(taint=>`${taint.key}${taint.value?'='+taint.value:''}:${taint.effect}`).join('; ');
+        html+=`<tr style="background:${index%2===0?'#fff':'#f9f9f9'}">
+          <td style="font-family:monospace;font-size:11px;max-width:210px;word-break:break-all">${node.node||'—'}</td>
+          <td><b>${node.role||'—'}</b><br><small>${node.pool||'—'} · ${node.classification||'—'}</small></td>
+          <td style="font-size:11px;color:${node.ready&&!node.memory_pressure&&!node.disk_pressure&&!node.pid_pressure?'#1a7f37':'#c0392b'}">${health}</td>
+          <td style="font-size:11px">${node.machineset||'—'}<br><small>${node.zone||'—'}</small></td>
+          <td style="font-size:11px">${node.instance_type||'—'}<br><small>${node.kubelet_version||'—'}</small></td>
+          <td style="text-align:right">${node.age_days??0}d</td><td style="text-align:right">${node.running_pods??0} / ${node.allocatable_pods??0}</td>
+          <td style="text-align:right">${f1(node.requested_cpu_cores)} / ${f1(node.allocatable_cpu_cores)}<br><small>${pct(node.requested_cpu_pct)}</small></td>
+          <td style="text-align:right">${node.actual_cpu_pct>0?f1(node.actual_cpu_cores)+' · '+pct(node.actual_cpu_pct):'—'}</td>
+          <td style="text-align:right">${f1(node.requested_memory_gib)} / ${f1(node.allocatable_memory_gib)}<br><small>${pct(node.requested_memory_pct)}</small></td>
+          <td style="text-align:right">${node.actual_memory_pct>0?f1(node.actual_memory_gib)+' GiB · '+pct(node.actual_memory_pct):'—'}</td>
+          <td style="font-size:10px;max-width:220px;word-break:break-word">${taints||'—'}</td>
+          <td><span style="color:${reasonColor};font-weight:700;font-size:11px">${reason.replaceAll('_',' ')}</span></td></tr>`;
+      });
+      nodeWrap.innerHTML=html+'</tbody></table></div>';
+    }
+  }
+
+  const machineWrap=$('ni-machineset-table-wrap');
+  const machinesets=data.machinesets||[];
+  if(machineWrap){
+    if(!machinesets.length){
+      machineWrap.innerHTML='<div class="info">MachineSets are not available or the collector identity cannot list them.</div>';
+    } else {
+      let html='<table><thead><tr><th>MachineSet</th><th>Zone</th><th>Instance Type</th><th>Desired</th><th>Current</th><th>Ready</th><th>Available</th><th>Status</th></tr></thead><tbody>';
+      machinesets.forEach((machine,index)=>{
+        const healthy=machine.candidate_reason==='HEALTHY';
+        html+=`<tr style="background:${index%2===0?'#fff':'#f9f9f9'}"><td style="font-family:monospace;font-size:12px">${machine.name||'—'}</td>
+          <td>${machine.zone||'—'}</td><td>${machine.instance_type||'—'}</td><td style="text-align:right">${machine.desired_replicas??0}</td>
+          <td style="text-align:right">${machine.current_replicas??0}</td><td style="text-align:right">${machine.ready_replicas??0}</td>
+          <td style="text-align:right">${machine.available_replicas??0}</td><td style="color:${healthy?'#1a7f37':'#c0392b'};font-weight:700">${(machine.candidate_reason||'UNKNOWN').replaceAll('_',' ')}</td></tr>`;
+      });
+      machineWrap.innerHTML=html+'</tbody></table>';
+    }
+  }
+}
+
+function exportNodeInventoryCsv(){
+  const env=($('ni-env-select')||{value:'DEV'}).value||'DEV';
+  const role=($('ni-role-filter')||{value:'all'}).value||'all';
+  const candidatesOnly=!!($('ni-candidates-only')||{}).checked;
+  const nodes=((_nodeInventoryData[env]||{}).nodes||[]).filter(node=>(role==='all'||node.role===role)&&(!candidatesOnly||node.candidate_reason!=='HEALTHY'));
+  const cell=value=>`"${String(value??'').replaceAll('"','""')}"`;
+  const columns=['node','role','pool','classification','machineset','zone','instance_type','kubelet_version','age_days','ready','schedulable','running_pods','allocatable_pods','allocatable_cpu_cores','requested_cpu_cores','requested_cpu_pct','actual_cpu_cores','actual_cpu_pct','allocatable_memory_gib','requested_memory_gib','requested_memory_pct','actual_memory_gib','actual_memory_pct','candidate_reason'];
+  const csv=[columns.join(','),...nodes.map(node=>columns.map(column=>cell(node[column])).join(','))].join('\n');
+  const link=document.createElement('a');
+  link.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  link.download=`node_inventory_${env}_${new Date().toISOString().slice(0,10)}.csv`;
+  link.click();
+}
 
 // ── Node Pressure tab ────────────────────────────────────────
 let _npData = {};
@@ -996,6 +1175,48 @@ async function renderNodePressureTab(){
   } catch(e) {
     wrap.innerHTML=`<p style="color:red">Failed to load: ${e.message}</p>`;
   }
+}
+
+// ── Pod Metrics tab ──────────────────────────────────────────
+let _pmData = {};
+
+async function renderPodMetricsTab(){
+  const env = ($('pm-env-select')||{value:'DEV'}).value||'DEV';
+  const wrap = $('pm-table-wrap'); if(!wrap) return;
+  wrap.innerHTML='<p style="color:#aaa">Loading…</p>';
+  try {
+    const r = await fetch(`/api/v1/pod-metrics/${env}?limit=5000`);
+    if(!r.ok) throw new Error(await r.text());
+    _pmData[env] = await r.json();
+    renderPodMetricsTable();
+  } catch(e) {
+    wrap.innerHTML=`<p style="color:red">Failed to load: ${e.message}</p>`;
+  }
+}
+
+function renderPodMetricsTable(){
+  const env = ($('pm-env-select')||{value:'DEV'}).value||'DEV';
+  const filter = (($('pm-filter')||{}).value||'').toLowerCase();
+  const wrap = $('pm-table-wrap'); if(!wrap) return;
+  const pods = ((_pmData[env]||{}).pods||[]).filter(p=>
+    !filter || (p.namespace||'').toLowerCase().includes(filter) || (p.pod||'').toLowerCase().includes(filter)
+  );
+  if(!pods.length){
+    wrap.innerHTML='<p style="color:#aaa">No pod metrics available for this selection.</p>';
+    return;
+  }
+
+  let h='<div style="overflow-x:auto;max-height:560px;border:1px solid #e4e7ec;border-radius:8px"><table><thead><tr><th>Namespace</th><th>Pod</th><th>CPU Used</th><th>Memory Used</th></tr></thead><tbody>';
+  pods.forEach((pod,index)=>{
+    h+=`<tr style="background:${index%2===0?'#fff':'#f9f9f9'}">
+      <td style="font-size:12px">${pod.namespace||'—'}</td>
+      <td style="font-family:monospace;font-size:11px">${pod.pod||'—'}</td>
+      <td style="text-align:right;font-weight:600;color:#2e75b6">${(+(pod.cpu_used_cores||0)).toFixed(4)} cores</td>
+      <td style="text-align:right;font-weight:600;color:#16a085">${f1(pod.memory_used_gib)} GiB</td>
+    </tr>`;
+  });
+  h+='</tbody></table></div>';
+  wrap.innerHTML=h;
 }
 
 // ── Desired Replicas tab ──────────────────────────────────────
@@ -1144,18 +1365,28 @@ async function renderMisplacedTab(){
 
 // ── PVC Inventory tab ─────────────────────────────────────────
 let _pvcData = {};
+let _storagePlanningData = {};
 
 async function renderPvcTab(){
   const env = ($('pvc-env-select')||{value:'DEV'}).value || 'DEV';
   ($('pvc-table-wrap')||{}).innerHTML = '<p style="color:#aaa">Loading…</p>';
+  ($('storage-candidates-wrap')||{}).innerHTML = '<p style="color:#aaa">Loading…</p>';
   try {
-    const r = await fetch(`/api/v1/pvcs/${env}?limit=2000`);
-    if(!r.ok) throw new Error(await r.text());
-    _pvcData[env] = await r.json();
+    const [pvcResponse, planningResponse] = await Promise.all([
+      fetch(`/api/v1/pvcs/${env}?limit=2000`),
+      fetch(`/api/v1/storage-planning/${env}`),
+    ]);
+    if(!pvcResponse.ok) throw new Error(await pvcResponse.text());
+    _pvcData[env] = await pvcResponse.json();
+    _storagePlanningData[env] = planningResponse.ok ? await planningResponse.json() : {};
+    const enrichedPvcs = _storagePlanningData[env].pvc_inventory || [];
+    if(enrichedPvcs.length) _pvcData[env].pvcs = enrichedPvcs.map(r=>({...r,pvc_name:r.name}));
     renderPvcSummary(env);
+    renderStorageCandidates(env);
     renderPvcTable();
   } catch(e) {
     ($('pvc-table-wrap')||{}).innerHTML = `<p style="color:red">Failed to load PVC data: ${e.message}</p>`;
+    ($('storage-candidates-wrap')||{}).innerHTML = `<p style="color:red">Failed to load storage planning data.</p>`;
   }
 }
 
@@ -1186,6 +1417,51 @@ function renderPvcSummary(env){
   }
 }
 
+function renderStorageCandidates(env){
+  const data = _storagePlanningData[env] || {};
+  const summary = data.summary || {};
+  const pvcCandidates = (data.pvc_inventory||[]).filter(r=>r.candidate_reason!=='IN_USE');
+  const unusedPvcs = pvcCandidates.filter(r=>r.candidate_reason==='NO_LIVE_POD_REFERENCE');
+  const pvCandidates = (data.pv_inventory||[]).filter(r=>r.candidate_reason!=='ACTIVE');
+  const controllers = data.zero_replica_controllers || [];
+  const terminalPods = data.old_terminal_pods || [];
+  const otherCount = pvcCandidates.length - unusedPvcs.length + pvCandidates.length + controllers.length + terminalPods.length;
+
+  ($('storage-unused-pvcs')||{}).textContent = summary.unused_pvcs ?? unusedPvcs.length;
+  ($('storage-unused-gib')||{}).textContent = `${f1(summary.unused_pvc_gib||0)} GiB provisioned`;
+  ($('storage-used-gib')||{}).textContent = (summary.pvc_usage_metrics_count||0)>0 ? `${f1(summary.used_gib||0)} GiB` : 'Unavailable';
+  ($('storage-metrics-coverage')||{}).textContent = `${summary.pvc_usage_metrics_count||0} of ${summary.total_pvcs||0} PVCs reporting`;
+  ($('storage-stale-count')||{}).textContent = otherCount;
+
+  const wrap = $('storage-candidates-wrap'); if(!wrap) return;
+  const candidates = [
+    ...pvcCandidates.map(r=>({type:'PVC',namespace:r.namespace,name:r.name,state:r.status,age:r.age_days,
+      capacity:r.capacity_gib,reason:r.candidate_reason})),
+    ...pvCandidates.map(r=>({type:'PV',namespace:r.claim_namespace||'—',name:r.name,state:r.status,age:r.age_days,
+      capacity:r.capacity_gib,reason:r.candidate_reason})),
+    ...controllers.map(r=>({type:r.kind,namespace:r.namespace,name:r.name,state:'0 replicas',age:r.age_days,
+      capacity:null,reason:r.candidate_reason})),
+    ...terminalPods.map(r=>({type:'Pod',namespace:r.namespace,name:r.name,state:r.phase,age:r.age_days,
+      capacity:null,reason:r.candidate_reason})),
+  ].sort((a,b)=>(b.capacity||0)-(a.capacity||0)||(b.age||0)-(a.age||0));
+
+  if(!candidates.length){
+    wrap.innerHTML='<div class="info">No stale-resource candidates were found in the latest collection.</div>';
+    return;
+  }
+
+  let html='<table><thead><tr><th>Type</th><th>Namespace / Claim</th><th>Name</th><th>State</th><th>Age</th><th>Capacity</th><th>Reason</th></tr></thead><tbody>';
+  candidates.slice(0,500).forEach((r,index)=>{
+    html+=`<tr style="background:${index%2===0?'#fff':'#f9f9f9'}">
+      <td><b>${r.type}</b></td><td>${r.namespace||'—'}</td>
+      <td style="font-family:monospace;font-size:12px;word-break:break-all">${r.name||'—'}</td>
+      <td>${r.state||'—'}</td><td style="text-align:right">${r.age??0} days</td>
+      <td style="text-align:right">${r.capacity==null?'—':f1(r.capacity)+' GiB'}</td>
+      <td style="color:#b45309;font-size:12px">${(r.reason||'REVIEW').replaceAll('_',' ')}</td></tr>`;
+  });
+  wrap.innerHTML=html+'</tbody></table>';
+}
+
 function renderPvcTable(){
   const env  = ($('pvc-env-select')||{value:'DEV'}).value || 'DEV';
   const nsF  = (($('pvc-ns-filter')||{}).value||'').toLowerCase();
@@ -1207,8 +1483,8 @@ function renderPvcTable(){
 
   let h=`<table>
     <thead><tr>
-      <th>Namespace</th><th>PVC Name</th><th>Status</th>
-      <th>Capacity (GiB)</th><th>Storage Class</th>
+      <th>Namespace</th><th>PVC Name</th><th>Status</th><th>Age</th>
+      <th>Provisioned</th><th>Used</th><th>Usage</th><th>Pod References</th><th>Storage Class</th>
     </tr></thead><tbody>`;
   rows.forEach((r,i)=>{
     const bg = i%2===0?'#fff':'#f9f9f9';
@@ -1216,7 +1492,11 @@ function renderPvcTable(){
       <td style="font-size:12px">${r.namespace||'—'}</td>
       <td style="font-family:monospace;font-size:12px">${r.pvc_name||'—'}</td>
       <td><span style="color:${statusColor(r.status)};font-weight:600">${r.status||'—'}</span></td>
-      <td style="text-align:right">${f1(r.capacity_gib)}</td>
+      <td style="text-align:right">${r.age_days==null?'—':r.age_days+' days'}</td>
+      <td style="text-align:right">${f1(r.capacity_gib)} GiB</td>
+      <td style="text-align:right">${r.used_percent==null?'—':f1(r.used_gib)+' GiB'}</td>
+      <td style="text-align:right;color:${r.used_percent>=85?'#c0392b':'inherit'};font-weight:${r.used_percent>=85?'700':'400'}">${r.used_percent==null?'—':f1(r.used_percent)+'%'}</td>
+      <td style="text-align:right">${r.pod_reference_count??'—'}</td>
       <td style="font-size:12px;color:#555">${r.storageclass||'—'}</td>
     </tr>`;
   });
@@ -1233,8 +1513,13 @@ function exportPvcCsv(){
     (!nsF||(r.namespace||'').toLowerCase().includes(nsF))&&
     (!scF||(r.storageclass||'').toLowerCase().includes(scF))
   );
-  const csv = ['namespace,pvc_name,status,capacity_gib,storageclass',
-    ...rows.map(r=>`${r.namespace},${r.pvc_name},${r.status},${f1(r.capacity_gib)},${r.storageclass}`)
+  const csvCell = value => `"${String(value??'').replaceAll('"','""')}"`;
+  const csv = ['namespace,pvc_name,status,age_days,capacity_gib,used_gib,used_percent,pod_reference_count,storageclass,candidate_reason',
+    ...rows.map(r=>[
+      r.namespace,r.pvc_name,r.status,r.age_days,f1(r.capacity_gib),
+      r.used_percent==null?'':f1(r.used_gib),r.used_percent==null?'':f1(r.used_percent),
+      r.pod_reference_count,r.storageclass,r.candidate_reason
+    ].map(csvCell).join(','))
   ].join('\n');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
@@ -1244,7 +1529,6 @@ function exportPvcCsv(){
 
 // ── Analytics tab ─────────────────────────────────────────────
 let _analyticsChart = null;
-let _analyticsData  = {};
 
 async function renderAnalyticsTab(){
   const env    = ($('an-env-select')    ||{value:'DEV'}).value;
@@ -1331,7 +1615,7 @@ async function renderAnalyticsTab(){
   const maxWCpu  = d.data.map(r=>parseFloat(r.max_worker_cpu_pct)||0);
   const avgWMem  = d.data.map(r=>parseFloat(r.avg_worker_mem_pct)||0);
   const avgCpuUsedPct = d.data.map(r=>{
-    const cpu=parseFloat(r.avg_worker_cpu)||0;
+    const cpu=parseFloat(r.avg_all_worker_cpu)||0;
     const used=parseFloat(r.avg_cpu_used)||0;
     return cpu>0?parseFloat(((used/cpu)*100).toFixed(2)):0;
   });
@@ -1367,7 +1651,7 @@ async function renderAnalyticsTab(){
           pointRadius:3, tension:0.3, yAxisID:'y', order:2
         },
         {
-          type:'line', label:'Avg CPU Actual Used %',
+          type:'line', label:'Avg CPU Actual Used % (all workers)',
           data:avgCpuUsedPct, borderColor:'rgba(230,126,34,0.9)',
           backgroundColor:'transparent', borderWidth:2,
           borderDash:[4,3], pointRadius:3, tension:0.3, yAxisID:'y', order:2

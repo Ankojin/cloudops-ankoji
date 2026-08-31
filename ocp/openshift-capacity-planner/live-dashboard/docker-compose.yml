@@ -84,6 +84,8 @@ services:
       SIT_TOKEN:      "${SIT_TOKEN:-}"
       DEV_ENV_LABEL:  "${DEV_ENV_LABEL:-DEV}"
       SIT_ENV_LABEL:  "${SIT_ENV_LABEL:-SIT}"
+      OCP_INSECURE_SKIP_TLS_VERIFY: "${OCP_INSECURE_SKIP_TLS_VERIFY:-false}"
+      OCP_CA_FILE:     "${OCP_CA_FILE:-}"
     volumes:
       - planner-output:/planner/output  # shared between collector + (optionally) api
     depends_on:

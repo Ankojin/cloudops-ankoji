@@ -265,7 +265,7 @@ async def pvcs(
     env: str,
     namespace: str | None = None,
     storageclass: str | None = None,
-    limit: int = 500,
+    limit: int = Query(default=500, ge=1, le=5000),
 ):
     """Per-PVC inventory for the latest snapshot of one environment."""
     env = env.upper()
@@ -301,8 +301,8 @@ async def pvcs(
         )
 
         # Summary stats
-        total_gib = await conn.fetchval(
-            "SELECT COALESCE(SUM(capacity_gib),0) FROM pvc_snapshots WHERE snapshot_id=$1",
+        totals = await conn.fetchrow(
+            "SELECT COUNT(*) AS pvc_count, COALESCE(SUM(capacity_gib),0) AS total_gib FROM pvc_snapshots WHERE snapshot_id=$1",
             snap_id,
         )
         by_sc = await conn.fetch(
@@ -329,8 +329,8 @@ async def pvcs(
     return {
         "env": env,
         "summary": {
-            "total_pvcs": len(rows),
-            "total_capacity_gib": float(total_gib or 0),
+            "total_pvcs": totals["pvc_count"],
+            "total_capacity_gib": float(totals["total_gib"] or 0),
             "by_storageclass": [dict(r) for r in by_sc],
             "top_namespaces_by_capacity": [dict(r) for r in by_ns],
         },
@@ -338,12 +338,53 @@ async def pvcs(
     }
 
 
+@app.get("/api/v1/storage-planning/{env}")
+async def storage_planning(env: str):
+    """Storage capacity and stale-resource candidates from the latest snapshot."""
+    env = env.upper()
+    if env not in ("DEV", "SIT"):
+        raise HTTPException(status_code=400, detail="env must be DEV or SIT")
+
+    async with pool.acquire() as conn:
+        snap = await conn.fetchrow(
+            """
+            SELECT id, collected_at, raw_planning
+            FROM capacity_snapshots
+            WHERE env = $1
+            ORDER BY collected_at DESC
+            LIMIT 1
+            """,
+            env,
+        )
+
+    if snap is None:
+        raise HTTPException(status_code=404, detail=f"No data for env={env}")
+
+    raw = snap["raw_planning"] or {}
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+
+    data = raw.get("storage_planning", {})
+    return {
+        "env": env,
+        "snapshot_id": snap["id"],
+        "collected_at": snap["collected_at"].isoformat(),
+        "summary": data.get("summary", {}),
+        "thresholds": data.get("thresholds", {}),
+        "note": data.get("note", "Storage planning is available after the next collection."),
+        "pvc_inventory": data.get("pvc_inventory", []),
+        "pv_inventory": data.get("pv_inventory", []),
+        "zero_replica_controllers": data.get("zero_replica_controllers", []),
+        "old_terminal_pods": data.get("old_terminal_pods", []),
+    }
+
+
 @app.get("/api/v1/namespaces/{env}")
 async def namespaces(
     env: str,
-    top: int = Query(default=20, ge=5, le=100),
+    top: int = Query(default=100, ge=5, le=1000),
 ):
-    """Top tenant namespaces by CPU for one environment (latest snapshot)."""
+    """Namespaces by CPU for one environment (latest snapshot)."""
     env = env.upper()
     if env not in ("DEV", "SIT"):
         raise HTTPException(status_code=400, detail="env must be DEV or SIT")
@@ -367,7 +408,7 @@ async def namespaces(
                    cpu_used, mem_used_gib, cpu_util_pct, mem_util_pct,
                    rightsizing_signal
             FROM namespace_snapshots
-            WHERE snapshot_id = $1 AND ns_type = 'tenant'
+                 WHERE snapshot_id = $1
             ORDER BY cpu_req DESC NULLS LAST
             LIMIT $2
             """,
@@ -441,7 +482,9 @@ async def aggregate(
                 ROUND(AVG(total_cpu)::numeric, 2)     AS avg_total_cpu,
                 ROUND(AVG(total_mem_gib)::numeric, 2) AS avg_total_mem_gib,
                 ROUND(AVG(worker_cpu)::numeric, 2)    AS avg_worker_cpu,
-                ROUND(AVG(worker_mem_gib)::numeric, 2) AS avg_worker_mem_gib
+                ROUND(AVG(worker_mem_gib)::numeric, 2) AS avg_worker_mem_gib,
+                ROUND(AVG(all_worker_cpu)::numeric, 2) AS avg_all_worker_cpu,
+                ROUND(AVG(all_worker_mem_gib)::numeric, 2) AS avg_all_worker_mem_gib
             FROM capacity_snapshots
             WHERE env = $1
             GROUP BY period_start
@@ -603,6 +646,78 @@ async def node_pressure(env: str):
     }
 
 
+@app.get("/api/v1/node-inventory/{env}")
+async def node_inventory(env: str):
+    """Complete node health, capacity, placement, and MachineSet inventory."""
+    env = env.upper()
+    if env not in ("DEV", "SIT"):
+        raise HTTPException(status_code=400, detail="env must be DEV or SIT")
+
+    async with pool.acquire() as conn:
+        snap = await conn.fetchrow(
+            """
+            SELECT id, collected_at, raw_planning
+            FROM capacity_snapshots
+            WHERE env = $1
+            ORDER BY collected_at DESC
+            LIMIT 1
+            """,
+            env,
+        )
+
+    if snap is None:
+        raise HTTPException(status_code=404, detail=f"No data for env={env}")
+
+    raw = snap["raw_planning"] or {}
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+
+    inventory = raw.get("node_machine_inventory", {})
+    return {
+        "env": env,
+        "snapshot_id": snap["id"],
+        "collected_at": snap["collected_at"].isoformat(),
+        "summary": inventory.get("summary", {}),
+        "note": inventory.get("note", "Node inventory is available after the next collection."),
+        "nodes": inventory.get("nodes", []),
+        "machinesets": inventory.get("machinesets", []),
+    }
+
+
+# ── Pod Metrics ──────────────────────────────────────────────
+@app.get("/api/v1/pod-metrics/{env}")
+async def pod_metrics(
+    env: str,
+    limit: int = Query(default=500, ge=1, le=5000),
+):
+    """Actual CPU and memory usage for the busiest pods in the latest snapshot."""
+    env = env.upper()
+    if env not in ("DEV", "SIT"):
+        raise HTTPException(status_code=400, detail="env must be DEV or SIT")
+
+    async with pool.acquire() as conn:
+        snap = await conn.fetchrow(
+            """
+            SELECT id, raw_planning
+            FROM capacity_snapshots
+            WHERE env = $1
+            ORDER BY collected_at DESC
+            LIMIT 1
+            """,
+            env,
+        )
+
+    if snap is None:
+        raise HTTPException(status_code=404, detail=f"No data for env={env}")
+
+    raw = snap["raw_planning"] or {}
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+
+    pods = raw.get("pod_metrics_top", [])[:limit]
+    return {"env": env, "snapshot_id": snap["id"], "pods": pods}
+
+
 # ── Misplaced Workloads ───────────────────────────────────────
 @app.get("/api/v1/misplaced/{env}")
 async def misplaced(env: str):
@@ -641,7 +756,10 @@ async def misplaced(env: str):
 
 # ── Desired Replica Detail ────────────────────────────────────
 @app.get("/api/v1/desired-replicas/{env}")
-async def desired_replicas(env: str, limit: int = 200):
+async def desired_replicas(
+    env: str,
+    limit: int = Query(default=200, ge=1, le=5000),
+):
     """
     Per-controller desired replica demand (Deployment + StatefulSet spec.replicas
     × template requests). Primary capacity planning signal per Red Hat practice #6.

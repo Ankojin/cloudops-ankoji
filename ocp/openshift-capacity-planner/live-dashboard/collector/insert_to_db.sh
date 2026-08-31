@@ -61,7 +61,18 @@ CHARGEBACK_CSV="${CSV_DIR}/chargeback_by_namespace.csv"
 
 for f in "${SUMMARY_FILE}" "${PLANNING_FILE}" "${COLLECT_FILE}"; do
   [[ -f "${f}" ]] || { echo "ERROR: missing required file ${f} — skipping ${ENV}"; exit 1; }
+  jq -e . "${f}" >/dev/null || { echo "ERROR: invalid JSON in ${f} — skipping ${ENV}"; exit 1; }
 done
+
+jq -e '.cluster_capacity.cpu_cores | numbers' "${SUMMARY_FILE}" >/dev/null || {
+  echo "ERROR: capacity_summary.json has no numeric cluster CPU capacity — skipping ${ENV}"; exit 1;
+}
+jq -e '.standard_worker_pool.cpu_cores_total | numbers' "${PLANNING_FILE}" >/dev/null || {
+  echo "ERROR: capacity_planning.json has no numeric standard worker capacity — skipping ${ENV}"; exit 1;
+}
+jq -e '.nodes | numbers' "${COLLECT_FILE}" >/dev/null || {
+  echo "ERROR: collection_summary.json has no numeric node count — skipping ${ENV}"; exit 1;
+}
 
 # cluster_utilization.json is optional (requires Prometheus; may not exist in all envs)
 if [[ ! -f "${UTIL_FILE}" ]]; then
@@ -162,10 +173,16 @@ RAW_UTIL=$(     [[ -n "${UTIL_FILE}" ]] && cat "${UTIL_FILE}" | jq -c '.' || ech
 NODE_PRESSURE_JSON="${JSON_DIR}/node_pressure.json"
 MISPLACED_JSON="${JSON_DIR}/misplaced_workloads.json"
 DESIRED_DETAIL_JSON="${JSON_DIR}/desired_replica_detail.json"
+POD_METRICS_TOP_JSON="${JSON_DIR}/pod_metrics_top.json"
+STORAGE_PLANNING_JSON="${JSON_DIR}/storage_planning.json"
+NODE_MACHINE_INVENTORY_JSON="${JSON_DIR}/node_machine_inventory.json"
 
 [[ -f "${NODE_PRESSURE_JSON}"  ]] || echo '[]'  > "${NODE_PRESSURE_JSON}"
 [[ -f "${MISPLACED_JSON}"      ]] || echo '{"misplaced_count":0,"controllers":[],"pod_sample":[]}' > "${MISPLACED_JSON}"
 [[ -f "${DESIRED_DETAIL_JSON}" ]] || echo '[]'  > "${DESIRED_DETAIL_JSON}"
+[[ -f "${POD_METRICS_TOP_JSON}" ]] || echo '[]' > "${POD_METRICS_TOP_JSON}"
+[[ -f "${STORAGE_PLANNING_JSON}" ]] || echo '{"summary":{},"pvc_inventory":[],"pv_inventory":[],"zero_replica_controllers":[],"old_terminal_pods":[]}' > "${STORAGE_PLANNING_JSON}"
+[[ -f "${NODE_MACHINE_INVENTORY_JSON}" ]] || echo '{"summary":{},"nodes":[],"machinesets":[]}' > "${NODE_MACHINE_INVENTORY_JSON}"
 
 _rp_tmp=$(mktemp)
 echo "${RAW_PLANNING}" > "${_rp_tmp}"
@@ -173,10 +190,16 @@ RAW_PLANNING=$(jq -c \
     --slurpfile np "${NODE_PRESSURE_JSON}" \
     --slurpfile mp "${MISPLACED_JSON}" \
     --slurpfile dd "${DESIRED_DETAIL_JSON}" \
+    --slurpfile pm "${POD_METRICS_TOP_JSON}" \
+    --slurpfile sp "${STORAGE_PLANNING_JSON}" \
+    --slurpfile ni "${NODE_MACHINE_INVENTORY_JSON}" \
     '. + {
         node_pressure:          ($np[0] // []),
         misplaced_workloads:    ($mp[0] // {"misplaced_count":0,"controllers":[],"pod_sample":[]}),
-        desired_replica_detail: ($dd[0] // [])
+      desired_replica_detail: ($dd[0] // []),
+      pod_metrics_top:         ($pm[0] // []),
+      storage_planning:        ($sp[0] // {"summary":{},"pvc_inventory":[],"pv_inventory":[],"zero_replica_controllers":[],"old_terminal_pods":[]}),
+      node_machine_inventory:  ($ni[0] // {"summary":{},"nodes":[],"machinesets":[]})
     }' "${_rp_tmp}" 2>/dev/null \
     || cat "${_rp_tmp}")
 rm -f "${_rp_tmp}" 
@@ -215,6 +238,15 @@ if [[ -z "${SNAP_ID}" ]]; then
 fi
 
 echo "INFO: Created snapshot id=${SNAP_ID}"
+
+cleanup_failed_snapshot() {
+  local status=$?
+  trap - ERR
+  echo "ERROR: Snapshot id=${SNAP_ID} was incomplete — removing it"
+  _psql -q -c "DELETE FROM capacity_snapshots WHERE id = ${SNAP_ID};" || true
+  exit "${status}"
+}
+trap cleanup_failed_snapshot ERR
 
 # ── INSERT pool rows ─────────────────────────────────────────
 if [[ -f "${POOLS_FILE}" ]]; then
@@ -278,7 +310,7 @@ SELECT
   ${CPU_ACT:-0}, ${MEM_ACT:-0}, ${CPU_UTIL:-0}, ${MEM_UTIL:-0},
   '${SIGNAL:-UNKNOWN}'
 FROM capacity_snapshots WHERE id = ${SNAP_ID};
-" 2>/dev/null || true
+"
   done
 fi
 
@@ -318,7 +350,7 @@ SELECT
   ${SNAP_ID}, env, collected_at,
   '${NS}', '${PVC_NAME}', '${STATUS}', ${CAP_GIB}, '${STORAGECLASS}'
 FROM capacity_snapshots WHERE id = ${SNAP_ID};
-" 2>/dev/null || true   # skip rows with bad data rather than aborting the run
+"
   done
 fi
 
@@ -328,4 +360,5 @@ DELETE FROM capacity_snapshots
 WHERE collected_at < NOW() - INTERVAL '365 days';
 "
 
+trap - ERR
 echo "INFO: ${ENV} snapshot inserted successfully (id=${SNAP_ID})"
