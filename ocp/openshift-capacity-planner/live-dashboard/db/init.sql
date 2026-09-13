@@ -135,6 +135,8 @@ SELECT DISTINCT ON (env) *
 FROM capacity_snapshots
 ORDER BY env, collected_at DESC;
 
--- ─── Retention: auto-purge snapshots older than 30 days ──────
--- Run via a pg_cron job if available, or a scheduled DELETE.
--- DELETE FROM capacity_snapshots WHERE collected_at < NOW() - INTERVAL '30 days';
+-- ─── Retention ────────────────────────────────────────────────
+-- insert_to_db.sh deletes parent snapshots older than the configured retention
+-- period (90 days by default) after every
+-- successful insert. Child pool, namespace, and PVC rows are removed by their
+-- ON DELETE CASCADE foreign keys.

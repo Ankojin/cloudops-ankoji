@@ -26,10 +26,13 @@ rules:
   resources: ["nodes", "pods"]
   verbs: ["get", "list"]
 - apiGroups: ["storage.k8s.io"]
-  resources: ["storageclasses"]
+  resources: ["storageclasses", "volumeattachments"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["batch"]
+  resources: ["cronjobs", "jobs"]
   verbs: ["get", "list", "watch"]
 # NEW: required so the collector can locate the Thanos-Querier / prometheus-k8s
 # route in openshift-monitoring. Without this, collect_capacity.sh's Prometheus

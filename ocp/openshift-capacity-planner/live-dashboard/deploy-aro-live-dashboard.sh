@@ -22,7 +22,7 @@
 #   Container Apps Environment (bab-core-azcpenv-ghcp-dashboard)
 #     ├── bab-aro-ops-api-01        (internal, :8000)
 #     ├── bab-aro-ops-dashboard-01  (external HTTPS, :80)
-#     └── bab-aro-ops-collector-01  (Job, */5 * * * *)
+#     └── bab-aro-ops-collector-01  (Job, every 15 minutes by default)
 #
 #   PostgreSQL Flexible Server
 #     └── pgdb-aro-ops-dashboard-01  (VNet-integrated)
@@ -88,7 +88,9 @@ readonly SIT_ENV_LABEL="${SIT_ENV_LABEL:-SIT}"
 readonly OCP_INSECURE_SKIP_TLS_VERIFY="${OCP_INSECURE_SKIP_TLS_VERIFY:-true}"
 readonly COLLECT_DEV="${COLLECT_DEV:-true}"
 readonly COLLECT_SIT="${COLLECT_SIT:-true}"
-readonly STALE_AFTER_MINUTES="${STALE_AFTER_MINUTES:-90}"
+readonly STALE_AFTER_MINUTES="${STALE_AFTER_MINUTES:-45}"
+readonly COLLECTOR_CRON_EXPRESSION="${COLLECTOR_CRON_EXPRESSION:-*/15 * * * *}"
+readonly SNAPSHOT_RETENTION_DAYS="${SNAPSHOT_RETENTION_DAYS:-90}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLANNER_ROOT="${SCRIPT_DIR}/.."          # live-dashboard/ → planner root
@@ -279,6 +281,7 @@ if [[ "${REBUILD_PLANNER}" == "true" || "${REBUILD_API}" == "true" || \
                 "OCP_INSECURE_SKIP_TLS_VERIFY=${OCP_INSECURE_SKIP_TLS_VERIFY}" \
                 "COLLECT_DEV=${COLLECT_DEV}" \
                 "COLLECT_SIT=${COLLECT_SIT}" \
+                "SNAPSHOT_RETENTION_DAYS=${SNAPSHOT_RETENTION_DAYS}" \
             --output table
         ok "Collector rebuilt and updated (${IMAGE_TAG})"
     fi
@@ -742,7 +745,7 @@ upsert_app "${APP_DASHBOARD}" \
 ok "Dashboard deployed: ${APP_DASHBOARD}"
 
 # ── 6c. Collector (Container App Job — cron schedule) ─────────
-info "Deploying Container App Job: ${APP_COLLECTOR} (every 5 min)"
+info "Deploying Container App Job: ${APP_COLLECTOR} (${COLLECTOR_CRON_EXPRESSION})"
 
 upsert_job "${APP_COLLECTOR}" \
     --environment "${CONTAINER_APP_ENV}" \
@@ -751,7 +754,7 @@ upsert_job "${APP_COLLECTOR}" \
     --registry-identity "${MI_RESOURCE_ID}" \
     --mi-user-assigned "${MI_RESOURCE_ID}" \
     --trigger-type Schedule \
-    --cron-expression "*/5 * * * *" \
+    --cron-expression "${COLLECTOR_CRON_EXPRESSION}" \
     --replica-timeout 240 \
     --replica-retry-limit 1 \
     --replica-completion-count 1 \
@@ -765,7 +768,7 @@ upsert_job "${APP_COLLECTOR}" \
     --env-vars "DEV_API=${DEV_API}" "DEV_TOKEN=secretref:dev-token" "DEV_ENV_LABEL=${DEV_ENV_LABEL}" \
     --env-vars "SIT_API=${SIT_API}" "SIT_TOKEN=secretref:sit-token" "SIT_ENV_LABEL=${SIT_ENV_LABEL}" \
     --env-vars "OCP_INSECURE_SKIP_TLS_VERIFY=${OCP_INSECURE_SKIP_TLS_VERIFY}" \
-    --env-vars "COLLECT_DEV=${COLLECT_DEV}" "COLLECT_SIT=${COLLECT_SIT}"
+    --env-vars "COLLECT_DEV=${COLLECT_DEV}" "COLLECT_SIT=${COLLECT_SIT}" "SNAPSHOT_RETENTION_DAYS=${SNAPSHOT_RETENTION_DAYS}"
 
 ok "Collector job deployed: ${APP_COLLECTOR}"
 
@@ -810,7 +813,7 @@ echo ""
 echo "  Container Apps:"
 printf "    %-35s %s\n" "${APP_API}"       "internal → http://${APP_API}:8000"
 printf "    %-35s %s\n" "${APP_DASHBOARD}" "external → https://${DASHBOARD_FQDN}"
-printf "    %-35s %s\n" "${APP_COLLECTOR}" "job      → every 5 min"
+printf "    %-35s %s\n" "${APP_COLLECTOR}" "job      → ${COLLECTOR_CRON_EXPRESSION}"
 echo ""
 echo "  Custom domain target : ${CUSTOM_DOMAIN}"
 echo "  See DNS instructions above (Step 7)"

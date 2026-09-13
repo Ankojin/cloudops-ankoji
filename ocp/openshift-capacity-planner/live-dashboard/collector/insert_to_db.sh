@@ -29,6 +29,12 @@ done
 [[ -d "${OUTPUT_DIR}" ]] || { echo "ERROR: directory not found: ${OUTPUT_DIR}"; exit 1; }
 
 DB_URL="${DATABASE_URL:-}"
+SNAPSHOT_RETENTION_DAYS="${SNAPSHOT_RETENTION_DAYS:-90}"
+
+if [[ ! "${SNAPSHOT_RETENTION_DAYS}" =~ ^[0-9]+$ ]] || [[ "${SNAPSHOT_RETENTION_DAYS}" -lt 60 ]]; then
+  echo "ERROR: SNAPSHOT_RETENTION_DAYS must be an integer of at least 60"
+  exit 1
+fi
 
 # If no DATABASE_URL, construct from individual vars (avoids URL-encoding issues
 # with special characters in passwords — PGPASSWORD is passed raw to libpq)
@@ -176,6 +182,7 @@ DESIRED_DETAIL_JSON="${JSON_DIR}/desired_replica_detail.json"
 POD_METRICS_TOP_JSON="${JSON_DIR}/pod_metrics_top.json"
 STORAGE_PLANNING_JSON="${JSON_DIR}/storage_planning.json"
 NODE_MACHINE_INVENTORY_JSON="${JSON_DIR}/node_machine_inventory.json"
+REPLICA_GAP_JSON="${JSON_DIR}/replica_gap_analysis.json"
 
 [[ -f "${NODE_PRESSURE_JSON}"  ]] || echo '[]'  > "${NODE_PRESSURE_JSON}"
 [[ -f "${MISPLACED_JSON}"      ]] || echo '{"misplaced_count":0,"controllers":[],"pod_sample":[]}' > "${MISPLACED_JSON}"
@@ -183,6 +190,7 @@ NODE_MACHINE_INVENTORY_JSON="${JSON_DIR}/node_machine_inventory.json"
 [[ -f "${POD_METRICS_TOP_JSON}" ]] || echo '[]' > "${POD_METRICS_TOP_JSON}"
 [[ -f "${STORAGE_PLANNING_JSON}" ]] || echo '{"summary":{},"pvc_inventory":[],"pv_inventory":[],"zero_replica_controllers":[],"old_terminal_pods":[]}' > "${STORAGE_PLANNING_JSON}"
 [[ -f "${NODE_MACHINE_INVENTORY_JSON}" ]] || echo '{"summary":{},"nodes":[],"machinesets":[]}' > "${NODE_MACHINE_INVENTORY_JSON}"
+[[ -f "${REPLICA_GAP_JSON}" ]] || echo '{"summary":{},"controllers":[]}' > "${REPLICA_GAP_JSON}"
 
 _rp_tmp=$(mktemp)
 echo "${RAW_PLANNING}" > "${_rp_tmp}"
@@ -193,13 +201,15 @@ RAW_PLANNING=$(jq -c \
     --slurpfile pm "${POD_METRICS_TOP_JSON}" \
     --slurpfile sp "${STORAGE_PLANNING_JSON}" \
     --slurpfile ni "${NODE_MACHINE_INVENTORY_JSON}" \
+    --slurpfile rg "${REPLICA_GAP_JSON}" \
     '. + {
         node_pressure:          ($np[0] // []),
         misplaced_workloads:    ($mp[0] // {"misplaced_count":0,"controllers":[],"pod_sample":[]}),
       desired_replica_detail: ($dd[0] // []),
       pod_metrics_top:         ($pm[0] // []),
       storage_planning:        ($sp[0] // {"summary":{},"pvc_inventory":[],"pv_inventory":[],"zero_replica_controllers":[],"old_terminal_pods":[]}),
-      node_machine_inventory:  ($ni[0] // {"summary":{},"nodes":[],"machinesets":[]})
+      node_machine_inventory:  ($ni[0] // {"summary":{},"nodes":[],"machinesets":[]}),
+      replica_gap_analysis:    ($rg[0] // {"summary":{},"controllers":[]})
     }' "${_rp_tmp}" 2>/dev/null \
     || cat "${_rp_tmp}")
 rm -f "${_rp_tmp}" 
@@ -356,10 +366,10 @@ FROM capacity_snapshots WHERE id = ${SNAP_ID};
   done
 fi
 
-# ── Purge old snapshots (keep 365 days for historical analysis) ──
+# ── Purge old snapshots after the configured history window ──
 _psql -q -c "
 DELETE FROM capacity_snapshots
-WHERE collected_at < NOW() - INTERVAL '365 days';
+WHERE collected_at < NOW() - (${SNAPSHOT_RETENTION_DAYS} * INTERVAL '1 day');
 "
 
 trap - ERR

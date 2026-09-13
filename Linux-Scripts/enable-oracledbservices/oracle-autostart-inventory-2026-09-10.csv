@@ -1,0 +1,2 @@
+Server,RHEL_Version,Oracle_User,Oracle_Group,Oracle_SIDs,Oracle_Homes,Oratab_Y_Count,DBStart_Status,DBShut_Status,Service_Status,Service_Enabled,Service_Active,Listener_Status,PMON_Status,Recommendation
+"10.189.56.231","Red Hat Enterprise Linux release 9.7 (Plow)","YES","oinstall","APPDBDEV","/opt/oracle/product/19c/dbhome_1","1","OK","OK","EXISTS","enabled","inactive","NOT_RUNNING","NOT_RUNNING","NO_ACTION"

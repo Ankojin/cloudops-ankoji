@@ -1,0 +1,4 @@
+# One server per line – computer name or private IP
+# Lines starting with # are ignored
+10.189.67.114
+10.189.67.168

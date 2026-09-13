@@ -8,7 +8,8 @@ Endpoints
 GET /api/v1/health              → liveness probe
 GET /api/v1/status              → latest snapshot for BOTH envs
 GET /api/v1/metrics/{env}       → latest snapshot for one env
-GET /api/v1/history/{env}       → last N hours of snapshots (trend)
+GET /api/v1/history/{env}       → cluster snapshots for up to 60 days
+GET /api/v1/namespace-history/{env} → 24-hour snapshots or 30-day daily namespace utilization
 GET /api/v1/pools/{env}         → dedicated node pool detail
 GET /api/v1/namespaces/{env}    → top tenant namespace usage
 """
@@ -18,7 +19,7 @@ import io
 import os
 import json
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import ssl
@@ -55,7 +56,7 @@ else:
     }
 
 pool: asyncpg.Pool = None  # type: ignore
-STALE_AFTER_MINUTES = int(os.getenv("STALE_AFTER_MINUTES", "90"))
+STALE_AFTER_MINUTES = int(os.getenv("STALE_AFTER_MINUTES", "45"))
 
 
 @asynccontextmanager
@@ -220,45 +221,200 @@ async def metrics(env: str):
 @app.get("/api/v1/history/{env}")
 async def history(
     env: str,
-    hours: int = Query(default=24, ge=1, le=168),
+    hours: int = Query(default=168, ge=1, le=1440),
+    start: datetime | None = None,
+    end: datetime | None = None,
 ):
-    """Time-series data for the requested lookback window (up to seven days)."""
+    """Cluster time series for a relative or custom range of up to 60 days."""
     env = env.upper()
     if env not in ("DEV", "SIT"):
         raise HTTPException(status_code=400, detail="env must be DEV or SIT")
 
+    range_end = end or datetime.now(timezone.utc)
+    range_start = start or (range_end - timedelta(hours=hours))
+    if range_start.tzinfo is None:
+        range_start = range_start.replace(tzinfo=timezone.utc)
+    if range_end.tzinfo is None:
+        range_end = range_end.replace(tzinfo=timezone.utc)
+    if range_start >= range_end:
+        raise HTTPException(status_code=400, detail="start must be before end")
+    if range_end - range_start > timedelta(days=60):
+        raise HTTPException(status_code=400, detail="history range cannot exceed 60 days")
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT collected_at,
-                   CASE WHEN worker_cpu > 0
-                        THEN (worker_cpu_requested / worker_cpu) * 100
+              SELECT cs.collected_at,
+                    CASE WHEN cs.worker_cpu > 0
+                        THEN (cs.worker_cpu_requested / cs.worker_cpu) * 100
                         ELSE 0 END AS cpu_pct,
-                   CASE WHEN worker_mem_gib > 0
-                        THEN (worker_mem_gib_requested / worker_mem_gib) * 100
+                    CASE WHEN cs.worker_mem_gib > 0
+                        THEN (cs.worker_mem_gib_requested / cs.worker_mem_gib) * 100
                         ELSE 0 END AS mem_pct,
-                    CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
-                            AND all_worker_cpu > 0
-                        THEN (cpu_used / all_worker_cpu) * 100
-                        ELSE NULL END AS cpu_used_pct,
-                    CASE WHEN raw_util->>'source' = 'prometheus-worker-nodes'
-                            AND all_worker_mem_gib > 0
-                        THEN (mem_used_gib / all_worker_mem_gib) * 100
-                        ELSE NULL END AS mem_used_pct,
-                    pods_running, pressure, worker_nodes, cpu_used, mem_used_gib
-            FROM capacity_snapshots
-            WHERE env = $1
-              AND collected_at >= NOW() - ($2 || ' hours')::interval
-            ORDER BY collected_at ASC
+                    CASE WHEN pool_actual.metric_count > 0 AND cs.worker_cpu > 0
+                        THEN (pool_actual.shared_cpu_used / cs.worker_cpu) * 100 END
+                        AS shared_cpu_used_pct,
+                    CASE WHEN pool_actual.metric_count > 0 AND cs.worker_mem_gib > 0
+                        THEN (pool_actual.shared_mem_used / cs.worker_mem_gib) * 100 END
+                        AS shared_mem_used_pct,
+                    CASE WHEN pool_actual.metric_count > 0
+                            AND (cs.all_worker_cpu - cs.worker_cpu) > 0
+                        THEN (pool_actual.dedicated_cpu_used / (cs.all_worker_cpu - cs.worker_cpu)) * 100 END
+                        AS dedicated_cpu_used_pct,
+                    CASE WHEN pool_actual.metric_count > 0
+                            AND (cs.all_worker_mem_gib - cs.worker_mem_gib) > 0
+                        THEN (pool_actual.dedicated_mem_used / (cs.all_worker_mem_gib - cs.worker_mem_gib)) * 100 END
+                        AS dedicated_mem_used_pct,
+                    cs.pods_running, cs.pressure, cs.worker_nodes,
+                    cs.cpu_used, cs.mem_used_gib
+              FROM capacity_snapshots cs
+              LEFT JOIN LATERAL (
+                SELECT COUNT(*) FILTER (WHERE node->>'role' = 'worker') AS metric_count,
+                       COALESCE(SUM((node->>'cpu_used')::numeric)
+                           FILTER (WHERE node->>'role' = 'worker' AND node->>'pool' = 'standard-worker'), 0) AS shared_cpu_used,
+                       COALESCE(SUM((node->>'mem_used_gib')::numeric)
+                           FILTER (WHERE node->>'role' = 'worker' AND node->>'pool' = 'standard-worker'), 0) AS shared_mem_used,
+                       COALESCE(SUM((node->>'cpu_used')::numeric)
+                           FILTER (WHERE node->>'role' = 'worker' AND node->>'pool' <> 'standard-worker'), 0) AS dedicated_cpu_used,
+                       COALESCE(SUM((node->>'mem_used_gib')::numeric)
+                           FILTER (WHERE node->>'role' = 'worker' AND node->>'pool' <> 'standard-worker'), 0) AS dedicated_mem_used
+                 FROM jsonb_array_elements(
+                    CASE WHEN jsonb_typeof(cs.raw_planning->'node_pressure') = 'array'
+                        THEN cs.raw_planning->'node_pressure' ELSE '[]'::jsonb END
+                 ) AS node
+              ) pool_actual ON TRUE
+              WHERE cs.env = $1
+                AND cs.collected_at >= $2
+                AND cs.collected_at <= $3
+              ORDER BY cs.collected_at ASC
             """,
             env,
-            str(hours),
+            range_start,
+            range_end,
         )
 
     return {
         "env": env,
-        "hours": hours,
+        "start": range_start.isoformat(),
+        "end": range_end.isoformat(),
         "points": [_row_to_dict(r) for r in rows],
+    }
+
+
+@app.get("/api/v1/namespace-history/{env}")
+async def namespace_history(
+    env: str,
+    period: str = Query(default="24h", pattern="^(24h|30d)$"),
+    scope: str = Query(default="all", pattern="^(all|tenant|infra)$"),
+    namespace: str | None = None,
+):
+    """Namespace summaries and scoped trends for 24 hours or 30 daily buckets."""
+    env = env.upper()
+    if env not in ("DEV", "SIT"):
+        raise HTTPException(status_code=400, detail="env must be DEV or SIT")
+
+    lookback = timedelta(hours=24) if period == "24h" else timedelta(days=30)
+    params: list = [env, lookback]
+    conditions = ["env = $1", "collected_at >= NOW() - $2::interval"]
+    if namespace:
+        params.append(namespace)
+        conditions.append(f"namespace = ${len(params)}")
+    elif scope == "tenant":
+        conditions.append("ns_type = 'tenant'")
+    elif scope == "infra":
+        conditions.append("ns_type <> 'tenant'")
+    where_clause = " AND ".join(conditions)
+
+    async with pool.acquire() as conn:
+        summaries = await conn.fetch(
+            f"""
+            SELECT namespace,
+                   MAX(ns_type) AS ns_type,
+                   COUNT(*) AS sample_count,
+                   ROUND(AVG(cpu_req)::numeric, 3) AS avg_cpu_req,
+                   ROUND(AVG(mem_req_gib)::numeric, 2) AS avg_mem_req_gib,
+                   ROUND(AVG(cpu_used)::numeric, 3) AS avg_cpu_used,
+                   ROUND(MAX(cpu_used)::numeric, 3) AS max_cpu_used,
+                   ROUND(AVG(mem_used_gib)::numeric, 2) AS avg_mem_used_gib,
+                   ROUND(MAX(mem_used_gib)::numeric, 2) AS max_mem_used_gib,
+                   ROUND(AVG(cpu_util_pct)::numeric, 1) AS avg_cpu_util_pct,
+                   ROUND(MAX(cpu_util_pct)::numeric, 1) AS max_cpu_util_pct,
+                   ROUND(AVG(mem_util_pct)::numeric, 1) AS avg_mem_util_pct,
+                   ROUND(MAX(mem_util_pct)::numeric, 1) AS max_mem_util_pct
+            FROM namespace_snapshots
+            WHERE {where_clause}
+            GROUP BY namespace
+            ORDER BY max_cpu_used DESC NULLS LAST, namespace
+            """,
+            *params,
+        )
+
+        if period == "30d":
+            points = await conn.fetch(
+                f"""
+                WITH snapshot_scope AS (
+                    SELECT collected_at,
+                           SUM(cpu_req) AS cpu_req,
+                           SUM(mem_req_gib) AS mem_req_gib,
+                           SUM(cpu_used) AS cpu_used,
+                           SUM(mem_used_gib) AS mem_used_gib
+                    FROM namespace_snapshots
+                    WHERE {where_clause}
+                    GROUP BY collected_at
+                ), ratios AS (
+                    SELECT collected_at, cpu_req, mem_req_gib, cpu_used, mem_used_gib,
+                           CASE WHEN cpu_req > 0 THEN cpu_used / cpu_req * 100 END AS cpu_util_pct,
+                           CASE WHEN mem_req_gib > 0 THEN mem_used_gib / mem_req_gib * 100 END AS mem_util_pct
+                    FROM snapshot_scope
+                )
+                SELECT DATE_TRUNC('day', collected_at AT TIME ZONE 'Asia/Riyadh')
+                           AT TIME ZONE 'Asia/Riyadh' AS collected_at,
+                       ROUND(AVG(cpu_req)::numeric, 3) AS cpu_req,
+                       ROUND(AVG(mem_req_gib)::numeric, 2) AS mem_req_gib,
+                       ROUND(AVG(cpu_used)::numeric, 3) AS cpu_used,
+                       ROUND(MAX(cpu_used)::numeric, 3) AS max_cpu_used,
+                       ROUND(AVG(mem_used_gib)::numeric, 2) AS mem_used_gib,
+                       ROUND(MAX(mem_used_gib)::numeric, 2) AS max_mem_used_gib,
+                       ROUND(AVG(cpu_util_pct)::numeric, 1) AS cpu_util_pct,
+                       ROUND(MAX(cpu_util_pct)::numeric, 1) AS max_cpu_util_pct,
+                       ROUND(AVG(mem_util_pct)::numeric, 1) AS mem_util_pct,
+                       ROUND(MAX(mem_util_pct)::numeric, 1) AS max_mem_util_pct,
+                       COUNT(*) AS sample_count
+                FROM ratios
+                GROUP BY DATE_TRUNC('day', collected_at AT TIME ZONE 'Asia/Riyadh')
+                ORDER BY collected_at ASC
+                """,
+                *params,
+            )
+        else:
+            points = await conn.fetch(
+                f"""
+                SELECT collected_at,
+                       ROUND(SUM(cpu_req)::numeric, 3) AS cpu_req,
+                       ROUND(SUM(mem_req_gib)::numeric, 2) AS mem_req_gib,
+                       ROUND(SUM(cpu_used)::numeric, 3) AS cpu_used,
+                       ROUND(SUM(mem_used_gib)::numeric, 2) AS mem_used_gib,
+                       CASE WHEN SUM(cpu_req) > 0
+                            THEN ROUND((SUM(cpu_used) / SUM(cpu_req) * 100)::numeric, 1) END AS cpu_util_pct,
+                       CASE WHEN SUM(mem_req_gib) > 0
+                            THEN ROUND((SUM(mem_used_gib) / SUM(mem_req_gib) * 100)::numeric, 1) END AS mem_util_pct,
+                       1 AS sample_count
+                FROM namespace_snapshots
+                WHERE {where_clause}
+                GROUP BY collected_at
+                ORDER BY collected_at ASC
+                """,
+                *params,
+            )
+
+    return {
+        "env": env,
+        "period": period,
+        "scope": scope,
+        "namespace": namespace,
+        "bucket": "day" if period == "30d" else "snapshot",
+        "summaries": [_row_to_dict(r) for r in summaries],
+        "points": [_row_to_dict(r) for r in points],
     }
 
 
@@ -580,7 +736,7 @@ async def export_csv(
     """
     Export capacity data as CSV.
 
-    period: monthly | quarterly | yearly | raw (every snapshot, last 365 days)
+    period: monthly | quarterly | yearly | raw (every retained snapshot)
     """
     env = env.upper()
     if env not in ("DEV", "SIT"):
@@ -877,3 +1033,40 @@ async def desired_replicas(
         detail = detail[:limit]
 
     return {"env": env, "snapshot_id": snap["id"], "controllers": detail}
+
+
+@app.get("/api/v1/replica-gaps/{env}")
+async def replica_gaps(env: str):
+    """Controller readiness gaps with conservative scheduling/application signals."""
+    env = env.upper()
+    if env not in ("DEV", "SIT"):
+        raise HTTPException(status_code=400, detail="env must be DEV or SIT")
+
+    async with pool.acquire() as conn:
+        snap = await conn.fetchrow(
+            """
+            SELECT id, collected_at, raw_planning
+            FROM capacity_snapshots
+            WHERE env = $1
+            ORDER BY collected_at DESC
+            LIMIT 1
+            """,
+            env,
+        )
+
+    if snap is None:
+        raise HTTPException(status_code=404, detail=f"No data for env={env}")
+
+    raw = snap["raw_planning"] or {}
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+
+    analysis = raw.get("replica_gap_analysis", {})
+    return {
+        "env": env,
+        "snapshot_id": snap["id"],
+        "collected_at": snap["collected_at"].isoformat(),
+        "summary": analysis.get("summary", {}),
+        "note": analysis.get("note", "Replica gap analysis is available after the next collection."),
+        "controllers": analysis.get("controllers", []),
+    }

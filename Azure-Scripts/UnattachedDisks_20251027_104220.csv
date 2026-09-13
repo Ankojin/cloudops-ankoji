@@ -1,2 +1,0 @@
-"SubscriptionName","SubscriptionId","ResourceGroup","DiskName","Location","DiskSize_GB","DiskSku","DiskState","TimeCreated","AgeDays","AgeCategory","IsStaleUpload","IsMigrationRelated","MigrationInfo","MonthlyCost_USD","Tags","DeletionStatus","RiskLevel"
-"Enjaz","44b5560d-2b39-4960-8c57-3447afb62f66","ENAJZ-SHARED-RG-01","AVD-GoldImage_disk1_26a1203c490149e49764566c4875dd62","uaenorth","128","Standard_LRS","Unattached","11/20/2022 9:06:44 AM","1072.1","Very Old (>6 months)","False","False","","5.12","Role=Gold Image VM","N/A","MEDIUM - Long Unattached"

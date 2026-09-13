@@ -1,0 +1,57 @@
+{
+  "aadProfile": {
+    "adminGroupObjectIDs": [
+      "8bc26806-7aae-4506-afd6-6dc7e2f93c89"
+    ],
+    "enableAzureRbac": false,
+    "tenantId": null
+  },
+  "agentPublicKeyCertificate": "",
+  "agentVersion": "1.33.0",
+  "arcAgentProfile": {
+    "agentAutoUpgrade": "Enabled",
+    "agentErrors": null,
+    "agentState": null,
+    "desiredAgentVersion": null,
+    "systemComponents": null
+  },
+  "arcAgentryConfigurations": null,
+  "azureHybridBenefit": "NotApplicable",
+  "connectivityStatus": "Connected",
+  "distribution": "aks_workload",
+  "distributionVersion": null,
+  "gateway": null,
+  "id": "/subscriptions/60b0404e-72cf-480e-9c95-bf013fa7ca3c/resourceGroups/BAB-Azl-AKS-KSA-rg-01/providers/Microsoft.Kubernetes/ConnectedClusters/BAB-Azl-AKS-KSA-01",
+  "identity": {
+    "principalId": "8092c0ee-97fb-4783-bf3b-e7d9e45ff592",
+    "tenantId": "cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5",
+    "type": "SystemAssigned"
+  },
+  "infrastructure": "azure_stack_hci",
+  "kind": "ProvisionedCluster",
+  "kubernetesVersion": "1.29.4",
+  "lastConnectivityTime": "2026-08-23T19:57:43.166+03:00",
+  "location": "westeurope",
+  "managedIdentityCertificateExpirationTime": "2026-10-22T23:13:00+03:00",
+  "miscellaneousProperties": null,
+  "name": "BAB-Azl-AKS-KSA-01",
+  "offering": "AzureStackHCI_AKS_Workload",
+  "oidcIssuerProfile": null,
+  "privateLinkScopeResourceId": null,
+  "privateLinkState": "Disabled",
+  "provisioningState": "Succeeded",
+  "resourceGroup": "BAB-Azl-AKS-KSA-rg-01",
+  "securityProfile": null,
+  "systemData": {
+    "createdAt": "2025-04-20T08:39:51.442838+03:00",
+    "createdBy": "TAlGhazzi@Bankalbilad.com",
+    "createdByType": "User",
+    "lastModifiedAt": "2026-08-23T19:57:47.056896+03:00",
+    "lastModifiedBy": "64b12d6e-6549-484c-8cc6-6281839ba394",
+    "lastModifiedByType": "Application"
+  },
+  "tags": {},
+  "totalCoreCount": 40,
+  "totalNodeCount": 6,
+  "type": "microsoft.kubernetes/connectedclusters"
+}

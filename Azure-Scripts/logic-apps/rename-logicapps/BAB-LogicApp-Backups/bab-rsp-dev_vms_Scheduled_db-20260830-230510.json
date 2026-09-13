@@ -1,0 +1,438 @@
+{
+  "properties": {
+    "provisioningState": "Succeeded",
+    "createdTime": "2026-03-05T09:26:46.3470047Z",
+    "changedTime": "2026-03-31T07:49:36.1633115Z",
+    "state": "Enabled",
+    "version": "08584266635093509834",
+    "accessEndpoint": "https://prod-21.westeurope.logic.azure.com:443/workflows/00bcebad002f49d7a44f3cf2ea2e3ff8",
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        }
+      },
+      "triggers": {
+        "ScheduledStartTriggers": {
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "schedule": {
+              "hours": [
+                7
+              ],
+              "minutes": [
+                50
+              ],
+              "weekDays": [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Sunday"
+              ]
+            },
+            "timeZone": "Arab Standard Time"
+          },
+          "evaluatedRecurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "schedule": {
+              "hours": [
+                7
+              ],
+              "minutes": [
+                50
+              ],
+              "weekDays": [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Sunday"
+              ]
+            },
+            "timeZone": "Arab Standard Time"
+          },
+          "type": "Recurrence"
+        }
+      },
+      "actions": {
+        "StartFunction": {
+          "actions": {
+            "ScheduledStartFunction": {
+              "type": "Function",
+              "inputs": {
+                "body": {
+                  "Action": "start",
+                  "EnableClassic": false,
+                  "RequestScopes": {
+                    "ExcludedVMLists": [],
+                    "VMLists": [
+                      "/subscriptions/43cc4f11-ffb1-4a0d-8420-0ba3746b4248/resourceGroups/bab-dev-rsp-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DARSPDBDLV01"
+                    ]
+                  }
+                },
+                "function": {
+                  "id": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-auto-weeu-rg-01/providers/Microsoft.Web/sites/bab-core-azfuncapp-stspvm-weeu-01tzr4mnjfkd4ji/functions/Scheduled"
+                }
+              }
+            }
+          },
+          "runAfter": {},
+          "type": "Scope"
+        }
+      }
+    },
+    "parameters": {
+      "$connections": {
+        "type": "Object",
+        "value": {}
+      }
+    },
+    "endpointsConfiguration": {
+      "workflow": {
+        "outgoingIpAddresses": [
+          {
+            "address": "20.103.17.247"
+          },
+          {
+            "address": "20.103.16.47"
+          },
+          {
+            "address": "20.103.57.29"
+          },
+          {
+            "address": "20.101.174.23"
+          },
+          {
+            "address": "20.93.235.107"
+          },
+          {
+            "address": "20.76.174.72"
+          },
+          {
+            "address": "20.82.87.16"
+          },
+          {
+            "address": "20.103.91.39"
+          },
+          {
+            "address": "20.76.161.156"
+          },
+          {
+            "address": "98.64.193.64"
+          },
+          {
+            "address": "98.64.194.135"
+          },
+          {
+            "address": "98.64.198.219"
+          },
+          {
+            "address": "98.64.198.194"
+          },
+          {
+            "address": "98.64.208.46"
+          },
+          {
+            "address": "98.64.209.43"
+          },
+          {
+            "address": "172.211.196.188"
+          },
+          {
+            "address": "172.211.195.181"
+          },
+          {
+            "address": "98.64.157.37"
+          },
+          {
+            "address": "98.64.156.69"
+          },
+          {
+            "address": "98.64.156.152"
+          },
+          {
+            "address": "98.64.156.62"
+          },
+          {
+            "address": "20.238.229.108"
+          },
+          {
+            "address": "108.141.139.225"
+          },
+          {
+            "address": "20.238.230.87"
+          },
+          {
+            "address": "108.141.139.80"
+          },
+          {
+            "address": "108.142.111.161"
+          },
+          {
+            "address": "108.142.111.173"
+          },
+          {
+            "address": "108.142.111.175"
+          },
+          {
+            "address": "108.142.111.182"
+          },
+          {
+            "address": "108.142.111.151"
+          },
+          {
+            "address": "108.142.111.155"
+          },
+          {
+            "address": "108.142.111.157"
+          },
+          {
+            "address": "108.142.111.167"
+          },
+          {
+            "address": "98.64.203.5"
+          },
+          {
+            "address": "98.64.156.150"
+          },
+          {
+            "address": "20.56.202.134"
+          },
+          {
+            "address": "20.56.202.244"
+          },
+          {
+            "address": "57.153.19.27"
+          },
+          {
+            "address": "57.153.59.193"
+          },
+          {
+            "address": "108.141.95.129"
+          },
+          {
+            "address": "20.61.147.200"
+          },
+          {
+            "address": "57.153.83.40"
+          },
+          {
+            "address": "57.153.38.60"
+          },
+          {
+            "address": "57.153.2.162"
+          },
+          {
+            "address": "57.153.1.215"
+          },
+          {
+            "address": "108.142.24.182"
+          },
+          {
+            "address": "108.142.31.170"
+          },
+          {
+            "address": "108.142.31.143"
+          },
+          {
+            "address": "20.61.152.226"
+          },
+          {
+            "address": "57.153.7.245"
+          },
+          {
+            "address": "108.141.83.46"
+          },
+          {
+            "address": "57.153.7.245"
+          },
+          {
+            "address": "108.141.83.46"
+          }
+        ],
+        "accessEndpointIpAddresses": [
+          {
+            "address": "98.64.193.78"
+          },
+          {
+            "address": "98.64.194.143"
+          },
+          {
+            "address": "98.64.198.223"
+          },
+          {
+            "address": "98.64.198.203"
+          },
+          {
+            "address": "98.64.208.186"
+          },
+          {
+            "address": "98.64.209.52"
+          },
+          {
+            "address": "172.211.196.189"
+          },
+          {
+            "address": "172.211.195.251"
+          },
+          {
+            "address": "98.64.154.66"
+          },
+          {
+            "address": "98.64.156.81"
+          },
+          {
+            "address": "98.64.156.180"
+          },
+          {
+            "address": "98.64.156.68"
+          },
+          {
+            "address": "20.238.229.165"
+          },
+          {
+            "address": "20.8.128.2"
+          },
+          {
+            "address": "20.238.230.113"
+          },
+          {
+            "address": "108.141.139.111"
+          },
+          {
+            "address": "108.142.111.162"
+          },
+          {
+            "address": "108.142.111.174"
+          },
+          {
+            "address": "108.142.111.178"
+          },
+          {
+            "address": "108.142.111.183"
+          },
+          {
+            "address": "108.142.111.152"
+          },
+          {
+            "address": "108.142.111.156"
+          },
+          {
+            "address": "108.142.111.179"
+          },
+          {
+            "address": "108.142.111.169"
+          },
+          {
+            "address": "98.64.203.30"
+          },
+          {
+            "address": "98.64.156.172"
+          },
+          {
+            "address": "20.56.202.157"
+          },
+          {
+            "address": "20.56.203.30"
+          },
+          {
+            "address": "57.153.19.33"
+          },
+          {
+            "address": "57.153.59.202"
+          },
+          {
+            "address": "108.141.95.140"
+          },
+          {
+            "address": "20.61.147.216"
+          },
+          {
+            "address": "57.153.83.52"
+          },
+          {
+            "address": "57.153.38.174"
+          },
+          {
+            "address": "57.153.3.13"
+          },
+          {
+            "address": "57.153.1.223"
+          },
+          {
+            "address": "108.142.29.55"
+          },
+          {
+            "address": "108.142.31.220"
+          },
+          {
+            "address": "108.142.31.202"
+          },
+          {
+            "address": "20.61.153.22"
+          },
+          {
+            "address": "57.153.7.252"
+          },
+          {
+            "address": "108.141.83.61"
+          },
+          {
+            "address": "57.153.7.252"
+          },
+          {
+            "address": "108.141.83.61"
+          }
+        ]
+      },
+      "connector": {
+        "outgoingIpAddresses": [
+          {
+            "address": "52.174.88.118"
+          },
+          {
+            "address": "40.91.208.65"
+          },
+          {
+            "address": "13.69.64.208/28"
+          },
+          {
+            "address": "13.69.71.192/27"
+          },
+          {
+            "address": "13.93.36.78"
+          },
+          {
+            "address": "20.86.93.32/27"
+          },
+          {
+            "address": "20.86.93.64/28"
+          },
+          {
+            "address": "20.126.243.151"
+          },
+          {
+            "address": "20.126.241.238"
+          },
+          {
+            "address": "20.103.132.139"
+          },
+          {
+            "address": "20.103.131.1"
+          }
+        ]
+      }
+    }
+  },
+  "id": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-auto-weeu-rg-01/providers/Microsoft.Logic/workflows/bab-rsp-dev_vms_Scheduled_db",
+  "name": "bab-rsp-dev_vms_Scheduled_db",
+  "type": "Microsoft.Logic/workflows",
+  "location": "westeurope",
+  "tags": {}
+}

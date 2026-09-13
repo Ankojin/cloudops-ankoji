@@ -1,0 +1,2 @@
+Server,Result,Reason,Oracle_SIDs,Oracle_Homes,Service_Enabled,Service_Active
+"10.189.56.231","SUCCESS","SERVICE_ENABLED_ORATAB_UPDATED","APPDBDEV","/opt/oracle/product/19c/dbhome_1","enabled","inactive"

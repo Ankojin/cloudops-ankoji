@@ -6,15 +6,13 @@
 #   postgres   — PostgreSQL 15 (stores all snapshots)
 #   api        — FastAPI backend (serves /api/v1/*)
 #   dashboard  — nginx SPA (serves UI + proxies /api)
-#   collector  — bash collector + DB insert (cron every 5 min)
+#   collector  — one-shot bash collection + DB insert
 #
 # Quick start (local test):
 #   cp .env.example .env  # fill in cluster tokens
 #   docker compose up -d
 #   open http://localhost:8080
 # =============================================================
-
-version: "3.9"
 
 services:
 
@@ -45,7 +43,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql://planner:${DB_PASSWORD:-planner}@postgres:5432/capacity"
-      STALE_AFTER_MINUTES: "${STALE_AFTER_MINUTES:-90}"
+      STALE_AFTER_MINUTES: "${STALE_AFTER_MINUTES:-45}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,12 +69,12 @@ services:
       timeout: 5s
       retries: 3
 
-  # ── Collector (runs every 5 min via crond) ─────────────────
+  # ── Collector (one-shot; rerun explicitly when needed) ─────
   collector:
     build:
       context: .             # needs planner scripts in parent context
       dockerfile: collector/Dockerfile
-    restart: unless-stopped
+    restart: "no"
     environment:
       DATABASE_URL:   "postgresql://planner:${DB_PASSWORD:-planner}@postgres:5432/capacity"
       DEV_API:        "${DEV_API:-}"
@@ -87,6 +85,7 @@ services:
       SIT_ENV_LABEL:  "${SIT_ENV_LABEL:-SIT}"
       OCP_INSECURE_SKIP_TLS_VERIFY: "${OCP_INSECURE_SKIP_TLS_VERIFY:-false}"
       OCP_CA_FILE:     "${OCP_CA_FILE:-}"
+      SNAPSHOT_RETENTION_DAYS: "${SNAPSHOT_RETENTION_DAYS:-90}"
     volumes:
       - planner-output:/planner/output  # shared between collector + (optionally) api
     depends_on:

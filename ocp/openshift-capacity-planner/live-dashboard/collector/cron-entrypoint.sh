@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================
 # cron-entrypoint.sh
-# Runs inside the collector container on a cron schedule.
+# Runs once per Azure Container Apps Job execution.
 # 1. Runs the existing run-multi-env.sh (collects from DEV+SIT)
 # 2. Calls insert_to_db.sh for each env to persist to PostgreSQL
 #
-# Runs every 5 minutes via crond (configured in Dockerfile.collector).
+# The external job schedule is configured by deploy-aro-live-dashboard.sh.
 # =============================================================
 set -Eeuo pipefail
 

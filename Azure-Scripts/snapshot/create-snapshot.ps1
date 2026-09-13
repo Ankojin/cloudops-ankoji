@@ -2,16 +2,15 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string[]]$ResourceGroupNames = @("dev-mobilebanking-rg-01"),
+    [string[]]$ResourceGroupNames = @("bab-sit-was-swec-rg-01"),
     
     [Parameter(Mandatory = $false)]
-    [string[]]$ExcludedVMNames = @(),
-    
+    [string[]]$ExcludedVMNames = @("DABIBADLDSWV1","DAIBGADLDSWV1","DAIBGADLDTWV1","DAIBGAPWSILV2","DAIBGWBWSIWV1"),
     [Parameter(Mandatory = $false)]
     [string]$SnapshotPrefix = "snapshot",
     
     [Parameter(Mandatory = $false)]
-    [string]$Location = "UAENorth"
+    [string]$Location = "swedencentral"
 )
 
 $dateStamp = Get-Date -Format "yyyyMMdd-HHmmss"

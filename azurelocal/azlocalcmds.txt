@@ -1,0 +1,53 @@
+az aksarc show `
+  --name BAB-Azl-AKS-KSA-01 `
+  --resource-group BAB-Azl-AKS-KSA-rg-01 `
+  --subscription 60b0404e-72cf-480e-9c95-bf013fa7ca3c
+
+
+  az connectedk8s show `
+  --name BAB-Azl-AKS-KSA-01 `
+  --resource-group BAB-Azl-AKS-KSA-rg-01 `
+  --subscription 60b0404e-72cf-480e-9c95-bf013fa7ca3c `
+  --query "{name:name, connectivityStatus:connectivityStatus, managedIdentityCertificateExpirationTime:managedIdentityCertificateExpirationTime, agentVersion:agentVersion}" -o json
+
+
+  az connectedk8s show `
+  --name BAB-Azl-AKS-KSA-01 `
+  --resource-group BAB-Azl-AKS-KSA-rg-01 `
+  --subscription 60b0404e-72cf-480e-9c95-bf013fa7ca3c `
+  --query "{
+    name:name,
+    connectivityStatus:connectivityStatus,
+    provisioningState:provisioningState,
+    currentState:status,
+    managedIdentityCertificateExpirationTime:managedIdentityCertificateExpirationTime,
+    agentVersion:agentVersion,
+    kubernetesVersion:kubernetesVersion
+  }" `
+  -o json
+
+
+  $vms = @()
+
+#shows both control-plane and node-pool VMs across the entire Azure Stack HCI cluster
+
+Get-ClusterNode | ForEach-Object {
+    $node = $_.Name
+    $vms += Invoke-Command -ComputerName $node -ScriptBlock {
+        Get-VM | Where-Object { 
+            $_.Name -like "*control-plane*" -or 
+            $_.Name -like "*nodepool*" -or 
+            $_.Name -like "*aks*" 
+        } | Select-Object Name, State, 
+            @{N='MemoryGB';E={[math]::Round($_.MemoryAssigned/1GB,1)}},
+            Uptime,
+            @{N='Host';E={$env:COMPUTERNAME}}
+    }
+}
+
+$vms | Sort-Object Name | Format-Table -AutoSize
+
+az aks get-credentials `
+--name BAB-Azl-AKS-KSA-01 `
+--resource-group BAB-Azl-AKS-KSA-rg-01 `
+--admin

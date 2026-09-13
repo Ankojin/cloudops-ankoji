@@ -2393,3 +2393,140 @@ if [[ -f "${CAPACITY_JSON}/desired_capacity.json" ]] && \
     rm -f "${CAPACITY_JSON}/desired_capacity_enriched.json"
     log INFO "Desired replica detail: $(jq 'length' "${CAPACITY_JSON}/desired_replica_detail.json" 2>/dev/null || echo 0) controllers"
 fi
+
+
+#############################################
+# Replica Readiness and Scheduling Gaps
+#############################################
+
+log INFO "Building replica readiness and scheduling gap analysis"
+
+TAINT_KEYS_REPLICA_JQ=$(echo "${DEDICATED_TAINT_KEYS:-}" | jq -Rs 'split("\n") | map(select(length>0))')
+
+jq -n \
+  --argjson taint_keys "${TAINT_KEYS_REPLICA_JQ:-[]}" \
+  --slurpfile deployments "${CAPACITY_RAW}/deployments.json" \
+  --slurpfile statefulsets "${CAPACITY_RAW}/statefulsets.json" \
+  --slurpfile replicasets "${CAPACITY_RAW}/replicasets.json" \
+  --slurpfile pods "${CAPACITY_RAW}/pods.json" '
+  def cpu_cores:
+    if . == null or . == "" then 0
+    elif test("m$") then (sub("m$"; "") | tonumber) / 1000
+    else (tonumber? // 0) end;
+  def mem_gib:
+    if . == null or . == "" then 0
+    elif test("Ki$") then (sub("Ki$"; "") | tonumber) / 1048576
+    elif test("Mi$") then (sub("Mi$"; "") | tonumber) / 1024
+    elif test("Gi$") then (sub("Gi$"; "") | tonumber)
+    elif test("Ti$") then (sub("Ti$"; "") | tonumber) * 1024
+    else (tonumber? // 0) / 1073741824 end;
+  def pool_hint:
+    ([(((.spec.template.spec.tolerations // []) | map(.key // empty)) +
+       ((.spec.template.spec.nodeSelector // {}) | keys) +
+       ([.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[]?.matchExpressions[]?.key // empty]))[] as $key |
+      $taint_keys[] | select(. == $key)] | length) as $dedicated |
+    if $dedicated > 0 then "DEDICATED" else "SHARED" end;
+
+  [($replicasets[0].items // [])[] |
+    . as $rs |
+    (($rs.metadata.ownerReferences // []) | map(select(.controller == true and .kind == "Deployment")) | first // null) as $owner |
+    select($owner != null) |
+    {key: ($rs.metadata.namespace + "/" + $rs.metadata.name), value: $owner.name}
+  ] | from_entries as $rs_to_deployment |
+
+  [($pods[0].items // [])[] |
+    . as $pod |
+    (($pod.metadata.ownerReferences // []) | map(select(.controller == true)) | first // {}) as $owner |
+    (if $owner.kind == "ReplicaSet" and $rs_to_deployment[($pod.metadata.namespace + "/" + $owner.name)] != null
+     then "Deployment/" + $rs_to_deployment[($pod.metadata.namespace + "/" + $owner.name)]
+     elif $owner.kind == "StatefulSet" then "StatefulSet/" + $owner.name
+     else "" end) as $controller |
+    select($controller != "") |
+    {
+      key: ($pod.metadata.namespace + "/" + $controller),
+      phase: ($pod.status.phase // "Unknown"),
+      unscheduled: (($pod.status.phase // "") == "Pending" and ($pod.spec.nodeName // "") == ""),
+      restarts: ([($pod.status.containerStatuses // [])[] | .restartCount // 0] | add // 0),
+      crashloop: ([($pod.status.containerStatuses // [])[] | select(.state.waiting.reason == "CrashLoopBackOff")] | length),
+      reasons: ([($pod.status.conditions // [])[] | select(.status == "False") | .reason // empty] +
+                [($pod.status.containerStatuses // [])[] | .state.waiting.reason // empty] | unique)
+    }
+  ] | group_by(.key) | map({
+    key: .[0].key,
+    value: {
+      observed_pods: length,
+      running_pods: (map(select(.phase == "Running")) | length),
+      pending_pods: (map(select(.phase == "Pending")) | length),
+      unscheduled_pending_pods: (map(select(.unscheduled)) | length),
+      restart_count: (map(.restarts) | add // 0),
+      crashloop_pods: (map(select(.crashloop > 0)) | length),
+      pod_reasons: (map(.reasons[]) | unique)
+    }
+  }) | from_entries as $pod_signals |
+
+  [(($deployments[0].items // []) + ($statefulsets[0].items // []))[] |
+    . as $controller |
+    ($controller.kind + "/" + $controller.metadata.name) as $controller_name |
+    ($controller.metadata.namespace + "/" + $controller_name) as $key |
+    ($pod_signals[$key] // {observed_pods:0,running_pods:0,pending_pods:0,unscheduled_pending_pods:0,restart_count:0,crashloop_pods:0,pod_reasons:[]}) as $pods |
+    ($controller.spec.replicas // 1) as $desired |
+    ($controller.status.replicas // 0) as $current |
+    ($controller.status.readyReplicas // 0) as $ready |
+    (if $controller.kind == "Deployment" then ($controller.status.availableReplicas // 0) else ($controller.status.readyReplicas // 0) end) as $available |
+    ([($controller.spec.template.spec.containers // [])[] | .resources.requests.cpu // "0" | cpu_cores] | add // 0) as $cpu_per_replica |
+    ([($controller.spec.template.spec.containers // [])[] | .resources.requests.memory // "0" | mem_gib] | add // 0) as $mem_per_replica |
+    ([0, ($desired - $ready)] | max) as $replica_gap |
+    {
+      namespace: $controller.metadata.namespace,
+      kind: $controller.kind,
+      name: $controller.metadata.name,
+      controller: $controller_name,
+      pool_hint: ($controller | pool_hint),
+      desired_replicas: $desired,
+      current_replicas: $current,
+      ready_replicas: $ready,
+      available_replicas: $available,
+      unavailable_replicas: ([0, ($desired - $available)] | max),
+      replica_gap: $replica_gap,
+      observed_pods: $pods.observed_pods,
+      running_pods: $pods.running_pods,
+      pending_pods: $pods.pending_pods,
+      unscheduled_pending_pods: $pods.unscheduled_pending_pods,
+      restart_count: $pods.restart_count,
+      crashloop_pods: $pods.crashloop_pods,
+      pod_reasons: $pods.pod_reasons,
+      cpu_per_replica: $cpu_per_replica,
+      mem_gib_per_replica: $mem_per_replica,
+      gap_cpu_cores: ($replica_gap * $cpu_per_replica),
+      gap_mem_gib: ($replica_gap * $mem_per_replica),
+      issue: (
+        if $desired == 0 then "SCALED_DOWN"
+        elif $pods.unscheduled_pending_pods > 0 then "SCHEDULING_REVIEW"
+        elif $pods.pending_pods > 0 then "STARTUP_PENDING"
+        elif $replica_gap > 0 and $pods.crashloop_pods > 0 then "APPLICATION_RESTARTS"
+        elif $replica_gap > 0 then "READINESS_REVIEW"
+        else "HEALTHY" end
+      )
+    }
+  ] as $controllers |
+  {
+    generated: (now | todate),
+    note: "Scheduling review is only asserted for Pending pods without a node. Other replica gaps require readiness or application investigation.",
+    summary: {
+      controllers: ($controllers | length),
+      healthy: ($controllers | map(select(.issue == "HEALTHY")) | length),
+      scaled_down: ($controllers | map(select(.issue == "SCALED_DOWN")) | length),
+      controllers_with_gap: ($controllers | map(select(.replica_gap > 0)) | length),
+      missing_ready_replicas: ($controllers | map(.replica_gap) | add // 0),
+      pending_pods: ($controllers | map(.pending_pods) | add // 0),
+      unscheduled_pending_pods: ($controllers | map(.unscheduled_pending_pods) | add // 0),
+      crashloop_pods: ($controllers | map(.crashloop_pods) | add // 0),
+      restart_count: ($controllers | map(.restart_count) | add // 0),
+      gap_cpu_cores: ($controllers | map(.gap_cpu_cores) | add // 0),
+      gap_mem_gib: ($controllers | map(.gap_mem_gib) | add // 0)
+    },
+    controllers: ($controllers | sort_by(-.unscheduled_pending_pods, -.replica_gap, -.restart_count))
+  }
+' > "${CAPACITY_JSON}/replica_gap_analysis.json"
+
+log INFO "Replica gap analysis: ${CAPACITY_JSON}/replica_gap_analysis.json"

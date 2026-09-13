@@ -178,7 +178,7 @@ div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
     <button data-tab="misplaced" onclick="switchTab('misplaced',this)">Placement</button>
   </div>
   <div class="header-right">
-    <span title="The collector runs hourly. This countdown only reloads the latest saved API data.">Data refresh in <span id="countdown">5:00</span></span>
+    <span title="The collector runs every 15 minutes. This countdown only reloads the latest saved API data.">Data refresh in <span id="countdown">5:00</span></span>
     <span id="last-updated" style="color:#adc6e0">—</span>
     <button class="btn-refresh" onclick="fetchAll()" title="Reload saved dashboard data. This does not start the collector job.">Refresh data</button>
   </div>
@@ -336,7 +336,7 @@ div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
   <div class="wrap">
     <div class="card" style="padding:12px 18px;margin-bottom:16px;background:#f0f7ff;border:1px solid #bcd4f0">
       <label style="font-size:13px;font-weight:600;color:#1f4e79;margin-right:10px">Environment</label>
-      <select id="ns-env-select" onchange="renderNamespacesTab()"
+      <select id="ns-env-select" onchange="renderNamespacesTab();loadNamespaceHistory()"
         style="padding:4px 10px;border:1px solid #bcd4f0;border-radius:5px;font-size:13px;background:#fff">
         <option value="DEV">DEV — Development</option>
         <option value="SIT">SIT — System Integration</option>
@@ -355,8 +355,18 @@ div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
         <span style="display:inline-block;width:10px;height:10px;background:#fff;border:1px solid #ddd;vertical-align:middle;margin-right:3px"></span>White=tenant odd</div>
     </div>
     <div class="card">
+      <h2>Tenant Projects</h2>
+      <p style="color:#555;font-size:13px">
+        Select a project to open its utilization history. &nbsp;
+        <span style="color:#1a7f37;font-weight:600">&#9646; green</span> 50–90% util &nbsp;
+        <span style="color:#d35400;font-weight:600">&#9646; amber</span> &lt;50% over-provisioned &nbsp;
+        <span style="color:#c0392b;font-weight:600">&#9646; red</span> &gt;90% tight
+      </p>
+      <div class="project-grid" id="project-cards"></div>
+    </div>
+    <div class="card">
       <h2 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Chargeback by Namespace <span id="ns-tab-env-label"></span>
-        <select id="ns-env-filter" onchange="renderNamespacesTab()" style="font-size:12px;padding:3px 8px;border:1px solid #ccc;border-radius:6px;margin-left:auto;cursor:pointer">
+        <select id="ns-env-filter" onchange="changeNamespaceTypeFilter()" style="font-size:12px;padding:3px 8px;border:1px solid #ccc;border-radius:6px;margin-left:auto;cursor:pointer">
           <option value="all">All</option>
           <option value="tenant">Tenant only</option>
           <option value="infra">Infra only</option>
@@ -373,14 +383,17 @@ div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
       </div>
     </div>
     <div class="card">
-      <h2>Tenant Projects</h2>
-      <p style="color:#555;font-size:13px">
-        <span style="color:#1a7f37;font-weight:600">&#9646; green</span> 50–90% util (healthy) &nbsp;
-        <span style="color:#d35400;font-weight:600">&#9646; amber</span> &lt;50% over-provisioned &nbsp;
-        <span style="color:#c0392b;font-weight:600">&#9646; red</span> &gt;90% tight &nbsp;
-        <span style="color:#2e75b6;font-weight:600">&#9646; blue</span> Metrics unavailable
-      </p>
-      <div class="project-grid" id="project-cards"></div>
+      <div style="display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <h2 style="margin:0;margin-right:auto">Namespace Utilization History</h2>
+        <label style="font-size:12px">Period<br><select id="ns-history-period" onchange="loadNamespaceHistory()" style="padding:4px 8px;border:1px solid #ccc;border-radius:5px"><option value="24h">Last 24 hours · each snapshot</option><option value="30d">Last 30 days · daily</option></select></label>
+        <label style="font-size:12px">Group<br><select id="ns-history-scope" onchange="changeNamespaceHistoryScope()" style="padding:4px 8px;border:1px solid #ccc;border-radius:5px"><option value="all">All namespaces</option><option value="tenant">Tenant projects</option><option value="infra">Platform / infrastructure</option></select></label>
+        <label style="font-size:12px">Namespace<br><select id="ns-history-selected" onchange="loadNamespaceHistoryPoints()" style="padding:4px 8px;border:1px solid #ccc;border-radius:5px;max-width:260px"><option value="">Group total</option></select></label>
+        <label style="font-size:12px">Find namespace<br><input id="ns-history-filter" type="search" placeholder="Filter namespaces" oninput="renderNamespaceHistory()" style="padding:4px 8px;border:1px solid #ccc;border-radius:5px;width:190px"></label>
+      </div>
+      <p style="color:#555;font-size:13px">Group trends combine the selected namespaces at each snapshot before calculating actual usage ÷ Requests. The 30-day view shows one Saudi-calendar daily average and peak. Select a namespace or click a row/card for its trend.</p>
+      <div id="ns-history-status" style="font-size:12px;color:#64748b;margin-bottom:8px"></div>
+      <div style="overflow-x:auto;max-height:420px"><table><thead><tr><th>Namespace</th><th>Type</th><th>Samples</th><th>Avg CPU</th><th>Peak CPU</th><th>Avg Memory</th><th>Peak Memory</th><th>Avg CPU / Requests</th><th>Peak CPU / Requests</th><th>Avg Memory / Requests</th><th>Peak Memory / Requests</th></tr></thead><tbody id="ns-history-body"><tr><td colspan="11" style="text-align:center;color:#aaa">Loading…</td></tr></tbody></table></div>
+      <div id="ns-history-chart-wrap" class="history-chart-wrap" style="display:none;margin-top:16px"><canvas id="ns-history-chart"></canvas></div>
     </div>
   </div>
 </div>
@@ -426,11 +439,21 @@ div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
         <option value="DEV">DEV</option><option value="SIT">SIT</option>
       </select>
       <input id="dr-filter" type="text" placeholder="Filter namespace/controller…" oninput="filterDesiredTable()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;width:240px"/>
+      <select id="dr-issue-filter" onchange="renderReplicaGaps()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px">
+        <option value="issues">Readiness issues</option><option value="all">All controllers</option>
+        <option value="SCHEDULING_REVIEW">Scheduling review</option><option value="STARTUP_PENDING">Startup pending</option>
+        <option value="APPLICATION_RESTARTS">Application restarts</option><option value="READINESS_REVIEW">Readiness review</option>
+        <option value="SCALED_DOWN">Scaled down</option>
+      </select>
     </div>
     <div class="info" style="margin-bottom:12px">
       <b>Primary planning signal</b> (Red Hat practice #6): <code>spec.replicas × template requests</code> = what the cluster must support if all workloads are fully scaled.
-      Compare against Running requests in the Namespaces tab to identify scheduling gaps. Replicas=0 = intentionally scaled-down (still counts toward desired capacity when scaled up).
+      Compare against Running requests in the Namespaces tab to identify scheduling gaps. Replicas=0 is intentionally scaled down and adds no demand until the configured replica count increases.
     </div>
+    <h3>Replica Readiness Analysis</h3>
+    <div id="dr-gap-summary" class="management-grid"><div class="management-metric">Available after the next collection.</div></div>
+    <div id="dr-gap-table-wrap" style="overflow-x:auto;margin-bottom:22px"></div>
+    <h3>Configured Replica Demand</h3>
     <div id="dr-table-wrap"><p style="color:#aaa">Loading…</p></div>
   </div>
 </div>
@@ -458,7 +481,7 @@ div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
 <div id="tab-pvcs" class="tab-content" style="display:none">
   <div class="card">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-      <h2 style="margin:0">&#128190; Storage Planning &amp; Stale Inventory</h2>
+      <h2 style="margin:0">Storage Capacity &amp; Inventory</h2>
       <select id="pvc-env-select" onchange="renderPvcTab()" style="font-size:13px;padding:4px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer">
         <option value="DEV">DEV</option>
         <option value="SIT">SIT</option>
@@ -473,8 +496,8 @@ div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
     </div>
 
     <div class="info" style="margin-bottom:14px">
-      Inventory candidates are based on current pod references and resource state. Review workload ownership,
-      retention policy, backup requirements, and application schedules before deleting any resource.
+      A Bound PVC is not automatically unused. Evidence combines active pod mounts, Deployment/StatefulSet/CronJob templates,
+      Job templates, VolumeAttachments, PV state, and filesystem metrics when available. Filesystem Used is shown only when the CSI/kubelet exposes <code>kubelet_volume_stats_*</code>; unavailable does not mean zero use. Claims without a current workload reference are validation items, not deletion recommendations; confirm ownership, backups, and retention before action.
     </div>
 
     <!-- Summary cards -->
@@ -488,19 +511,29 @@ div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
         <div id="pvc-total-gib" style="font-size:22px;font-weight:700;color:#16a085">—</div>
       </div>
       <div class="card" style="flex:1;min-width:140px;padding:12px 16px">
-        <div style="font-size:12px;color:#888">Actual Used</div>
+        <div style="font-size:12px;color:#888">Filesystem Used</div>
         <div id="storage-used-gib" style="font-size:22px;font-weight:700;color:#2e75b6">—</div>
         <div id="storage-metrics-coverage" style="font-size:11px;color:#888">—</div>
       </div>
+      <div class="card" style="flex:1;min-width:150px;padding:12px 16px">
+        <div style="font-size:12px;color:#888">Active Pod Mounts</div>
+        <div id="storage-active-pvcs" style="font-size:22px;font-weight:700;color:#1a7f37">—</div>
+        <div style="font-size:11px;color:#888">PVCs mounted by current pods</div>
+      </div>
       <div class="card" style="flex:1;min-width:160px;padding:12px 16px">
-        <div style="font-size:12px;color:#888">Unused PVC Candidates</div>
+        <div style="font-size:12px;color:#888">Workload Reserved</div>
+        <div id="storage-reserved-pvcs" style="font-size:22px;font-weight:700;color:#2e75b6">—</div>
+        <div id="storage-reserved-gib" style="font-size:11px;color:#888">—</div>
+      </div>
+      <div class="card" style="flex:1;min-width:160px;padding:12px 16px">
+        <div style="font-size:12px;color:#888">Unreferenced Claims</div>
         <div id="storage-unused-pvcs" style="font-size:22px;font-weight:700;color:#d97706">—</div>
         <div id="storage-unused-gib" style="font-size:11px;color:#888">—</div>
       </div>
       <div class="card" style="flex:1;min-width:160px;padding:12px 16px">
-        <div style="font-size:12px;color:#888">Other Stale Candidates</div>
+        <div style="font-size:12px;color:#888">PV Lifecycle Exceptions</div>
         <div id="storage-stale-count" style="font-size:22px;font-weight:700;color:#c0392b">—</div>
-        <div style="font-size:11px;color:#888">PVs, controllers, terminal pods</div>
+        <div style="font-size:11px;color:#888">Released, failed, or long-available PVs</div>
       </div>
       <div class="card" style="flex:2;min-width:240px;padding:12px 16px">
         <div style="font-size:12px;color:#888;margin-bottom:6px">By Storage Class</div>
@@ -513,7 +546,7 @@ div[style*="overflow-x:auto"] thead th{position:sticky;top:0;z-index:2}
     </div>
 
     <div style="margin-bottom:18px">
-      <h3 style="margin:0 0 8px">Review Candidates</h3>
+      <h3 style="margin:0 0 8px">Items Requiring Validation</h3>
       <div id="storage-candidates-wrap" style="overflow-x:auto"><p style="color:#aaa">Loading…</p></div>
     </div>
 
@@ -596,8 +629,9 @@ const REFRESH_SECS = 300;
 const DISPLAY_TIME_ZONE = 'Asia/Riyadh';
 const DISPLAY_TIME_ZONE_LABEL = 'AST (UTC+3)';
 
-let _status={}, _metrics={}, _history={}, _pools={}, _ns={};
+let _status={}, _metrics={}, _history={}, _pools={}, _ns={}, _nsHistory={};
 let _sparkCharts={}, _histCharts={};
+let _nsHistoryChart=null;
 let _remaining = REFRESH_SECS;
 let _analyticsData = {};
 let _lastWhatIf = null;
@@ -868,23 +902,42 @@ function comparisonBar(label,value,color){
 }
 function renderManagementSections(env,d){
   const p=env.toLowerCase(), model=capacityPoolModel(env,d);
-  const pools=[model.dedicated,model.shared];
+  const planningPools=[model.dedicated,model.shared];
+  const apiPools=((_pools[env]||{}).pools||[]);
+  const inventoryNodes=((planningData(d).node_machine_inventory||{}).nodes||[]).filter(node=>node.role==='worker');
+  const utilizationPools=apiPools.map(pool=>{
+    const poolNodes=inventoryNodes.filter(node=>node.pool===pool.pool_name);
+    return {
+      name:pool.pool_name,
+      label:pool.dedicated?`Dedicated · ${pool.pool_name}`:'Shared / General-Purpose',
+      dedicated:!!pool.dedicated,
+      taint:pool.taint_key?`${pool.taint_key}=${pool.taint_value||''}:${pool.effect||''}`:'',
+      nodes:+pool.node_count||0,
+      capacityCpu:+pool.cpu_cores||0,capacityMem:+pool.memory_gib||0,
+      runningCpu:+pool.cpu_cores_requested||0,runningMem:+pool.memory_gib_requested||0,
+      actualCpu:poolNodes.reduce((sum,node)=>sum+(+node.actual_cpu_cores||0),0),
+      actualMem:poolNodes.reduce((sum,node)=>sum+(+node.actual_memory_gib||0),0),
+      namespaces:(pool.namespaces||[]).map(row=>row.namespace)
+    };
+  }).sort((a,b)=>Number(a.dedicated)-Number(b.dedicated));
+  if(!utilizationPools.length)utilizationPools.push({...model.shared,label:'Shared / General-Purpose',dedicated:false,namespaces:[]});
   const util=$(`${p}-pool-utilization`);
-  if(util) util.innerHTML=pools.map(pool=>{
+  if(util) util.innerHTML=utilizationPools.map(pool=>{
     const cpuReq=pool.capacityCpu>0?pool.runningCpu/pool.capacityCpu*100:0;
     const memReq=pool.capacityMem>0?pool.runningMem/pool.capacityMem*100:0;
     const cpuUse=pool.capacityCpu>0?pool.actualCpu/pool.capacityCpu*100:0;
     const memUse=pool.capacityMem>0?pool.actualMem/pool.capacityMem*100:0;
-    return `<div class="comparison-panel"><h3>${pool.name==='SHARED'?'Shared / General-Purpose':'Dedicated / Tainted'} Pool</h3>
+    const namespaceText=pool.namespaces.length?pool.namespaces.join(', '):pool.dedicated?'No tenant namespace detected':'Shared tenant workloads';
+    return `<div class="comparison-panel"><h3>${escapeHtml(pool.label)}</h3>
       ${comparisonBar('CPU requests',cpuReq,cpuReq>80?'#c0392b':cpuReq>60?'#d97706':'#2e75b6')}
       ${comparisonBar('CPU actual usage',cpuUse,'#5ba4cf')}
       ${comparisonBar('Memory requests',memReq,memReq>80?'#c0392b':memReq>60?'#d97706':'#16a085')}
       ${comparisonBar('Memory actual usage',memUse,'#4fb3a5')}
-      <div class="detail">${f1(pool.runningCpu)} / ${f1(pool.capacityCpu)} cores requested · ${f1(pool.runningMem)} / ${f1(pool.capacityMem)} GiB requested</div></div>`;
+      <div class="detail">${pool.nodes} node(s) · ${f1(pool.runningCpu)} / ${f1(pool.capacityCpu)} cores requested · ${f1(pool.runningMem)} / ${f1(pool.capacityMem)} GiB requested${pool.taint?`<br><code>${escapeHtml(pool.taint)}</code>`:''}<br><b>Namespaces:</b> ${escapeHtml(namespaceText)}</div></div>`;
   }).join('');
 
   const recs={};
-  pools.forEach(pool=>{recs[pool.name]={running:recommendation(pool.runningCpu,pool.runningMem,pool.capacityCpu,pool.capacityMem,pool.netCpu,pool.netMem),desired:recommendation(pool.desiredCpu,pool.desiredMem,pool.capacityCpu,pool.capacityMem,pool.netCpu,pool.netMem)};});
+  planningPools.forEach(pool=>{recs[pool.name]={running:recommendation(pool.runningCpu,pool.runningMem,pool.capacityCpu,pool.capacityMem,pool.netCpu,pool.netMem),desired:recommendation(pool.desiredCpu,pool.desiredMem,pool.capacityCpu,pool.capacityMem,pool.netCpu,pool.netMem)};});
   const desiredTotal=recs.SHARED.desired.nodes+recs.DEDICATED.desired.nodes;
   const runningTotal=recs.SHARED.running.nodes+recs.DEDICATED.running.nodes;
   ($(`${p}-mg-workers`)||{}).textContent=model.shared.nodes+model.dedicated.nodes;
@@ -899,9 +952,9 @@ function renderManagementSections(env,d){
   ($(`${p}-mg-placement`)||{}).style.color=model.misplaced?'#c0392b':'#1a7f37';
 
   const recCards=$(`${p}-node-recommendation`);
-  if(recCards) recCards.innerHTML=pools.map(pool=>{const rec=recs[pool.name].desired;return `<div class="management-metric"><div class="label">${pool.name} · desired scale</div><div class="value" style="color:${rec.nodes?'#c0392b':'#1a7f37'}">+${rec.nodes}</div><div class="detail">Binding: ${rec.binding} · ${rec.nodes?`add ${rec.nodes} node(s) for desired-replica demand`:'desired replicas remain within the 80% target'}</div></div>`;}).join('');
+  if(recCards) recCards.innerHTML=planningPools.map(pool=>{const rec=recs[pool.name].desired;return `<div class="management-metric"><div class="label">${pool.name} · desired scale</div><div class="value" style="color:${rec.nodes?'#c0392b':'#1a7f37'}">+${rec.nodes}</div><div class="detail">Binding: ${rec.binding} · ${rec.nodes?`add ${rec.nodes} node(s) for desired-replica demand`:'desired replicas remain within the 80% target'}</div></div>`;}).join('');
   const recBody=$(`${p}-node-rec-body`);
-  if(recBody) recBody.innerHTML=pools.flatMap(pool=>[['Running now','runningCpu','runningMem','running'],['Desired replicas','desiredCpu','desiredMem','desired']].map(([basis,cpuKey,memKey,recKey])=>{const rec=recs[pool.name][recKey];return `<tr><td><b>${pool.name}</b></td><td>${basis}</td><td>${pool.nodes}</td><td>${f3(pool[cpuKey])}</td><td>${f1(pool[memKey])}</td><td>${f3(pool.netCpu)}</td><td>${f1(pool.netMem)}</td><td><b style="color:${rec.nodes?'#c0392b':'#1a7f37'}">+${rec.nodes}</b></td><td>${rec.binding}</td><td>${rec.nodes?'Add capacity':'Within target'}</td></tr>`;})).join('');
+  if(recBody) recBody.innerHTML=planningPools.flatMap(pool=>[['Running now','runningCpu','runningMem','running'],['Desired replicas','desiredCpu','desiredMem','desired']].map(([basis,cpuKey,memKey,recKey])=>{const rec=recs[pool.name][recKey];return `<tr><td><b>${pool.name}</b></td><td>${basis}</td><td>${pool.nodes}</td><td>${f3(pool[cpuKey])}</td><td>${f1(pool[memKey])}</td><td>${f3(pool.netCpu)}</td><td>${f1(pool.netMem)}</td><td><b style="color:${rec.nodes?'#c0392b':'#1a7f37'}">+${rec.nodes}</b></td><td>${rec.binding}</td><td>${rec.nodes?'Add capacity':'Within target'}</td></tr>`;})).join('');
   return model;
 }
 
@@ -921,7 +974,7 @@ function buildEnvTab(env){
     </div>
   </div>
   <div class="grid">
-    <div class="card"><h3>Unrequested Shared Capacity</h3><div class="metric green" id="${p}-health-score">—%</div><small style="color:#667085">Remaining to 100%; node planning uses the stricter 80% target</small></div>
+    <div class="card"><h3>Shared Pool Request Headroom</h3><div class="metric green" id="${p}-health-score">—%</div><small style="color:#667085">Remaining before 100%, based on the higher of CPU or memory Request %. Planning targets 80%.</small></div>
     <div class="card"><h3>Shared CPU Requested</h3><div class="metric" id="${p}-cpu-pct" style="color:#2e75b6">—%</div>
       <div style="font-size:12px;color:#888;margin-top:4px"><span id="${p}-cpu-req">—</span> of <span id="${p}-cpu-total">—</span> cores</div></div>
     <div class="card"><h3>Shared Memory Requested</h3><div class="metric" id="${p}-mem-pct" style="color:#16a085">—%</div>
@@ -1024,25 +1077,23 @@ function buildEnvTab(env){
       <tr><td>Namespaces</td><td><b id="${p}-plan-ns">—</b></td></tr>
     </table>
   </div>
-  <div class="card">
-    <h2>Red Hat OpenShift Capacity Practices Used Here</h2>
-    <div class="methodology">
-      1. Scheduling capacity compares pod <b>Requests</b> with node <b>Allocatable</b> resources.<br>
-      2. Overcommit means Limits exceed Requests; it does not permit Requests beyond Allocatable.<br>
-      3. Requests should be set consistently and reviewed against observed usage for rightsizing.<br>
-      4. Scale planning targets about <b>80%</b> Request/Allocatable to retain failure and rollout headroom.<br>
-      5. DaemonSet Requests are subtracted from the capacity gained by each new node.<br>
-      6. Desired replicas are the primary planning signal; Running pods describe current pressure.<br>
-      7. Actual usage comes from OpenShift metrics and is used for rightsizing, not scheduler admission.
-    </div>
+  <div class="methodology" style="margin-bottom:20px">
+    <b>Calculation basis:</b> Capacity recommendations compare workload Requests with shared-pool Allocatable resources, target 80% utilization, account for DaemonSet overhead, and use desired replicas for forward planning. Actual usage is shown separately for rightsizing.
   </div>
   <div class="card">
-    <h2 style="display:flex;align-items:center;gap:10px">Shared Pool Request History
+    <h2 style="display:flex;align-items:center;gap:10px">Cluster Utilization History
       <select id="${p}-hist-hours" onchange="changeHistoryRange('${env}')" style="font-size:12px;padding:3px 8px;border:1px solid #ccc;border-radius:6px;cursor:pointer">
         <option value="1">1 h</option><option value="6">6 h</option>
         <option value="24">24 h</option><option value="72">3 days</option><option value="168" selected>7 days</option>
+        <option value="336">14 days</option><option value="720">30 days</option><option value="1440">60 days</option><option value="custom">Custom</option>
       </select>
     </h2>
+    <div id="${p}-hist-custom" style="display:none;align-items:end;gap:10px;flex-wrap:wrap;margin:0 0 12px">
+      <label style="font-size:12px">Start (AST)<br><input id="${p}-hist-start" type="datetime-local" style="padding:4px 7px;border:1px solid #ccc;border-radius:5px"></label>
+      <label style="font-size:12px">End (AST)<br><input id="${p}-hist-end" type="datetime-local" style="padding:4px 7px;border:1px solid #ccc;border-radius:5px"></label>
+      <button onclick="applyCustomHistory('${env}')" style="background:#2e75b6;color:#fff;border:0;border-radius:5px;padding:6px 12px;cursor:pointer">Apply</button>
+      <span id="${p}-hist-error" style="font-size:12px;color:#c0392b"></span>
+    </div>
     <p style="color:#555;font-size:13px">Successful collection samples only. Smooth lines connect real observations; no synthetic points are generated.</p>
     <div id="${p}-history-empty" class="history-empty"></div>
     <div class="history-chart-wrap"><canvas id="${p}-history-chart"></canvas></div>
@@ -1069,21 +1120,15 @@ function drawSparkline(canvasId, pctVal, color, histPts){
     const n=[.85,.90,.88,.92,.87,.91,.89,.93,.90,1.0];
     pts=n.map((v,i)=>({x:Math.round(i*(W-1)/(n.length-1)),y:Math.round(H-(pctVal*v/100)*(H-6)-3)}));
   }
-  ctx.beginPath(); ctx.moveTo(pts[0].x,H);
-  pts.forEach(p=>ctx.lineTo(p.x,p.y));
-  ctx.lineTo(pts[pts.length-1].x,H); ctx.closePath();
-  ctx.fillStyle=color+'33'; ctx.fill();
-  ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=2;
-  pts.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
-  const last=pts[pts.length-1];
-  ctx.beginPath(); ctx.arc(last.x,last.y,4,0,2*Math.PI); ctx.fillStyle=color; ctx.fill();
+  ctx.strokeStyle=color;ctx.lineWidth=Math.max(1,Math.min(3,(W/Math.max(pts.length,1))*.7));
+  pts.forEach(point=>{ctx.beginPath();ctx.moveTo(point.x,H-2);ctx.lineTo(point.x,point.y);ctx.stroke();});
   const thresh=Math.round(H-0.80*(H-6)-3);
   ctx.setLineDash([4,3]); ctx.strokeStyle='#e67e22'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(0,thresh); ctx.lineTo(W,thresh); ctx.stroke();
   ctx.setLineDash([]);
 }
 
-// ── 24h history Chart.js line chart ─────────────────────────
+// ── Utilization history spike chart ─────────────────────────
 function buildHistoryChart(env,points){
   const p=env.toLowerCase();
   const canvas=$(p+'-history-chart'); if(!canvas) return;
@@ -1095,22 +1140,24 @@ function buildHistoryChart(env,points){
     if(wrap)wrap.style.display='none';
     return;
   }
-  if(empty){empty.style.display=points.length<2?'block':'none';empty.textContent=points.length<2?'One successful sample is available. A trend line will appear after the next collection.':'';}
+  if(empty){empty.style.display=points.length<2?'block':'none';empty.textContent=points.length<2?'One successful sample is available. More spikes will appear after subsequent collections.':'';}
   if(wrap)wrap.style.display='block';
   const spanHours=points.length>1?(new Date(points.at(-1).collected_at)-new Date(points[0].collected_at))/3600000:0;
   const labels=points.map(row=>formatSaudiHistoryTime(row.collected_at,spanHours>24));
-  const pointRadius=points.length<3?5:points.length<20?3:1.5;
-  _histCharts[env]=new Chart(canvas,{type:'line',data:{labels,datasets:[
-    {label:'CPU Requests %',data:points.map(r=>+(r.cpu_pct||0)),borderColor:'#2e75b6',backgroundColor:'#2e75b61a',fill:true,tension:.35,cubicInterpolationMode:'monotone',pointRadius,borderWidth:2},
-    {label:'Memory Requests %',data:points.map(r=>+(r.mem_pct||0)),borderColor:'#16a085',backgroundColor:'#16a08512',fill:true,tension:.35,cubicInterpolationMode:'monotone',pointRadius,borderWidth:2},
-    {label:'CPU Actual % · all workers',data:points.map(r=>r.cpu_used_pct==null?null:+r.cpu_used_pct),borderColor:'#5ba4cf',borderDash:[3,3],fill:false,tension:.35,cubicInterpolationMode:'monotone',pointRadius,borderWidth:2,spanGaps:false},
-    {label:'Memory Actual % · all workers',data:points.map(r=>r.mem_used_pct==null?null:+r.mem_used_pct),borderColor:'#7a6bb7',borderDash:[3,3],fill:false,tension:.35,cubicInterpolationMode:'monotone',pointRadius,borderWidth:2,spanGaps:false},
-    {label:'60% monitor level',data:points.map(()=>60),borderColor:'#d97706',borderDash:[5,5],pointRadius:0,borderWidth:1,fill:false},
-    {label:'80% planning target',data:points.map(()=>80),borderColor:'#c0392b',borderDash:[7,4],pointRadius:0,borderWidth:1.5,fill:false}
+  const spike={type:'bar',borderWidth:0,categoryPercentage:.95,barPercentage:.9};
+  _histCharts[env]=new Chart(canvas,{type:'bar',data:{labels,datasets:[
+    {...spike,label:'CPU Requests %',data:points.map(r=>+(r.cpu_pct||0)),backgroundColor:'rgba(46,117,182,.72)'},
+    {...spike,label:'Memory Requests %',data:points.map(r=>+(r.mem_pct||0)),backgroundColor:'rgba(22,160,133,.68)'},
+    {...spike,label:'Shared CPU actual %',data:points.map(r=>r.shared_cpu_used_pct==null?null:+r.shared_cpu_used_pct),backgroundColor:'rgba(91,164,207,.72)'},
+    {...spike,label:'Shared memory actual %',data:points.map(r=>r.shared_mem_used_pct==null?null:+r.shared_mem_used_pct),backgroundColor:'rgba(79,179,165,.70)'},
+    {...spike,label:'Dedicated CPU actual %',data:points.map(r=>r.dedicated_cpu_used_pct==null?null:+r.dedicated_cpu_used_pct),backgroundColor:'rgba(122,107,183,.72)'},
+    {...spike,label:'Dedicated memory actual %',data:points.map(r=>r.dedicated_mem_used_pct==null?null:+r.dedicated_mem_used_pct),backgroundColor:'rgba(194,124,89,.72)'},
+    {type:'line',label:'60% monitor level',data:points.map(()=>60),borderColor:'#d97706',borderDash:[5,5],pointRadius:0,borderWidth:1,fill:false},
+    {type:'line',label:'80% planning target',data:points.map(()=>80),borderColor:'#c0392b',borderDash:[7,4],pointRadius:0,borderWidth:1.5,fill:false}
   ]},options:{responsive:true,maintainAspectRatio:false,
     plugins:{legend:{position:'top',labels:{font:{size:11}}},tooltip:{mode:'index',intersect:false}},
     interaction:{mode:'index',intersect:false},
-    scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%',font:{size:10}},grid:{color:'#e8edf2'},title:{display:true,text:'Requests / Shared Allocatable'}},x:{ticks:{font:{size:10},maxTicksLimit:10,maxRotation:0},grid:{display:false}}}}});
+    scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%',font:{size:10}},grid:{color:'#e8edf2'},title:{display:true,text:'Utilization within each pool'}},x:{ticks:{font:{size:10},maxTicksLimit:10,maxRotation:0},grid:{display:false}}}}});
 }
 
 // ── Growth forecast rows ─────────────────────────────────────
@@ -1166,7 +1213,7 @@ function renderOverview(envs){
   const warning=$('data-freshness-warning');
   if(warning){
     warning.style.display=staleEnvs.length?'block':'none';
-    warning.innerHTML=staleEnvs.length?`<b>Collection data is older than expected.</b> ${staleEnvs.join(' · ')}. Hourly collection is considered delayed after ${staleAfterMinutes} minutes; only the listed environment tabs may be incomplete.`:'';
+    warning.innerHTML=staleEnvs.length?`<b>Collection data is older than expected.</b> ${staleEnvs.join(' · ')}. Fifteen-minute collection is considered delayed after ${staleAfterMinutes} minutes; only the listed environment tabs may be incomplete.`:'';
   }
 }
 function renderExecutiveSummary(){
@@ -1177,12 +1224,13 @@ function renderExecutiveSummary(){
     const pressure=standardPressure(d), maxPressure=Math.max(pressure.cpu,pressure.mem);
     const model=capacityPoolModel(env,d), runningRec=recommendation(model.shared.runningCpu,model.shared.runningMem,model.shared.capacityCpu,model.shared.capacityMem,model.shared.netCpu,model.shared.netMem);
     const desiredRec=recommendation(model.shared.desiredCpu,model.shared.desiredMem,model.shared.capacityCpu,model.shared.capacityMem,model.shared.netCpu,model.shared.netMem);
+    const gaps=(_replicaGapData[env]||{}).summary||{};
     const safeHeadroom=80-maxPressure;
     const status=d.data_stale?'DATA OLD':maxPressure>90?'ACTION NEEDED':maxPressure>80?'AT RISK':maxPressure>60?'MONITOR':'COMFORTABLE';
     const statusClass=d.data_stale?'badge-at_risk':maxPressure>90?'badge-critical':maxPressure>60?'badge-at_risk':'badge-safe';
     const border=d.data_stale?'#d97706':maxPressure>90?'#c0392b':maxPressure>60?'#d97706':'#1a7f37';
     const headroomText=safeHeadroom>=0?`${safeHeadroom.toFixed(1)} percentage points remain before the 80% target`:`${Math.abs(safeHeadroom).toFixed(1)} percentage points above the 80% target`;
-    return `<div class="executive-item" style="border-left-color:${border}"><div class="executive-title"><span>${env} · Shared Pool</span><span class="${statusClass}">${status}</span></div><div class="executive-copy"><b>CPU ${pressure.cpu.toFixed(1)}%</b> · Memory ${pressure.mem.toFixed(1)}% · ${headroomText}.<br>Current Running demand: <b>+${runningRec.nodes} node(s)</b> · Desired-replica demand: <b>+${desiredRec.nodes} node(s)</b>.<br><span style="color:#64748b">${model.shared.nodes} shared and ${model.dedicated.nodes} dedicated workers · Snapshot ${formatSaudiDateTime(d.collected_at)}</span></div></div>`;
+    return `<div class="executive-item" style="border-left-color:${border}"><div class="executive-title"><span>${env} · Shared Pool</span><span class="${statusClass}">${status}</span></div><div class="executive-copy"><b>CPU ${pressure.cpu.toFixed(1)}%</b> · Memory ${pressure.mem.toFixed(1)}% · ${headroomText}.<br>Nodes needed now: <b>${runningRec.nodes}</b> · Nodes needed for configured scale: <b>${desiredRec.nodes}</b>.<br>Replica evidence: <b>${gaps.missing_ready_replicas||0}</b> missing ready · <b>${gaps.unscheduled_pending_pods||0}</b> unscheduled pending · <b>${gaps.crashloop_pods||0}</b> CrashLoop.<br><span style="color:#64748b">${model.shared.nodes} shared and ${model.dedicated.nodes} dedicated workers · Snapshot ${formatSaudiDateTime(d.collected_at)}</span></div></div>`;
   }).join('');
 }
 
@@ -1328,14 +1376,14 @@ function renderNamespacesTab(){
     const hasAct=(+(ns.cpu_used||0)>0||+(ns.mem_used_gib||0)>0);
     let bg; if(isInfra){bg='#f3e8ff';}else{tenantRow++;bg=(tenantRow%2===0)?'#eaf4fb':'#ffffff';}
     rows+=`<tr style="background:${bg};border-bottom:1px solid #e0e0e0">
-      <td>${ns.namespace}</td><td><span class="${isInfra?'type-infra':'type-tenant'}">${isInfra?'infra':'tenant'}</span></td>
+      <td><button onclick="selectNamespaceHistory('${escapeHtml(ns.namespace)}')" style="border:0;background:none;padding:0;color:#1f4e79;font-weight:700;cursor:pointer;text-decoration:underline">${escapeHtml(ns.namespace)}</button></td><td><span class="${isInfra?'type-infra':'type-tenant'}">${isInfra?'infra':'tenant'}</span></td>
       <td>${ns.pod_count||0}</td><td>${f3(ns.cpu_req)}</td><td>${f3(ns.cpu_used||0)}</td>
       <td><b style="color:${cColor}">${cU.toFixed(1)}%</b></td>
       <td>${f1(ns.mem_req_gib||ns.mem_req||0)}</td><td>${f1(ns.mem_used_gib||0)}</td>
       <td><b style="color:${mColor}">${mU.toFixed(1)}%</b></td></tr>`;
     if(!isInfra){
       const bc=!hasAct?'#2e75b6':cU>90?'#c0392b':cU>50?'#1a7f37':'#d35400';
-      cardHtml+=`<div class="project-card" style="border-top-color:${bc}">
+      cardHtml+=`<div class="project-card" role="button" tabindex="0" onclick="selectNamespaceHistory('${escapeHtml(ns.namespace)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectNamespaceHistory('${escapeHtml(ns.namespace)}')}" style="border-top-color:${bc};cursor:pointer" title="Open utilization history for ${escapeHtml(ns.namespace)}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
           <span style="font-weight:700;font-size:13px;color:#1f4e79;word-break:break-all">${ns.namespace}</span>
           <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:#dbeafe;color:#1e40af;margin-left:6px">${ns.pod_count||0} pods</span>
@@ -1356,6 +1404,95 @@ function renderNamespacesTab(){
   if(cards) cards.innerHTML=cardHtml||'<p style="color:#aaa">No tenant namespaces.</p>';
 }
 
+async function loadNamespaceHistory(){
+  const env=($('ns-env-select')||{}).value||'DEV';
+  const period=($('ns-history-period')||{value:'24h'}).value||'24h';
+  const scope=($('ns-history-scope')||{value:'all'}).value||'all';
+  const status=$('ns-history-status');if(status)status.textContent='Loading namespace history…';
+  try{
+    const params=new URLSearchParams({period,scope});
+    const r=await fetch(`${API}/api/v1/namespace-history/${env}?${params}`);
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    _nsHistory[env]=await r.json();
+    const selected=$('ns-history-selected'),previous=selected?.value||'';
+    if(selected){
+      selected.innerHTML='<option value="">Group total</option>'+(_nsHistory[env].summaries||[]).map(row=>`<option value="${escapeHtml(row.namespace)}">${escapeHtml(row.namespace)}</option>`).join('');
+      if([...selected.options].some(option=>option.value===previous))selected.value=previous;
+    }
+    renderNamespaceHistory();
+    if(status)status.textContent=`${(_nsHistory[env].summaries||[]).length} namespaces · ${period==='30d'?'30 daily buckets':'24-hour snapshot view'} · successful snapshots only`;
+    if(selected?.value)await loadNamespaceHistoryPoints();else renderNamespaceHistoryChart(_nsHistory[env].points||[],scope==='all'?'All namespaces':scope==='tenant'?'Tenant projects':'Platform / infrastructure',period);
+  }catch(e){if(status)status.textContent=`Failed to load namespace history: ${e.message}`;}
+}
+
+function changeNamespaceHistoryScope(){
+  const selected=$('ns-history-selected');if(selected)selected.value='';
+  const chargeback=$('ns-env-filter'),scope=($('ns-history-scope')||{}).value||'all';if(chargeback)chargeback.value=scope;
+  renderNamespacesTab();
+  loadNamespaceHistory();
+}
+
+function changeNamespaceTypeFilter(){
+  renderNamespacesTab();
+  const scope=($('ns-env-filter')||{}).value||'all',historyScope=$('ns-history-scope'),selected=$('ns-history-selected');
+  if(historyScope)historyScope.value=scope;if(selected)selected.value='';
+  loadNamespaceHistory();
+}
+
+function renderNamespaceHistory(){
+  const env=($('ns-env-select')||{}).value||'DEV';
+  const filter=(($('ns-history-filter')||{}).value||'').toLowerCase();
+  const selected=($('ns-history-selected')||{}).value||'';
+  const rows=(_nsHistory[env]?.summaries||[]).filter(row=>(!selected||row.namespace===selected)&&(!filter||(row.namespace||'').toLowerCase().includes(filter)));
+  const body=$('ns-history-body');if(!body)return;
+  body.innerHTML=rows.map((row,index)=>`<tr style="background:${index%2?'#f9fafb':'#fff'}">
+    <td><button onclick="selectNamespaceHistory('${escapeHtml(row.namespace)}')" style="border:0;background:none;padding:0;color:#1f4e79;font-weight:700;cursor:pointer;text-decoration:underline">${escapeHtml(row.namespace)}</button></td><td><span class="${row.ns_type==='tenant'?'type-tenant':'type-infra'}">${escapeHtml(row.ns_type||'unknown')}</span></td><td>${row.sample_count||0}</td>
+    <td>${f3(row.avg_cpu_used)} cores</td><td>${f3(row.max_cpu_used)} cores</td><td>${f1(row.avg_mem_used_gib)} GiB</td><td>${f1(row.max_mem_used_gib)} GiB</td>
+    <td>${pct(row.avg_cpu_util_pct)}</td><td><b style="color:${utilColor(+(row.max_cpu_util_pct||0))}">${pct(row.max_cpu_util_pct)}</b></td>
+    <td>${pct(row.avg_mem_util_pct)}</td><td><b style="color:${utilColor(+(row.max_mem_util_pct||0))}">${pct(row.max_mem_util_pct)}</b></td></tr>`).join('')||'<tr><td colspan="11" style="text-align:center;color:#aaa">No namespaces match this filter.</td></tr>';
+}
+
+async function selectNamespaceHistory(namespace){
+  const env=($('ns-env-select')||{}).value||'DEV';
+  const latest=(_ns[env]?.namespaces||[]).find(row=>row.namespace===namespace);
+  const scope=$('ns-history-scope');if(scope)scope.value=latest?.ns_type==='tenant'?'tenant':'infra';
+  await loadNamespaceHistory();
+  const selected=$('ns-history-selected');
+  if(selected&&[...selected.options].some(option=>option.value===namespace)){selected.value=namespace;await loadNamespaceHistoryPoints();}
+  $('ns-history-chart-wrap')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+async function loadNamespaceHistoryPoints(){
+  const env=($('ns-env-select')||{}).value||'DEV',namespace=($('ns-history-selected')||{}).value;
+  const period=($('ns-history-period')||{value:'24h'}).value||'24h';
+  const scope=($('ns-history-scope')||{value:'all'}).value||'all';
+  const params=new URLSearchParams({period,scope});if(namespace)params.set('namespace',namespace);
+  const r=await fetch(`${API}/api/v1/namespace-history/${env}?${params}`);if(!r.ok)return;
+  const data=await r.json();
+  renderNamespaceHistory();
+  const status=$('ns-history-status');if(status)status.textContent=namespace
+    ? `${namespace} · ${period==='30d'?'30 daily buckets':'24-hour snapshot view'} · successful snapshots only`
+    : `${(data.summaries||[]).length} namespaces · ${period==='30d'?'30 daily buckets':'24-hour snapshot view'} · successful snapshots only`;
+  renderNamespaceHistoryChart(data.points||[],namespace||(scope==='all'?'All namespaces':scope==='tenant'?'Tenant projects':'Platform / infrastructure'),period);
+}
+
+function renderNamespaceHistoryChart(points,label,period){
+  const wrap=$('ns-history-chart-wrap'),canvas=$('ns-history-chart');if(!canvas)return;
+  if(_nsHistoryChart)_nsHistoryChart.destroy();
+  if(!points.length){if(wrap)wrap.style.display='none';return;}
+  if(wrap)wrap.style.display='block';
+  const daily=period==='30d';
+  const datasets=[
+    {type:'bar',label:'CPU average actual / requests %',data:points.map(row=>row.cpu_util_pct),backgroundColor:'rgba(46,117,182,.72)',categoryPercentage:.88,barPercentage:.9},
+    {type:'bar',label:'Memory average actual / requests %',data:points.map(row=>row.mem_util_pct),backgroundColor:'rgba(22,160,133,.68)',categoryPercentage:.88,barPercentage:.9}
+  ];
+  if(daily){
+    datasets.push({type:'bar',label:'CPU daily peak %',data:points.map(row=>row.max_cpu_util_pct),backgroundColor:'rgba(122,107,183,.68)',categoryPercentage:.88,barPercentage:.9});
+    datasets.push({type:'bar',label:'Memory daily peak %',data:points.map(row=>row.max_mem_util_pct),backgroundColor:'rgba(194,124,89,.68)',categoryPercentage:.88,barPercentage:.9});
+  }
+  _nsHistoryChart=new Chart(canvas,{type:'bar',data:{labels:points.map(row=>formatSaudiHistoryTime(row.collected_at,daily)),datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:`${label} · ${daily?'30-day daily utilization':'last 24 hours'}`}},interaction:{mode:'index',intersect:false},scales:{y:{beginAtZero:true,ticks:{callback:value=>value+'%'}},x:{ticks:{maxTicksLimit:daily?15:12,maxRotation:0}}}}});
+}
+
 // ── Main fetch ───────────────────────────────────────────────
 async function fetchAll(){
   $('overlay').classList.remove('hidden');
@@ -1373,21 +1510,24 @@ async function fetchAll(){
     if(_status.envs) renderOverview(_status.envs);
 
     await Promise.all(ENVS.map(async env=>{
-      const [mR,hR,pR,nR]=await Promise.all([
+      const [mR,hR,pR,nR,gR]=await Promise.all([
         fetch(API+'/api/v1/metrics/'+env),
         fetch(API+'/api/v1/history/'+env+'?hours=168'),
         fetch(API+'/api/v1/pools/'+env),
         fetch(API+'/api/v1/namespaces/'+env+'?top=1000'),
+        fetch(API+'/api/v1/replica-gaps/'+env),
       ]);
       if(mR.ok) _metrics[env]=await mR.json();
       if(hR.ok) _history[env]=await hR.json();
       if(pR.ok) _pools[env]=await pR.json();
       if(nR.ok) _ns[env]=await nR.json();
+      if(gR.ok) _replicaGapData[env]=await gR.json();
       if(_metrics[env]) renderEnvTab(env,_metrics[env],_history[env]);
       if(_pools[env])   renderPools(env,_pools[env]);
     }));
 
     renderNamespacesTab();
+    await loadNamespaceHistory();
     renderExecutiveSummary();
     $('last-updated').textContent='Data loaded '+formatSaudiTime(new Date());
     _remaining=REFRESH_SECS;
@@ -1409,11 +1549,30 @@ setInterval(()=>{
 // ── History range change ─────────────────────────────────────
 async function changeHistoryRange(env){
   const p=env.toLowerCase();
-  const hours=+($(`${p}-hist-hours`)||{value:168}).value||168;
+  const value=($(`${p}-hist-hours`)||{value:'168'}).value;
+  const custom=$(`${p}-hist-custom`);if(custom)custom.style.display=value==='custom'?'flex':'none';
+  if(value==='custom')return;
+  const hours=+value||168;
   try{
     const r=await fetch(API+'/api/v1/history/'+env+'?hours='+hours);
     if(r.ok){_history[env]=await r.json();if(_history[env]&&_history[env].points) buildHistoryChart(env,_history[env].points);}
   }catch(e){console.warn('history fetch failed',e);}
+}
+
+async function applyCustomHistory(env){
+  const p=env.toLowerCase(),error=$(`${p}-hist-error`);
+  const startValue=($(`${p}-hist-start`)||{}).value,endValue=($(`${p}-hist-end`)||{}).value;
+  if(error)error.textContent='';
+  if(!startValue||!endValue){if(error)error.textContent='Select both dates.';return;}
+  const start=new Date(startValue+'+03:00'),end=new Date(endValue+'+03:00');
+  if(!(start<end)){if(error)error.textContent='Start must be before end.';return;}
+  if(end-start>60*86400000){if(error)error.textContent='Maximum range is 60 days.';return;}
+  try{
+    const params=new URLSearchParams({start:start.toISOString(),end:end.toISOString()});
+    const r=await fetch(`${API}/api/v1/history/${env}?${params}`);
+    if(!r.ok)throw new Error((await r.json()).detail||`HTTP ${r.status}`);
+    _history[env]=await r.json();buildHistoryChart(env,_history[env].points||[]);
+  }catch(e){if(error)error.textContent=e.message;}
 }
 
 // ── Boot ──────────────────────────────────────────────────────
@@ -1430,7 +1589,7 @@ async function renderNodeInventoryTab(){
   if(nodeWrap) nodeWrap.innerHTML='<p style="color:#aaa">Loading…</p>';
   if(machineWrap) machineWrap.innerHTML='<p style="color:#aaa">Loading…</p>';
   try {
-    const response = await fetch(`/api/v1/node-inventory/${env}`);
+    const response = await fetch(`${API}/api/v1/node-inventory/${env}`);
     if(!response.ok) throw new Error(await response.text());
     _nodeInventoryData[env] = await response.json();
     renderNodeInventoryTables();
@@ -1525,7 +1684,7 @@ async function renderNodePressureTab(){
   const wrap = $('np-table-wrap'); if(!wrap) return;
   wrap.innerHTML='<p style="color:#aaa">Loading…</p>';
   try {
-    const r = await fetch(`/api/v1/node-pressure/${env}`);
+    const r = await fetch(`${API}/api/v1/node-pressure/${env}`);
     if(!r.ok) throw new Error(await r.text());
     _npData[env] = await r.json();
     const nodes = (_npData[env].nodes||[]);
@@ -1577,7 +1736,7 @@ async function renderPodMetricsTab(){
   const wrap = $('pm-table-wrap'); if(!wrap) return;
   wrap.innerHTML='<p style="color:#aaa">Loading…</p>';
   try {
-    const r = await fetch(`/api/v1/pod-metrics/${env}?limit=5000`);
+    const r = await fetch(`${API}/api/v1/pod-metrics/${env}?limit=5000`);
     if(!r.ok) throw new Error(await r.text());
     _pmData[env] = await r.json();
     renderPodMetricsTable();
@@ -1613,19 +1772,57 @@ function renderPodMetricsTable(){
 
 // ── Desired Replicas tab ──────────────────────────────────────
 let _drData = {};
+let _replicaGapData = {};
 
 async function renderDesiredReplicasTab(){
   const env = ($('dr-env-select')||{value:'DEV'}).value||'DEV';
   const wrap = $('dr-table-wrap'); if(!wrap) return;
   wrap.innerHTML='<p style="color:#aaa">Loading…</p>';
   try {
-    const r = await fetch(`/api/v1/desired-replicas/${env}?limit=5000`);
-    if(!r.ok) throw new Error(await r.text());
-    _drData[env] = await r.json();
+    const [desiredResponse,gapResponse] = await Promise.all([
+      fetch(`${API}/api/v1/desired-replicas/${env}?limit=5000`),
+      fetch(`${API}/api/v1/replica-gaps/${env}`),
+    ]);
+    if(!desiredResponse.ok) throw new Error(await desiredResponse.text());
+    _drData[env] = await desiredResponse.json();
+    _replicaGapData[env] = gapResponse.ok ? await gapResponse.json() : {summary:{},controllers:[]};
     filterDesiredTable();
+    renderReplicaGaps();
   } catch(e) {
     wrap.innerHTML=`<p style="color:red">Failed to load: ${e.message}</p>`;
   }
+}
+
+function renderReplicaGaps(){
+  const env=($('dr-env-select')||{value:'DEV'}).value||'DEV';
+  const data=_replicaGapData[env]||{summary:{},controllers:[]};
+  const summary=data.summary||{};
+  const cards=$('dr-gap-summary');
+  if(cards) cards.innerHTML=[
+    ['Missing ready replicas',summary.missing_ready_replicas||0,`${summary.controllers_with_gap||0} controller(s) with a gap`],
+    ['Unscheduled pending',summary.unscheduled_pending_pods||0,'Pending pods without a node'],
+    ['Other pending',Math.max(0,(summary.pending_pods||0)-(summary.unscheduled_pending_pods||0)),'Assigned or starting pods'],
+    ['Restart signals',summary.crashloop_pods||0,`${summary.restart_count||0} cumulative restarts`]
+  ].map(([label,value,detail])=>`<div class="management-metric"><div class="label">${label}</div><div class="value">${value}</div><div class="detail">${detail}</div></div>`).join('');
+
+  const filter=($('dr-issue-filter')||{value:'issues'}).value||'issues';
+  const query=(($('dr-filter')||{}).value||'').toLowerCase();
+  const issueRows=(data.controllers||[]).filter(row=>
+    (filter==='all'||(filter==='issues'?!['HEALTHY','SCALED_DOWN'].includes(row.issue):row.issue===filter))&&
+    (!query||(row.namespace+row.controller).toLowerCase().includes(query))
+  );
+  const wrap=$('dr-gap-table-wrap');if(!wrap)return;
+  if(!data.controllers?.length){wrap.innerHTML='<div class="info">Replica readiness analysis is available after the next collector snapshot.</div>';return;}
+  if(!issueRows.length){wrap.innerHTML='<div class="info">No replica readiness issues match the selected filter.</div>';return;}
+  const issueLabel={SCHEDULING_REVIEW:'Scheduling review',STARTUP_PENDING:'Startup pending',APPLICATION_RESTARTS:'Application restarts',READINESS_REVIEW:'Readiness review',SCALED_DOWN:'Scaled down',HEALTHY:'Healthy'};
+  const issueAction={SCHEDULING_REVIEW:'Review scheduler events, Requests, taints, affinity, quotas, and PVC binding.',STARTUP_PENDING:'Pod is assigned or starting; review image pulls, init containers, and readiness.',APPLICATION_RESTARTS:'Review container logs, probes, configuration, and application health.',READINESS_REVIEW:'Desired replicas are not ready; inspect controller conditions and pod readiness.',SCALED_DOWN:'Intentional capacity is configured at zero replicas.',HEALTHY:'Desired replicas are ready.'};
+  let html='<table><thead><tr><th>Namespace</th><th>Controller</th><th>Pool</th><th>Desired</th><th>Current</th><th>Ready</th><th>Available</th><th>Gap</th><th>Pending</th><th>Unscheduled</th><th>Restarts</th><th>Gap CPU</th><th>Gap Memory</th><th>Assessment</th><th>Recommended investigation</th></tr></thead><tbody>';
+  issueRows.forEach((row,index)=>{
+    const issue=row.issue||'READINESS_REVIEW';
+    const color=issue==='SCHEDULING_REVIEW'?'#c0392b':issue==='APPLICATION_RESTARTS'?'#b45309':'#d97706';
+    html+=`<tr style="background:${index%2?'#f9f9f9':'#fff'}"><td>${row.namespace}</td><td style="font-family:monospace;font-size:11px">${row.controller}</td><td>${row.pool_hint}</td><td>${row.desired_replicas}</td><td>${row.current_replicas}</td><td>${row.ready_replicas}</td><td>${row.available_replicas}</td><td><b>${row.replica_gap}</b></td><td>${row.pending_pods}</td><td>${row.unscheduled_pending_pods}</td><td>${row.restart_count}</td><td>${f3(row.gap_cpu_cores)}</td><td>${f1(row.gap_mem_gib)} GiB</td><td style="color:${color};font-weight:700">${issueLabel[issue]||issue}</td><td style="min-width:260px;font-size:12px">${issueAction[issue]||'Review controller and pod status.'}${(row.pod_reasons||[]).length?`<br><small>Observed: ${row.pod_reasons.join(', ')}</small>`:''}</td></tr>`;
+  });
+  wrap.innerHTML=html+'</tbody></table>';
 }
 
 function filterDesiredTable(){
@@ -1634,6 +1831,7 @@ function filterDesiredTable(){
   const wrap = $('dr-table-wrap'); if(!wrap) return;
   const data = _drData[env];
   if(!data) return;
+  renderReplicaGaps();
 
   let rows = (data.controllers||[]).filter(r=>
     !q || (r.namespace+r.controller).toLowerCase().includes(q)
@@ -1686,7 +1884,7 @@ async function renderMisplacedTab(){
   if(alertWrap) alertWrap.innerHTML='';
 
   try {
-    const r = await fetch(`/api/v1/misplaced/${env}`);
+    const r = await fetch(`${API}/api/v1/misplaced/${env}`);
     if(!r.ok) throw new Error(await r.text());
     _mpData[env] = await r.json();
     const d = _mpData[env];
@@ -1765,8 +1963,8 @@ async function renderPvcTab(){
   ($('storage-candidates-wrap')||{}).innerHTML = '<p style="color:#aaa">Loading…</p>';
   try {
     const [pvcResponse, planningResponse] = await Promise.all([
-      fetch(`/api/v1/pvcs/${env}?limit=2000`),
-      fetch(`/api/v1/storage-planning/${env}`),
+      fetch(`${API}/api/v1/pvcs/${env}?limit=2000`),
+      fetch(`${API}/api/v1/storage-planning/${env}`),
     ]);
     if(!pvcResponse.ok) throw new Error(await pvcResponse.text());
     _pvcData[env] = await pvcResponse.json();
@@ -1809,47 +2007,62 @@ function renderPvcSummary(env){
   }
 }
 
+function storageAssessmentLabel(reason){
+  return ({
+    ACTIVE_POD_MOUNT: 'Active pod mount',
+    VOLUME_ATTACHED: 'Volume attached',
+    CONTROLLER_RESERVED: 'Referenced by workload definition',
+    REVIEW_NO_ACTIVE_WORKLOAD_REFERENCE: 'No active workload reference; validate ownership',
+    NO_LIVE_POD_REFERENCE: 'No current pod reference; validate ownership',
+    UTILIZATION_85_PERCENT: 'Filesystem utilization at or above 85%',
+    PVC_PENDING: 'PVC pending',
+    PVC_LOST: 'PVC lost',
+  })[reason] || String(reason||'Unknown').replaceAll('_',' ').toLowerCase();
+}
+
 function renderStorageCandidates(env){
   const data = _storagePlanningData[env] || {};
   const summary = data.summary || {};
-  const pvcCandidates = (data.pvc_inventory||[]).filter(r=>r.candidate_reason!=='IN_USE');
-  const unusedPvcs = pvcCandidates.filter(r=>r.candidate_reason==='NO_LIVE_POD_REFERENCE');
+  const pvcInventory = data.pvc_inventory||[];
+  const pvcCandidates = pvcInventory.filter(r=>
+    ['REVIEW_NO_ACTIVE_WORKLOAD_REFERENCE','NO_LIVE_POD_REFERENCE','UTILIZATION_85_PERCENT'].includes(r.candidate_reason) || r.status!=='Bound'
+  );
+  const unreferencedPvcs = pvcCandidates.filter(r=>['REVIEW_NO_ACTIVE_WORKLOAD_REFERENCE','NO_LIVE_POD_REFERENCE'].includes(r.candidate_reason));
   const pvCandidates = (data.pv_inventory||[]).filter(r=>r.candidate_reason!=='ACTIVE');
-  const controllers = data.zero_replica_controllers || [];
-  const terminalPods = data.old_terminal_pods || [];
-  const otherCount = pvcCandidates.length - unusedPvcs.length + pvCandidates.length + controllers.length + terminalPods.length;
 
-  ($('storage-unused-pvcs')||{}).textContent = summary.unused_pvcs ?? unusedPvcs.length;
-  ($('storage-unused-gib')||{}).textContent = `${f1(summary.unused_pvc_gib||0)} GiB provisioned`;
+  ($('storage-active-pvcs')||{}).textContent = summary.actively_mounted_pvcs ?? pvcInventory.filter(r=>r.candidate_reason==='ACTIVE_POD_MOUNT').length;
+  ($('storage-reserved-pvcs')||{}).textContent = summary.controller_reserved_pvcs ?? pvcInventory.filter(r=>r.candidate_reason==='CONTROLLER_RESERVED').length;
+  ($('storage-reserved-gib')||{}).textContent = `${f1(summary.controller_reserved_gib??pvcInventory.filter(r=>r.candidate_reason==='CONTROLLER_RESERVED').reduce((sum,row)=>sum+(+row.capacity_gib||0),0))} GiB referenced by workload definitions`;
+  ($('storage-unused-pvcs')||{}).textContent = summary.unreferenced_review_pvcs ?? summary.unused_pvcs ?? unreferencedPvcs.length;
+  ($('storage-unused-gib')||{}).textContent = `${f1(summary.unreferenced_review_gib??summary.unused_pvc_gib??unreferencedPvcs.reduce((sum,row)=>sum+(+row.capacity_gib||0),0))} GiB requires ownership validation`;
   ($('storage-used-gib')||{}).textContent = (summary.pvc_usage_metrics_count||0)>0 ? `${f1(summary.used_gib||0)} GiB` : 'Unavailable';
-  ($('storage-metrics-coverage')||{}).textContent = `${summary.pvc_usage_metrics_count||0} of ${summary.total_pvcs||0} PVCs reporting`;
-  ($('storage-stale-count')||{}).textContent = otherCount;
+  ($('storage-metrics-coverage')||{}).textContent = (summary.pvc_usage_metrics_count||0)>0
+    ? `${summary.pvc_usage_metrics_count} of ${summary.total_pvcs||0} PVCs reporting`
+    :'kubelet volume usage metrics are not exposed';
+  ($('storage-stale-count')||{}).textContent = pvCandidates.length;
 
   const wrap = $('storage-candidates-wrap'); if(!wrap) return;
   const candidates = [
     ...pvcCandidates.map(r=>({type:'PVC',namespace:r.namespace,name:r.name,state:r.status,age:r.age_days,
-      capacity:r.capacity_gib,reason:r.candidate_reason})),
+      capacity:r.capacity_gib,reason:r.candidate_reason,evidence:(r.referencing_controllers||[]).join('; ')})),
     ...pvCandidates.map(r=>({type:'PV',namespace:r.claim_namespace||'—',name:r.name,state:r.status,age:r.age_days,
-      capacity:r.capacity_gib,reason:r.candidate_reason})),
-    ...controllers.map(r=>({type:r.kind,namespace:r.namespace,name:r.name,state:'0 replicas',age:r.age_days,
-      capacity:null,reason:r.candidate_reason})),
-    ...terminalPods.map(r=>({type:'Pod',namespace:r.namespace,name:r.name,state:r.phase,age:r.age_days,
-      capacity:null,reason:r.candidate_reason})),
+      capacity:r.capacity_gib,reason:r.candidate_reason,evidence:r.reclaim_policy?`Reclaim policy: ${r.reclaim_policy}`:''})),
   ].sort((a,b)=>(b.capacity||0)-(a.capacity||0)||(b.age||0)-(a.age||0));
 
   if(!candidates.length){
-    wrap.innerHTML='<div class="info">No stale-resource candidates were found in the latest collection.</div>';
+    wrap.innerHTML='<div class="info">No PVC or PV items require validation in the latest collection.</div>';
     return;
   }
 
-  let html='<table><thead><tr><th>Type</th><th>Namespace / Claim</th><th>Name</th><th>State</th><th>Age</th><th>Capacity</th><th>Reason</th></tr></thead><tbody>';
+  let html='<table><thead><tr><th>Type</th><th>Namespace / Claim</th><th>Name</th><th>State</th><th>Age</th><th>Capacity</th><th>Assessment</th><th>Evidence</th></tr></thead><tbody>';
   candidates.slice(0,500).forEach((r,index)=>{
     html+=`<tr style="background:${index%2===0?'#fff':'#f9f9f9'}">
       <td><b>${r.type}</b></td><td>${r.namespace||'—'}</td>
       <td style="font-family:monospace;font-size:12px;word-break:break-all">${r.name||'—'}</td>
       <td>${r.state||'—'}</td><td style="text-align:right">${r.age??0} days</td>
       <td style="text-align:right">${r.capacity==null?'—':f1(r.capacity)+' GiB'}</td>
-      <td style="color:#b45309;font-size:12px">${(r.reason||'REVIEW').replaceAll('_',' ')}</td></tr>`;
+      <td style="color:#b45309;font-size:12px">${storageAssessmentLabel(r.reason)}</td>
+      <td style="font-size:12px">${r.evidence||'No active pod or controller reference found; confirm owner and retention before action.'}</td></tr>`;
   });
   wrap.innerHTML=html+'</tbody></table>';
 }
@@ -1876,7 +2089,7 @@ function renderPvcTable(){
   let h=`<table>
     <thead><tr>
       <th>Namespace</th><th>PVC Name</th><th>Status</th><th>Age</th>
-      <th>Provisioned</th><th>Used</th><th>Usage</th><th>Pod References</th><th>Storage Class</th>
+      <th>Provisioned</th><th>Used</th><th>Usage</th><th>Active Pods</th><th>Controller References</th><th>Assessment</th><th>Storage Class</th>
     </tr></thead><tbody>`;
   rows.forEach((r,i)=>{
     const bg = i%2===0?'#fff':'#f9f9f9';
@@ -1889,6 +2102,8 @@ function renderPvcTable(){
       <td style="text-align:right">${r.used_percent==null?'—':f1(r.used_gib)+' GiB'}</td>
       <td style="text-align:right;color:${r.used_percent>=85?'#c0392b':'inherit'};font-weight:${r.used_percent>=85?'700':'400'}">${r.used_percent==null?'—':f1(r.used_percent)+'%'}</td>
       <td style="text-align:right">${r.pod_reference_count??'—'}</td>
+      <td style="font-size:11px">${(r.referencing_controllers||[]).join('; ')||'—'}</td>
+      <td style="font-size:11px;color:${['REVIEW_NO_ACTIVE_WORKLOAD_REFERENCE','NO_LIVE_POD_REFERENCE'].includes(r.candidate_reason)?'#b45309':'#475569'}">${storageAssessmentLabel(r.candidate_reason)}</td>
       <td style="font-size:12px;color:#555">${r.storageclass||'—'}</td>
     </tr>`;
   });
@@ -1906,11 +2121,11 @@ function exportPvcCsv(){
     (!scF||(r.storageclass||'').toLowerCase().includes(scF))
   );
   const csvCell = value => `"${String(value??'').replaceAll('"','""')}"`;
-  const csv = ['namespace,pvc_name,status,age_days,capacity_gib,used_gib,used_percent,pod_reference_count,storageclass,candidate_reason',
+  const csv = ['namespace,pvc_name,status,age_days,capacity_gib,used_gib,used_percent,active_pod_references,controller_reference_count,referencing_controllers,storageclass,assessment',
     ...rows.map(r=>[
       r.namespace,r.pvc_name,r.status,r.age_days,f1(r.capacity_gib),
       r.used_percent==null?'':f1(r.used_gib),r.used_percent==null?'':f1(r.used_percent),
-      r.pod_reference_count,r.storageclass,r.candidate_reason
+      r.pod_reference_count,r.controller_reference_count,(r.referencing_controllers||[]).join(';'),r.storageclass,r.candidate_reason
     ].map(csvCell).join(','))
   ].join('\n');
   const a=document.createElement('a');
@@ -2046,30 +2261,26 @@ async function renderAnalyticsTab(){
           data:avgWMem, backgroundColor:'rgba(22,160,133,0.45)',
           yAxisID:'y', order:3
         },
-        // Lines overlay
+        // Peak and actual utilization spikes
         {
-          type:'line', label:'Max CPU Request % (workers)',
-          data:maxWCpu, borderColor:'rgba(46,117,182,1)',
-          backgroundColor:'transparent', borderWidth:2,
-          pointRadius:3, tension:0.3, yAxisID:'y', order:2
+          type:'bar', label:'Max CPU Request % (workers)',
+          data:maxWCpu, backgroundColor:'rgba(46,117,182,0.9)',
+          yAxisID:'y', order:2
         },
         {
-          type:'line', label:'Max Mem Request % (workers)',
-          data:maxWMem, borderColor:'rgba(22,160,133,1)',
-          backgroundColor:'transparent', borderWidth:2,
-          pointRadius:3, tension:0.3, yAxisID:'y', order:2
+          type:'bar', label:'Max Mem Request % (workers)',
+          data:maxWMem, backgroundColor:'rgba(22,160,133,0.85)',
+          yAxisID:'y', order:2
         },
         {
-          type:'line', label:'Avg CPU Actual Used % (all workers)',
-          data:avgCpuUsedPct, borderColor:'rgba(230,126,34,0.9)',
-          backgroundColor:'transparent', borderWidth:2,
-          borderDash:[4,3], pointRadius:3, tension:0.3, yAxisID:'y', order:2
+          type:'bar', label:'Avg CPU Actual Used % (all workers)',
+          data:avgCpuUsedPct, backgroundColor:'rgba(230,126,34,0.78)',
+          yAxisID:'y', order:2
         },
         {
-          type:'line', label:'Avg Mem Actual Used % (all workers)',
-          data:avgMemUsedPct, borderColor:'rgba(192,57,43,0.9)',
-          backgroundColor:'transparent', borderWidth:2,
-          borderDash:[4,3], pointRadius:3, tension:0.3, yAxisID:'y', order:2
+          type:'bar', label:'Avg Mem Actual Used % (all workers)',
+          data:avgMemUsedPct, backgroundColor:'rgba(192,57,43,0.75)',
+          yAxisID:'y', order:2
         },
         // 80% threshold reference line
         {

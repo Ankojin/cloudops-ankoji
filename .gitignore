@@ -10,6 +10,7 @@
 **/*credential*
 **/*credentials*
 **/*token*
+!ocp/openshift-capacity-planner/live-dashboard/generate-aro-tokens.sh
 
 # Common secret/config files
 **/secrets.json

@@ -237,6 +237,7 @@ rules:
     - apiGroups: ["storage.k8s.io"]
         resources:
             - storageclasses
+            - volumeattachments
         verbs: ["get", "list", "watch"]
 
     - apiGroups: ["apps"]
@@ -245,6 +246,12 @@ rules:
             - replicasets
             - daemonsets
             - statefulsets
+        verbs: ["get", "list", "watch"]
+
+    - apiGroups: ["batch"]
+        resources:
+            - cronjobs
+            - jobs
         verbs: ["get", "list", "watch"]
 
     - apiGroups: ["route.openshift.io"]

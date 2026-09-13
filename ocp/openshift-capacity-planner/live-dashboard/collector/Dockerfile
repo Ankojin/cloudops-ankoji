@@ -2,7 +2,7 @@
 # Collector container
 # Extends the existing capacity-planner image with:
 #   - postgresql-client (for psql in insert_to_db.sh)
-#   - crond (Alpine busybox) for scheduled runs
+# Azure Container Apps invokes the entrypoint once per scheduled job execution.
 #
 # Build locally:
 #   docker build -t collector \
@@ -23,11 +23,6 @@ WORKDIR /collector
 COPY live-dashboard/collector/insert_to_db.sh    ./
 COPY live-dashboard/collector/cron-entrypoint.sh ./
 RUN chmod +x *.sh
-
-# Set up cron: run every 5 minutes
-# Edit the schedule here if you want a different interval
-RUN echo "*/5 * * * * /collector/cron-entrypoint.sh >> /var/log/collector.log 2>&1" \
-    > /etc/crontabs/root
 
 VOLUME ["/planner/output"]
 

@@ -1,0 +1,224 @@
+{
+  "properties": {
+    "provisioningState": "Succeeded",
+    "createdTime": "2026-07-29T13:28:40.006665Z",
+    "changedTime": "2026-07-29T13:29:52.8028258Z",
+    "state": "Enabled",
+    "version": "08584162750926815458",
+    "accessEndpoint": "https://prod-14.swedencentral.logic.azure.com:443/workflows/221dce2f1ddc4cdb986015237bb9b2b3",
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "triggers": {
+        "ScheduledStartTrigger": {
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "schedule": {
+              "hours": [
+                8
+              ],
+              "minutes": [
+                0
+              ],
+              "weekDays": [
+                "Thursday",
+                "Sunday",
+                "Tuesday",
+                "Wednesday",
+                "Monday"
+              ]
+            },
+            "timeZone": "Arab Standard Time"
+          },
+          "evaluatedRecurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "schedule": {
+              "hours": [
+                8
+              ],
+              "minutes": [
+                0
+              ],
+              "weekDays": [
+                "Thursday",
+                "Sunday",
+                "Tuesday",
+                "Wednesday",
+                "Monday"
+              ]
+            },
+            "timeZone": "Arab Standard Time"
+          },
+          "type": "Recurrence"
+        }
+      },
+      "actions": {
+        "ScheduledStartFunction": {
+          "type": "Function",
+          "inputs": {
+            "body": {
+              "Action": "start",
+              "EnableClassic": false,
+              "RequestScopes": {
+                "ExcludedVMLists": [],
+                "VMLists": [
+                  "/subscriptions/e48414cd-f96d-4414-ae9e-da7fec844f77/resourceGroups/bab-sit-picm-swec-rg-01/providers/Microsoft.Compute/virtualMachines/DAPICMORDBSLV01"
+                ]
+              }
+            },
+            "function": {
+              "id": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-auto-weeu-rg-01/providers/Microsoft.Web/sites/bab-core-azfuncapp-stspvm-weeu-01tzr4mnjfkd4ji/functions/Scheduled"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {},
+    "endpointsConfiguration": {
+      "workflow": {
+        "outgoingIpAddresses": [
+          {
+            "address": "74.241.204.65"
+          },
+          {
+            "address": "74.241.204.35"
+          },
+          {
+            "address": "74.241.204.193"
+          },
+          {
+            "address": "74.241.205.139"
+          },
+          {
+            "address": "4.225.198.80"
+          },
+          {
+            "address": "4.225.198.41"
+          },
+          {
+            "address": "74.241.203.136"
+          },
+          {
+            "address": "4.225.198.14"
+          },
+          {
+            "address": "74.241.204.65"
+          },
+          {
+            "address": "74.241.204.35"
+          },
+          {
+            "address": "74.241.204.193"
+          },
+          {
+            "address": "74.241.205.139"
+          },
+          {
+            "address": "4.225.198.80"
+          },
+          {
+            "address": "4.225.198.41"
+          },
+          {
+            "address": "74.241.203.136"
+          },
+          {
+            "address": "4.225.198.14"
+          }
+        ],
+        "accessEndpointIpAddresses": [
+          {
+            "address": "74.241.204.72"
+          },
+          {
+            "address": "74.241.204.55"
+          },
+          {
+            "address": "74.241.204.197"
+          },
+          {
+            "address": "74.241.206.0"
+          },
+          {
+            "address": "4.225.198.176"
+          },
+          {
+            "address": "4.225.198.50"
+          },
+          {
+            "address": "4.225.197.219"
+          },
+          {
+            "address": "4.225.198.33"
+          },
+          {
+            "address": "74.241.204.72"
+          },
+          {
+            "address": "74.241.204.55"
+          },
+          {
+            "address": "74.241.204.197"
+          },
+          {
+            "address": "74.241.206.0"
+          },
+          {
+            "address": "4.225.198.176"
+          },
+          {
+            "address": "4.225.198.50"
+          },
+          {
+            "address": "4.225.197.219"
+          },
+          {
+            "address": "4.225.198.33"
+          }
+        ]
+      },
+      "connector": {
+        "outgoingIpAddresses": [
+          {
+            "address": "20.240.11.143"
+          },
+          {
+            "address": "20.240.10.145"
+          }
+        ]
+      }
+    }
+  },
+  "id": "/subscriptions/d88f0b5b-6660-4607-8c6a-395820400912/resourceGroups/bab-core-auto-weeu-rg-01/providers/Microsoft.Logic/workflows/bab-sit-picm-db-start-01",
+  "name": "bab-sit-picm-db-start-01",
+  "type": "Microsoft.Logic/workflows",
+  "location": "swedencentral",
+  "tags": {
+    "ApplicationName": "PICM",
+    "ApproverName": "Osama Ali Amer",
+    "BusinessOwner": " Mailgroup Payments Inquiries",
+    "Company": "BAB",
+    "CostCenter": "99801",
+    "CreatedBy": "Terraform",
+    "CreationDate": "2026-07-29",
+    "Department": "Head Office Center Operation",
+    "EndDate": "2027-07-29",
+    "Environment": "SIT",
+    "ManagedBy": "CloudOps Team",
+    "Project": "PICM",
+    "ProjectName": "PICM",
+    "Region": "swedencentral",
+    "RequestNumber": "RITM0122803",
+    "RequesterName": "Abroo Jalil Mohyuddin",
+    "ServiceClass": "Low",
+    "StartDate": "2026-07-29",
+    "TechnicalOwner": "Mailgroup Backoffice Development Team"
+  },
+  "identity": {
+    "type": "SystemAssigned",
+    "principalId": "298fa70c-afb0-4b6a-a234-7f98956a21b6",
+    "tenantId": "cd7bd4e0-1364-439d-8dc4-bc0ef1fb2bf5"
+  }
+}
